@@ -29,6 +29,27 @@ pub fn round_up_page(length: usize) -> usize {
     }
 }
 
+/// Called after host memory is (re)mapped into a cage: `(cageid, sys_addr, len, prot)`.
+pub type CageMapHook = fn(u64, usize, usize, i32);
+
+static CAGE_MAP_HOOK: std::sync::OnceLock<CageMapHook> = std::sync::OnceLock::new();
+
+/// Installs the hook run after cage memory is mapped. Used by the MPK runtime
+/// to re-apply the cage's protection key, which a fresh `mmap` resets.
+pub fn set_cage_map_hook(hook: CageMapHook) {
+    let _ = CAGE_MAP_HOOK.set(hook);
+}
+
+/// Notifies the map hook, if any, that `[addr, addr + len)` was mapped with
+/// `prot` for cage `cageid`. Error results of `mmap` are ignored.
+pub fn notify_cage_mapping(cageid: u64, addr: usize, len: usize, prot: i32) {
+    if let Some(hook) = CAGE_MAP_HOOK.get() {
+        if !is_mmap_error(addr) {
+            hook(cageid, addr, len, prot);
+        }
+    }
+}
+
 /// Check if a return value from libc::mmap indicates an error
 ///
 /// Valid mmap addresses are always page-aligned. This function uses page alignment
@@ -116,6 +137,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     child_st as *mut libc::c_void,
                 );
             };
+            notify_cage_mapping(child_cageid, child_st, addr_len, entry.prot);
         } else {
             unsafe {
                 // temporarily enable write on child's memory region to write parent data

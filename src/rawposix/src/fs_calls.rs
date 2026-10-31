@@ -1,5 +1,5 @@
 use cage::{
-    get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
+    get_cage, get_shm_length, is_mmap_error, notify_cage_mapping, new_shm_segment, round_up_page, shmat_helper,
     shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
     SHM_METADATA,
 };
@@ -1046,6 +1046,7 @@ pub extern "C" fn mmap_inner(
                     ) as i64
                 };
 
+                notify_cage_mapping(cageid, ret as usize, len, prot);
                 // Return raw result (including -1 on error)
                 // Caller will check page alignment to detect errors
                 ret as usize
@@ -1057,6 +1058,7 @@ pub extern "C" fn mmap_inner(
     } else {
         // Handle mmap with fd = -1 (anonymous memory mapping or special case)
         let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
+        notify_cage_mapping(cageid, ret as usize, len, prot);
         // Return raw result (including -1 on error)
         // Caller will check page alignment to detect errors
         ret as usize
@@ -1151,6 +1153,7 @@ pub extern "C" fn munmap_syscall(
             let errno = get_errno();
             return (handle_errno(errno, "munmap")) as i64;
         }
+        notify_cage_mapping(cageid, result, act_len, PROT_NONE as i32);
     }
 
     vmmap.remove_entry(req_start, req_end - req_start);

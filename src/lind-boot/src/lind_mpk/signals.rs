@@ -320,7 +320,36 @@ extern "C" fn mpk_sigsegv_handler(_signo: i32, _info: *mut libc::siginfo_t, uctx
     }
 }
 
-pub fn register_os_signal_handlers() -> anyhow::Result<()> {
+/// Signal handlers run with the kernel's default PKRU, which only allows key
+/// 0, possibly on a cage stack. Switch to the supervisor PKRU before touching
+/// any memory. sigreturn restores the interrupted PKRU. `uctx` (rdx) is
+/// preserved across wrpkru.
+macro_rules! supervisor_pkru_signal_stub {
+    ($name:ident, $handler:path) => {
+        #[unsafe(naked)]
+        unsafe extern "C" fn $name(_signo: i32, _info: *mut libc::siginfo_t, _uctx: *mut c_void) {
+            std::arch::naked_asm!(
+                "movq %rdx, %r11",
+                "xorl %eax, %eax",
+                "xorl %ecx, %ecx",
+                "xorl %edx, %edx",
+                "wrpkru",
+                "movq %r11, %rdx",
+                "jmp {handler}",
+                handler = sym $handler,
+                options(att_syntax),
+            );
+        }
+    };
+}
+
+supervisor_pkru_signal_stub!(mpk_sigusr2_entry, mpk_sigusr2_handler);
+supervisor_pkru_signal_stub!(mpk_sigsegv_entry, mpk_sigsegv_handler);
+
+/// Installs the SIGUSR2 and SIGSEGV handlers. With `mpk`, they are entered
+/// through the PKRU-switching stubs; without PKU (so no MPK cage can exist)
+/// the plain handlers are installed, as wrpkru would fault.
+pub fn register_os_signal_handlers(mpk: bool) -> anyhow::Result<()> {
     unsafe {
         let alt_stack_ptr = *SIGNAL_ALT_STACK_PTR.get_or_init(|| {
             let stack = vec![0u8; SIGNAL_ALT_STACK_SIZE].into_boxed_slice();
@@ -338,12 +367,9 @@ pub fn register_os_signal_handlers() -> anyhow::Result<()> {
         }
 
         let mut usr2: libc::sigaction = std::mem::zeroed();
-        let usr2_handler: extern "C" fn(i32, *mut libc::siginfo_t, *mut c_void) =
-            mpk_sigusr2_handler;
-        usr2.sa_sigaction = std::mem::transmute::<
-            extern "C" fn(i32, *mut libc::siginfo_t, *mut c_void),
-            usize,
-        >(usr2_handler);
+        let usr2_handler: unsafe extern "C" fn(i32, *mut libc::siginfo_t, *mut c_void) =
+            if mpk { mpk_sigusr2_entry } else { mpk_sigusr2_handler };
+        usr2.sa_sigaction = usr2_handler as usize;
         usr2.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
         libc::sigemptyset(&mut usr2.sa_mask);
         if libc::sigaction(libc::SIGUSR2, &usr2, std::ptr::null_mut()) != 0 {
@@ -351,12 +377,9 @@ pub fn register_os_signal_handlers() -> anyhow::Result<()> {
         }
 
         let mut segv: libc::sigaction = std::mem::zeroed();
-        let segv_handler: extern "C" fn(i32, *mut libc::siginfo_t, *mut c_void) =
-            mpk_sigsegv_handler;
-        segv.sa_sigaction = std::mem::transmute::<
-            extern "C" fn(i32, *mut libc::siginfo_t, *mut c_void),
-            usize,
-        >(segv_handler);
+        let segv_handler: unsafe extern "C" fn(i32, *mut libc::siginfo_t, *mut c_void) =
+            if mpk { mpk_sigsegv_entry } else { mpk_sigsegv_handler };
+        segv.sa_sigaction = segv_handler as usize;
         segv.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
         libc::sigemptyset(&mut segv.sa_mask);
         if libc::sigaction(libc::SIGSEGV, &segv, std::ptr::null_mut()) != 0 {
@@ -636,6 +659,8 @@ fn invoke_handler_on_cage_stack(
             (*gs_data).contexts[current + 1].cage_id = cageid;
             (*gs_data).contexts[current + 1].rsp = (stack_top & !0xf) as u64;
             (*gs_data).contexts[current + 1].fs_base = fs_base;
+            (*gs_data).contexts[current + 1].pkru_guest_fs_slot.pkru =
+                info.pkru.load(Ordering::Relaxed) as u64;
             crate::lind_mpk::gs_fork::call_with_cage_gs(cageid, || {
                 crate::lind_mpk::trampoline::_call_into_cage_asm(
                     signo as u64,

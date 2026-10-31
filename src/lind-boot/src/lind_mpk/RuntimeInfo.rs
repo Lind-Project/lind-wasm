@@ -1,7 +1,7 @@
 use libc::{c_void, pid_t};
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering, AtomicU32};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use cage::{get_cage, MemoryBackingType, RuntimeInfo, RwLock, VmmapOps};
 use sysdefs::constants::fs_const::{PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
@@ -153,6 +153,7 @@ fn map_region_in_vmmap(
         })?;
         anyhow::bail!("mmap for cage {} region failed: {}", cage_id, error);
     }
+    crate::lind_mpk::pkeys::retag(region_base, allocation_size, libc::PROT_READ | libc::PROT_WRITE);
 
     Ok((region_base, allocation_size))
 }
@@ -465,7 +466,8 @@ pub(super) fn allocate_context_pages() -> anyhow::Result<(usize, usize, *mut MPK
     }
     let stack_page = base as usize + CONTEXT_PAGE_SIZE;
     // The context-stack page must be a shared mapping so mremap can alias it.
-    // TODO: the context-stack page must be tagged with the supervisor MPK key.
+    // It keeps the supervisor protection key 0, and so do its aliases in cage
+    // memory (mremap copies the key), so guest code cannot access it.
     let shared = unsafe {
         libc::mmap(
             stack_page as *mut c_void,
@@ -487,14 +489,19 @@ pub(super) fn allocate_context_pages() -> anyhow::Result<(usize, usize, *mut MPK
 /// Guest FS base used before glibc installs its TLS: the TCB ends exactly at
 /// the context-stack page allocated by `allocate_context_pages`. Makes the
 /// bootstrap page in front of `context_stack` writable and zeroes it, so the
-/// guest finds a writable, zeroed dummy TCB at the returned FS base.
-pub fn prepare_bootstrap_tcb(context_stack: *mut MPKSupervisorCtxStack) -> anyhow::Result<usize> {
-    prepare_bootstrap_tcb_with_size(context_stack, guest_tcb_size()?)
+/// guest finds a writable, zeroed dummy TCB at the returned FS base. The page
+/// is tagged with `pkey`, the key of the cage about to run on it.
+pub fn prepare_bootstrap_tcb(
+    context_stack: *mut MPKSupervisorCtxStack,
+    pkey: Option<u32>,
+) -> anyhow::Result<usize> {
+    prepare_bootstrap_tcb_with_size(context_stack, guest_tcb_size()?, pkey)
 }
 
 fn prepare_bootstrap_tcb_with_size(
     context_stack: *mut MPKSupervisorCtxStack,
     tcb_size: usize,
+    pkey: Option<u32>,
 ) -> anyhow::Result<usize> {
     let stack_page = context_stack as usize;
     if stack_page & (CONTEXT_PAGE_SIZE - 1) != 0 || stack_page < CONTEXT_PAGE_SIZE {
@@ -504,18 +511,16 @@ fn prepare_bootstrap_tcb_with_size(
         anyhow::bail!("unsupported guest TCB size {tcb_size:#x}");
     }
     let bootstrap_page = stack_page - CONTEXT_PAGE_SIZE;
-    let ret = unsafe {
-        libc::mprotect(
-            bootstrap_page as *mut c_void,
-            CONTEXT_PAGE_SIZE,
-            libc::PROT_READ | libc::PROT_WRITE,
-        )
+    let prot = libc::PROT_READ | libc::PROT_WRITE;
+    let ret = match pkey {
+        Some(key) => crate::lind_mpk::pkeys::tag(bootstrap_page, CONTEXT_PAGE_SIZE, prot, key),
+        None => match unsafe { libc::mprotect(bootstrap_page as *mut c_void, CONTEXT_PAGE_SIZE, prot) } {
+            0 => Ok(()),
+            _ => Err(std::io::Error::last_os_error()),
+        },
     };
-    if ret != 0 {
-        anyhow::bail!(
-            "mprotect for bootstrap TCB page {bootstrap_page:#x} failed: {}",
-            std::io::Error::last_os_error()
-        );
+    if let Err(error) = ret {
+        anyhow::bail!("mprotect for bootstrap TCB page {bootstrap_page:#x} failed: {error}");
     }
     unsafe { std::ptr::write_bytes(bootstrap_page as *mut u8, 0, CONTEXT_PAGE_SIZE) };
     Ok(stack_page - tcb_size)
@@ -738,7 +743,7 @@ mod context_stack_tests {
             (*stack).os_tid = 0x1234;
             assert_eq!(libc::mprotect(base as *mut c_void, PAGE, libc::PROT_READ), 0);
         }
-        let fs = prepare_bootstrap_tcb_with_size(stack, TCB).unwrap();
+        let fs = prepare_bootstrap_tcb_with_size(stack, TCB, None).unwrap();
         assert_eq!(fs, stack as usize - TCB);
         unsafe {
             let page = std::slice::from_raw_parts_mut(base as *mut u8, PAGE);
@@ -1269,6 +1274,7 @@ pub struct MPKRuntimeInfo {
     pub killed: AtomicBool,
     pub state_lock: Mutex<()>,
     pub state_cv: Condvar,
+    pub pkru: AtomicU32,
 }
 
 impl MPKRuntimeInfo {
@@ -1305,6 +1311,7 @@ impl MPKRuntimeInfo {
             killed: AtomicBool::new(false),
             state_lock: Mutex::new(()),
             state_cv: Condvar::new(),
+            pkru: AtomicU32::new(0),
         }
     }
 }

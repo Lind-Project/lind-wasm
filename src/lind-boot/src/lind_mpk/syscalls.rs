@@ -337,8 +337,8 @@ pub extern "C" fn mpk_mmap_syscall_entry(
         // Strip the Lind-only flag and extend the mapping by one blank page at
         // the first page boundary after the guest TCB. The context stack is
         // aliased onto it once the TCB is installed (see `alias_context_stack`).
-        // TODO: the context-stack page must be tagged with the supervisor MPK
-        // key so the guest cannot access its own context stack.
+        // The alias keeps the supervisor protection key 0, so with MPK the
+        // guest cannot access its own context stack.
         // TODO: glibc only munmaps the TLS part, so the extra page outlives
         // the thread's TLS.
         flags_arg &= !MAP_LIND_TLS;

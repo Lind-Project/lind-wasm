@@ -15,6 +15,7 @@ const GS_CURRENT_CONTEXT_OFFSET: usize = offset_of!(MPKSupervisorCtxStack, curre
 pub const GS_OS_TID_OFFSET: usize = offset_of!(MPKSupervisorCtxStack, os_tid);
 const GS_CONTEXT_ARRAY_OFFSET: usize = offset_of!(MPKSupervisorCtxStack, contexts);
 const GS_CONTEXT_FS_OFFSET: usize = GS_CONTEXT_ARRAY_OFFSET + offset_of!(MPKSupervisorContext, fs_base);
+const GS_CONTEXT_PKRU_OFFSET: usize = GS_CONTEXT_ARRAY_OFFSET + offset_of!(MPKSupervisorContext, pkru_guest_fs_slot);
 const GS_CONTEXT_SIZE: usize = size_of::<MPKSupervisorContext>();
 const GS_CONTEXT_NEXT_SUP_RSP_OFFSET: usize = GS_CONTEXT_ARRAY_OFFSET + 2*GS_CONTEXT_SIZE;
 const GS_CONTEXT_NEXT_SUP_FS_OFFSET: usize = GS_CONTEXT_ARRAY_OFFSET + 2*GS_CONTEXT_SIZE + offset_of!(MPKSupervisorContext, fs_base);
@@ -188,7 +189,7 @@ pub extern "C" fn grate_callback_trampoline(
     );
     let switch_to_context_index = current_context_index + 1;
     let os_tid = unsafe { (*gs_data).os_tid as libc::pid_t };
-    let (grate_stack, grate_fs_base, thread_gs_data) = {
+    let (grate_stack, grate_fs_base, thread_gs_data, grate_pkru) = {
         let cage = get_cage(cageid).expect("inner_grate_callback_trampoline: cage not found");
         let runtime_info = cage.runtime_info.read();
         let mpk_info = runtime_info
@@ -203,6 +204,7 @@ pub extern "C" fn grate_callback_trampoline(
             cage_thread.stack_addr.load(std::sync::atomic::Ordering::Relaxed),
             cage_thread.fs_base,
             cage_thread.thread_info.gs_data,
+            mpk_info.pkru.load(std::sync::atomic::Ordering::Relaxed),
         )
     };
     assert!(!thread_gs_data.is_null(), "inner_grate_callback_trampoline: null GS context");
@@ -221,6 +223,7 @@ pub extern "C" fn grate_callback_trampoline(
         (*gs_data).contexts[switch_to_context_index].rsp = (next_stack & !0xf) as u64;
         (*gs_data).contexts[switch_to_context_index].cage_id = cageid;
         (*gs_data).contexts[switch_to_context_index].fs_base = grate_fs_base;
+        (*gs_data).contexts[switch_to_context_index].pkru_guest_fs_slot.pkru = grate_pkru as u64;
     }
 
     let return_value = gs_fork::call_with_cage_gs(cageid, || unsafe { inner_grate_callback_trampoline_asm(
@@ -317,9 +320,28 @@ unsafe extern "sysv64" fn inner_grate_callback_trampoline_asm(
     "incq {gs_current_context_offset}(%r12); ",
     
     //switch pkru, get as offset from gs:r10
+
+    // Switch to the callee's PKRU (contexts[i+1].pkru, r10 still holds its
+    // offset). wrpkru needs ecx = edx = 0, so park the argument registers in
+    // r10 and r12 (r12 is recomputed after the call).
+    "movl {gs_context_pkru_offset}(%r12, %r10), %eax; ",
+    "movq %rcx, %r10; ",
+    "movq %rdx, %r12; ",
+    "xorl %ecx, %ecx; ",
+    "xorl %edx, %edx; ",
+    "wrpkru; ",
+    "movq %r10, %rcx; ",
+    "movq %r12, %rdx; ",
     //call fptr
     "call *%r11; ",
-    //switch back pkru
+
+    // Back to the supervisor PKRU before touching supervisor memory.
+    "movq %rax, %r10; ",
+    "xorl %eax, %eax; ",
+    "xorl %ecx, %ecx; ",
+    "xorl %edx, %edx; ",
+    "wrpkru; ",
+    "movq %r10, %rax; ",
 
     // Do not trust the saved r12 here: in a clone child it still names the
     // parent's context stack. The grate returns on its own FS, whose next
@@ -350,6 +372,7 @@ unsafe extern "sysv64" fn inner_grate_callback_trampoline_asm(
         gs_contexts_size_value = const GS_CONTEXT_SIZE,
         gs_context_next_sup_rsp_offset = const GS_CONTEXT_NEXT_SUP_RSP_OFFSET,
         gs_context_next_sup_fs_offset = const GS_CONTEXT_NEXT_SUP_FS_OFFSET,
+        gs_context_pkru_offset = const GS_CONTEXT_PKRU_OFFSET,
         guest_tcb_size = sym GUEST_TCB_SIZE,
         context_page_size = const CONTEXT_PAGE_SIZE,
         options(att_syntax));
@@ -404,9 +427,28 @@ pub(super) unsafe extern "sysv64" fn _call_into_cage_asm(
     "incq {gs_current_context_offset}(%r12); ",
     
     //switch pkru, get as offset from gs:r10
+
+    // Switch to the callee's PKRU (contexts[i+1].pkru, r10 still holds its
+    // offset). wrpkru needs ecx = edx = 0, so park the argument registers in
+    // r10 and r12 (r12 is recomputed after the call).
+    "movl {gs_context_pkru_offset}(%r12, %r10), %eax; ",
+    "movq %rcx, %r10; ",
+    "movq %rdx, %r12; ",
+    "xorl %ecx, %ecx; ",
+    "xorl %edx, %edx; ",
+    "wrpkru; ",
+    "movq %r10, %rcx; ",
+    "movq %r12, %rdx; ",
     //call fptr
     "call *%r9; ",
-    //switch back pkru
+
+    // Back to the supervisor PKRU before touching supervisor memory.
+    "movq %rax, %r10; ",
+    "xorl %eax, %eax; ",
+    "xorl %ecx, %ecx; ",
+    "xorl %edx, %edx; ",
+    "wrpkru; ",
+    "movq %r10, %rax; ",
 
     // Recompute the context stack from the cage's FS, see
     // inner_grate_callback_trampoline_asm.
@@ -436,6 +478,7 @@ pub(super) unsafe extern "sysv64" fn _call_into_cage_asm(
         gs_contexts_size_value = const GS_CONTEXT_SIZE,
         gs_context_next_sup_rsp_offset = const GS_CONTEXT_NEXT_SUP_RSP_OFFSET,
         gs_context_next_sup_fs_offset = const GS_CONTEXT_NEXT_SUP_FS_OFFSET,
+        gs_context_pkru_offset = const GS_CONTEXT_PKRU_OFFSET,
         guest_tcb_size = sym GUEST_TCB_SIZE,
         context_page_size = const CONTEXT_PAGE_SIZE,
         options(att_syntax));
@@ -463,9 +506,15 @@ unsafe extern "sysv64" fn jmp_into_cage_asm(
             "movq {gs_contexts_array_offset}(%rsi), %rsp; ",
             "movq {gs_context_fs_offset}(%rsi), %rax; ",
             "wrfsbase %rax; ",
+            // Enter with the cage's PKRU from contexts[0].
+            "movl {gs_context_pkru_offset}(%rsi), %eax; ",
+            "xorl %ecx, %ecx; ",
+            "xorl %edx, %edx; ",
+            "wrpkru; ",
             "jmp *%rdi",
         gs_contexts_array_offset = const GS_CONTEXT_ARRAY_OFFSET,
         gs_context_fs_offset = const GS_CONTEXT_FS_OFFSET,
+        gs_context_pkru_offset = const GS_CONTEXT_PKRU_OFFSET,
         options(att_syntax));
 
     }
@@ -475,6 +524,15 @@ unsafe extern "sysv64" fn jmp_into_cage_asm(
 mod context_stack_tests {
     use super::*;
     use std::arch::asm;
+
+    /// The trampolines execute wrpkru, which needs PKU enabled by the OS.
+    fn pku_available() -> bool {
+        let ospke = unsafe { std::arch::x86_64::__cpuid_count(7, 0) }.ecx & (1 << 4) != 0;
+        if !ospke {
+            eprintln!("skipping: CPU/OS without protection keys (OSPKE)");
+        }
+        ospke
+    }
 
     struct ContextStack {
         pointer: *mut MPKSupervisorCtxStack,
@@ -567,6 +625,9 @@ mod context_stack_tests {
 
     #[test]
     fn cage_entry_uses_thread_local_context_stack_instead_of_gs() {
+        if !pku_available() {
+            return;
+        }
         let stack = ContextStack::new();
         let mut gs_context = MPKSupervisorCtxStack::new(0, Default::default());
         unsafe {
@@ -659,6 +720,9 @@ mod context_stack_tests {
 
     #[test]
     fn grate_trampoline_preserves_arguments_and_restores_context() {
+        if !pku_available() {
+            return;
+        }
         let stack = ContextStack::new();
         assert_eq!(current_context_stack(), stack.pointer);
         let result = unsafe {
@@ -700,6 +764,9 @@ mod context_stack_tests {
 
     #[test]
     fn signal_trampoline_uses_explicit_context_stack() {
+        if !pku_available() {
+            return;
+        }
         let stack = ContextStack::new();
         unsafe {
             _call_into_cage_asm(1, 2, 3, 4, 5, signal_stub as *const () as u64, stack.pointer);
@@ -712,6 +779,9 @@ mod context_stack_tests {
 
     #[test]
     fn grate_trampoline_returns_through_child_context_stack_from_fs() {
+        if !pku_available() {
+            return;
+        }
         let parent = ContextStack::new();
         let child = ContextStack::new();
         current_ctx_stack.set(parent.pointer);

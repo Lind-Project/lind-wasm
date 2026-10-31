@@ -158,6 +158,7 @@ impl ShmSegment {
                 0,
             ) as usize
         };
+        crate::memory::notify_cage_mapping(cageid, result, self.size as usize, prot);
 
         result
     }
@@ -176,6 +177,7 @@ impl ShmSegment {
             ) as usize)
         };
         assert!(mmap_ret == shmaddr as usize);
+        crate::memory::notify_cage_mapping(cageid, mmap_ret, self.size as usize, PROT_NONE);
 
         self.shminfo.shm_nattch -= 1;
         self.shminfo.shm_dtime = timestamp() as isize;

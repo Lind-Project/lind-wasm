@@ -147,6 +147,11 @@ pub(super) fn mmap_aligned_cage_memory() -> anyhow::Result<*mut c_void> {
         bail!("failed to reserve the fork stack arena: {error}");
     }
 
+    if let Err(error) = crate::lind_mpk::pkeys::assign_reservation(aligned_addr) {
+        unsafe { libc::munmap(aligned_addr as *mut c_void, CAGE_RESERVATION_SIZE) };
+        bail!("failed to assign a protection key to cage memory: {error}");
+    }
+
     Ok(aligned_addr as *mut c_void)
 }
 
@@ -308,6 +313,7 @@ fn write_initial_stack_to_context_stack(
     gs_data: *mut MPKSupervisorCtxStack,
     cage_id: u64,
     entry_rsp: u64,
+    pkru: u32,
 ) -> anyhow::Result<()> {
     if gs_data.is_null() {
         bail!("MPK GS context is null while preparing initial stack");
@@ -320,6 +326,8 @@ fn write_initial_stack_to_context_stack(
         // Initial cage entry runs on the stack prepared by write_process_entry_stack.
         (*gs_data).contexts[0].rsp = entry_rsp;
         (*gs_data).contexts[0].cage_id = cage_id;
+        // PKRU the cage is entered with (see `jmp_into_cage_asm`).
+        (*gs_data).contexts[0].pkru_guest_fs_slot.pkru = pkru as u64;
         (*gs_data).current_context = 0;
     }
 
@@ -329,13 +337,21 @@ fn write_initial_stack_to_context_stack(
 /// Points the guest FS at a bootstrap TCB that ends right before this
 /// thread's context-stack page, so guest code can reach the context stack
 /// before glibc installs its own TLS via arch_prctl(ARCH_SET_FS). The dummy
-/// TCB is writable and zeroed.
-fn initialize_bootstrap_tls(gs_data: *mut MPKSupervisorCtxStack) -> anyhow::Result<()> {
-    let fs_base = prepare_bootstrap_tcb(gs_data)?;
+/// TCB is writable and zeroed, and tagged with the cage's key `pkey`.
+fn initialize_bootstrap_tls(gs_data: *mut MPKSupervisorCtxStack, pkey: Option<u32>) -> anyhow::Result<()> {
+    let fs_base = prepare_bootstrap_tcb(gs_data, pkey)?;
     unsafe {
         (*gs_data).contexts[0].fs_base = fs_base;
     }
     Ok(())
+}
+
+/// Key of the cage memory at `memory_base` and the PKRU the cage runs with,
+/// which only allows that key. `mmap_aligned_cage_memory` assigned the key.
+fn cage_pkru(memory_base: *mut c_void) -> (u32, u32) {
+    let key = crate::lind_mpk::pkeys::reservation_key(memory_base as usize)
+        .expect("cage memory has no protection key");
+    (key, crate::lind_mpk::pkeys::pkru_for_keys(&[key]))
 }
 
 fn merge_host_ld_env_vars(vars: &mut Vec<(String, Option<String>)>) {
@@ -527,8 +543,13 @@ unsafe fn write_process_entry_stack(
 
     cursor &= !(std::mem::align_of::<usize>() - 1);
 
+    // No AT_SYSINFO_EHDR: the vDSO cannot be used by cages. Its data pages
+    // ([vvar]) have the supervisor key and cannot be duplicated into a cage
+    // (the kernel rejects mremap/ARCH_MAP_VDSO_64 for them), and its code is
+    // not GS-rewritten, so in a GS-forked child it would write results to the
+    // root's memory. Without it, glibc makes real syscalls through the
+    // trampolines.
     let aux_entries = [
-        (auxv::AT_SYSINFO_EHDR, auxv.sysinfo_ehdr),
         (auxv::AT_MINSIGSTKSZ, auxv.minsigstksz),
         (auxv::AT_HWCAP, auxv.hwcap),
         (auxv::AT_PAGESZ, auxv.pagesz),
@@ -770,6 +791,17 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
         crate::lind_mpk::RuntimeInfo::current_vmmap_debug_context,
     );
     mpk_debug("initializing lind-mpk");
+    // Claim the protection keys before any cage memory exists, and re-tag
+    // memory rawposix maps for a cage with that cage's key. Without PKU only
+    // Wasm cages can run; creating an MPK cage then fails.
+    let mpk_available = match crate::lind_mpk::pkeys::init() {
+        Ok(()) => true,
+        Err(error) => {
+            mpk_debug(format!("{error}"));
+            false
+        }
+    };
+    cage::memory::set_cage_map_hook(crate::lind_mpk::pkeys::cage_map_hook);
     // Publish the manager globally so mpk_clone_syscall_entry can reach it.
     LIND_MANAGER.set(lind_manager).ok();
     set_interpose_handlers(InterposeHandlers {
@@ -785,7 +817,7 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
         .expect("failed to register MPK set_tid_address syscall handler");
     register_mmap_syscall_handler()
         .expect("failed to register MPK mmap syscall handler");
-    crate::lind_mpk::signals::register_os_signal_handlers()
+    crate::lind_mpk::signals::register_os_signal_handlers(mpk_available)
         .expect("failed to register MPK process signal handlers");
 
     threei::register_trampoline(
@@ -1041,6 +1073,7 @@ fn exec_mpk_internal(
         match mpk_load_ldso_and_binary_with_info(DEFAULT_LDSO_PATH, &so_path, &mut vmmap) {
             Ok(v) => v,
             Err(e) => {
+                crate::lind_mpk::pkeys::release_reservation(memory_base as usize);
                 unsafe { libc::munmap(memory_base, CAGE_RESERVATION_SIZE) };
                 return Err(e);
             }
@@ -1051,6 +1084,7 @@ fn exec_mpk_internal(
     let process_auxv = match build_process_auxv(&so_path, &loaded) {
         Ok(v) => v,
         Err(e) => {
+            crate::lind_mpk::pkeys::release_reservation(memory_base as usize);
             unsafe { libc::munmap(memory_base, CAGE_RESERVATION_SIZE) };
             return Err(e);
         }
@@ -1076,6 +1110,8 @@ fn exec_mpk_internal(
             dtv_size: 0,
         })),
     );
+    let (pkey, pkru) = cage_pkru(memory_base);
+    mpk_info.pkru.store(pkru, Ordering::Relaxed);
     *cage.runtime_info.write() = Box::new(mpk_info);
     crate::lind_mpk::signals::register_mpk_memory_region(
         cage_id,
@@ -1113,8 +1149,8 @@ fn exec_mpk_internal(
         loaded.binary_entrypoint,
     ));
 
-    write_initial_stack_to_context_stack(thread_info.gs_data, cage_id, entry_rsp as u64)?;
-    initialize_bootstrap_tls(thread_info.gs_data)?;
+    write_initial_stack_to_context_stack(thread_info.gs_data, cage_id, entry_rsp as u64, pkru)?;
+    initialize_bootstrap_tls(thread_info.gs_data, Some(pkey))?;
 
 
     jmp_into_cage_prepared_gs_naked(loaded.ldso_entrypoint);
@@ -1170,6 +1206,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         match mpk_load_ldso_and_binary_with_info(DEFAULT_LDSO_PATH, &so_path, &mut vmmap) {
             Ok(v) => v,
             Err(e) => {
+                crate::lind_mpk::pkeys::release_reservation(memory_base as usize);
                 unsafe { libc::munmap(memory_base, CAGE_RESERVATION_SIZE) };
                 return Err(e);
             }
@@ -1180,6 +1217,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     let process_auxv = match build_process_auxv(&so_path, &loaded) {
         Ok(v) => v,
         Err(e) => {
+            crate::lind_mpk::pkeys::release_reservation(memory_base as usize);
             unsafe { libc::munmap(memory_base, CAGE_RESERVATION_SIZE) };
             return Err(e);
         }
@@ -1206,6 +1244,8 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
             dtv_size: 0,
         })),
     );
+    let (pkey, pkru) = cage_pkru(memory_base);
+    mpk_info.pkru.store(pkru, Ordering::Relaxed);
     *cage.runtime_info.write() = Box::new(mpk_info);
     crate::lind_mpk::signals::register_mpk_memory_region(
         cage_id,
@@ -1271,8 +1311,8 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
             .ok_or_else(|| anyhow::anyhow!("thread {} has no MPK thread info", tid))?;
         thread.thread_info.gs_data
     };
-    write_initial_stack_to_context_stack(gs_data, cage_id, entry_rsp as u64)?;
-    initialize_bootstrap_tls(gs_data)?;
+    write_initial_stack_to_context_stack(gs_data, cage_id, entry_rsp as u64, pkru)?;
+    initialize_bootstrap_tls(gs_data, Some(pkey))?;
 
     // Step 6: Transfer control to the loader entrypoint; execution returns via guest exit paths.
     jmp_into_cage_prepared_gs_naked(loaded.ldso_entrypoint);

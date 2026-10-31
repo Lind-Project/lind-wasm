@@ -61,7 +61,6 @@ pub mod auxv {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProcessAuxv {
-	pub sysinfo_ehdr: usize,
 	pub minsigstksz: usize,
 	pub hwcap: usize,
 	pub pagesz: usize,
@@ -412,7 +411,6 @@ pub fn build_process_auxv(
 		.context("failed to compute AT_PHDR address")?;
 
 	Ok(ProcessAuxv {
-		sysinfo_ehdr: host_auxv_value(auxv::AT_SYSINFO_EHDR),
 		minsigstksz: host_auxv_value(auxv::AT_MINSIGSTKSZ),
 		hwcap: host_auxv_value(auxv::AT_HWCAP),
 		pagesz: host_sysconf_value(libc::_SC_PAGESIZE, 4096),

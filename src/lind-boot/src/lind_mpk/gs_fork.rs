@@ -16,9 +16,11 @@
 //!   is aliased at `parent_stack + X` and at `child_stack + X`, so GS-relative
 //!   accesses through pointers into either stack reach the child's copy.
 //!
-//! Code and RIP-relative data are not relocated, so a child keeps executing
-//! out of the memory of the cage that was started by exec (the "root" of the
-//! fork family). Nested forks therefore use offsets relative to the root, take
+//! Code is not relocated, so a child keeps executing out of the memory of the
+//! cage that was started by exec (the "root" of the fork family). Its data
+//! accesses, RIP-relative ones included, are GS-relative and reach its own
+//! copy, so the child runs with only its own protection key: PKRU
+//! does not apply to instruction fetches. Nested forks therefore use offsets relative to the root, take
 //! their stacks from the root's arena and alias every ancestor's stack. The
 //! root's memory stays mapped until every member of its family has exited.
 
@@ -34,6 +36,7 @@ use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 
+use crate::lind_mpk::pkeys;
 use crate::lind_mpk::execute::{
     current_tid, mmap_aligned_cage_memory, CAGE_STACK_GUARD, CAGE_STACK_SIZE, MPK_MEMORY_SIZE,
 };
@@ -223,17 +226,23 @@ fn apply_memory_ops(ops: Vec<MemoryOp>) {
             MemoryOp::Unmap(addr, len) => {
                 gs_debug(format!("unmapping {addr:#x}..{:#x}", addr + len));
                 unsafe { libc::munmap(addr as *mut c_void, len) };
+                if len == CAGE_RESERVATION_SIZE {
+                    pkeys::release_reservation(addr);
+                }
             }
-            MemoryOp::Reserve(addr, len) => unsafe {
-                libc::mmap(
-                    addr as *mut c_void,
-                    len,
-                    libc::PROT_NONE,
-                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE | libc::MAP_FIXED,
-                    -1,
-                    0,
-                );
-            },
+            MemoryOp::Reserve(addr, len) => {
+                unsafe {
+                    libc::mmap(
+                        addr as *mut c_void,
+                        len,
+                        libc::PROT_NONE,
+                        libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE | libc::MAP_FIXED,
+                        -1,
+                        0,
+                    );
+                }
+                pkeys::retag(addr, len, libc::PROT_NONE);
+            }
         }
     }
 }
@@ -357,7 +366,8 @@ pub(super) fn prepare_thread(cage_id: u64, tls: usize, stack_size: usize) -> any
         {
             anyhow::bail!("thread pointer {tls:#x} is outside the memory of cage {cage_id}");
         }
-        create_aliased_stack(stack_lo, stack_size, &[stack_lo], offset, region_base)?;
+        let pkey = pkeys::reservation_key(region_base);
+        create_aliased_stack(stack_lo, stack_size, &[stack_lo], offset, region_base, pkey)?;
         unsafe { std::ptr::write_unaligned(field as *mut usize, offset) };
         Ok(fs_base)
     })();
@@ -472,6 +482,8 @@ fn duplicate_cage_memory(vmmap: &Vmmap, delta: usize) -> anyhow::Result<()> {
                 )
             };
             if ret as usize == dst {
+                // The alias keeps the parent's protection key.
+                pkeys::retag(dst, len, entry.prot);
                 continue;
             }
             gs_debug(format!(
@@ -499,7 +511,8 @@ fn duplicate_cage_memory(vmmap: &Vmmap, delta: usize) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn map_shared_fixed(fd: libc::c_int, addr: usize, len: usize) -> anyhow::Result<()> {
+/// Maps `fd` read/write at `addr`, tagged with `pkey` when MPK is enabled.
+fn map_shared_fixed(fd: libc::c_int, addr: usize, len: usize, pkey: Option<u32>) -> anyhow::Result<()> {
     let ret = unsafe {
         libc::mmap(
             addr as *mut c_void,
@@ -513,12 +526,17 @@ fn map_shared_fixed(fd: libc::c_int, addr: usize, len: usize) -> anyhow::Result<
     if ret == libc::MAP_FAILED || ret as usize != addr {
         anyhow::bail!("mapping child stack at {addr:#x} failed: {}", std::io::Error::last_os_error());
     }
+    if let Some(key) = pkey {
+        pkeys::tag(addr, len, libc::PROT_READ | libc::PROT_WRITE, key)
+            .map_err(|error| anyhow::anyhow!("tagging child stack at {addr:#x} failed: {error}"))?;
+    }
     Ok(())
 }
 
 /// Creates the child stack: a memfd mapped at `real_lo` holding the parent
 /// stack's live part `[copy_lo, parent_hi)`, aliased at every `view + offset`.
 /// Every alias must fall inside `[child_base, child_base + CAGE_RESERVATION_SIZE)`.
+/// The stack and its aliases are tagged with the child's key `pkey`.
 fn create_child_stack(
     parent_stack: (usize, usize),
     copy_lo: usize,
@@ -526,9 +544,10 @@ fn create_child_stack(
     views: &[usize],
     offset: usize,
     child_base: usize,
+    pkey: Option<u32>,
 ) -> anyhow::Result<()> {
     let (parent_lo, stack_size) = parent_stack;
-    create_aliased_stack(real_lo, stack_size, views, offset, child_base)?;
+    create_aliased_stack(real_lo, stack_size, views, offset, child_base, pkey)?;
     unsafe {
         std::ptr::copy_nonoverlapping(
             copy_lo as *const u8,
@@ -541,12 +560,15 @@ fn create_child_stack(
 
 /// Maps an empty `stack_size` memfd stack at `real_lo` and aliases it at every
 /// `view + offset`, which must fall inside the cage reservation at `child_base`.
+/// The stack and every alias are tagged with `pkey`, the key of the
+/// cage owning the stack, even though the stack itself lies in the root's arena.
 fn create_aliased_stack(
     real_lo: usize,
     stack_size: usize,
     views: &[usize],
     offset: usize,
     child_base: usize,
+    pkey: Option<u32>,
 ) -> anyhow::Result<()> {
     let fd = unsafe { libc::memfd_create(c"lind-gs-fork-stack".as_ptr(), libc::MFD_CLOEXEC) };
     if fd < 0 {
@@ -556,7 +578,7 @@ fn create_aliased_stack(
         if unsafe { libc::ftruncate(fd, stack_size as libc::off_t) } != 0 {
             anyhow::bail!("ftruncate of child stack failed: {}", std::io::Error::last_os_error());
         }
-        map_shared_fixed(fd, real_lo, stack_size)?;
+        map_shared_fixed(fd, real_lo, stack_size, pkey)?;
         let child_end = child_base + CAGE_RESERVATION_SIZE;
         for view in views {
             let alias = view.wrapping_add(offset);
@@ -565,7 +587,7 @@ fn create_aliased_stack(
                     "stack alias {alias:#x} for {view:#x} is outside the child reservation {child_base:#x}..{child_end:#x}"
                 );
             }
-            map_shared_fixed(fd, alias, stack_size)?;
+            map_shared_fixed(fd, alias, stack_size, pkey)?;
         }
         Ok(())
     })();
@@ -577,7 +599,8 @@ fn create_aliased_stack(
 
 /// Hands the active parent contexts of a copied context stack to the child:
 /// renames the cage, moves stack pointers on the parent's guest stack onto the
-/// child stack and other pointers into the child's memory copy.
+/// child stack and other pointers into the child's memory copy. The saved
+/// PKRU of each parent context becomes `child_pkru`.
 fn retarget_parent_contexts(
     stack: &mut MPKSupervisorCtxStack,
     parent: u64,
@@ -586,6 +609,7 @@ fn retarget_parent_contexts(
     stack_delta: usize,
     parent_region: (usize, usize),
     region_delta: usize,
+    child_pkru: u32,
 ) {
     let (stack_lo, stack_hi) = parent_stack;
     let (region_lo, region_hi) = parent_region;
@@ -595,6 +619,7 @@ fn retarget_parent_contexts(
             continue;
         }
         context.cage_id = child;
+        context.pkru_guest_fs_slot.pkru = child_pkru as u64;
         if i >= current {
             continue;
         }
@@ -659,10 +684,13 @@ impl Drop for ForkCleanup {
                     0,
                 );
             }
+            let slot_lo = slot_addr(root_base, slot);
+            pkeys::retag(slot_lo, STACK_SLOT_SIZE, libc::PROT_NONE);
             registry().lock().unwrap().free_slot(root_base, slot);
         }
         if let Some(base) = self.child_region.take() {
             unsafe { libc::munmap(base as *mut c_void, CAGE_RESERVATION_SIZE) };
+            pkeys::release_reservation(base);
         }
     }
 }
@@ -758,6 +786,13 @@ fn gs_fork_inner(
         .ok_or_else(|| anyhow::anyhow!("no free stack slot in the arena of {root_base:#x}"))?;
     cleanup.slot = Some((root_base, slot));
 
+    // The child runs with only its own key. It executes the root's code, but
+    // PKRU does not apply to instruction fetches, and every data access
+    // (RIP-relative ones included) is GS-relative and reaches the child's copy.
+    let child_key = pkeys::reservation_key(child_base)
+        .ok_or_else(|| anyhow::anyhow!("child cage memory has no protection key"))?;
+    let child_pkey = Some(child_key);
+    let child_pkru = pkeys::pkru_for_keys(&[child_key]);
     let gs_offset = child_base.wrapping_sub(root_base);
     let region_delta = child_base.wrapping_sub(parent_base);
     let stack_lo = slot_stack_lo(root_base, slot, stack_size);
@@ -780,7 +815,7 @@ fn gs_fork_inner(
     drop(parent_vmmap);
     let copy_lo = (guest_rsp.saturating_sub(RED_ZONE) & !(PAGE_SIZE - 1)).max(parent_stack_lo);
     let views: Vec<usize> = ancestor_stacks.iter().copied().chain(std::iter::once(stack_lo)).collect();
-    create_child_stack(parent_stack, copy_lo, stack_lo, &views, gs_offset, child_base)?;
+    create_child_stack(parent_stack, copy_lo, stack_lo, &views, gs_offset, child_base, child_pkey)?;
 
     // ── Supervisor state of the child thread ──
     let (context_pages, context_pages_size, new_gs_data) = allocate_context_pages()?;
@@ -825,6 +860,7 @@ fn gs_fork_inner(
             stack_delta,
             (parent_base, parent_base + MPK_MEMORY_SIZE),
             region_delta,
+            child_pkru,
         );
     }
     let child_fs = caller.fs_base.wrapping_add(region_delta);
@@ -863,7 +899,7 @@ fn gs_fork_inner(
     child_cage
         .sigset
         .store(parent_cage.sigset.load(Ordering::Relaxed), Ordering::Relaxed);
-    *child_cage.runtime_info.write() = Box::new(MPKRuntimeInfo::new(
+    let child_info = MPKRuntimeInfo::new(
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         dl_allocate_tls,
@@ -872,7 +908,9 @@ fn gs_fork_inner(
         MPK_MEMORY_SIZE,
         THREAD_START_ID + 1,
         None,
-    ));
+    );
+    child_info.pkru.store(child_pkru, Ordering::Relaxed);
+    *child_cage.runtime_info.write() = Box::new(child_info);
     crate::lind_mpk::signals::register_mpk_memory_region(child_cageid, child_base, MPK_MEMORY_SIZE);
     child_cage
         .runtime_type
@@ -1229,7 +1267,7 @@ mod tests {
         stack.contexts[3] = MPKSupervisorContext { rsp: 0x7000, fs_base: 0x9000, cage_id: 0, ..Default::default() };
         stack.contexts[5] = MPKSupervisorContext { rsp: 0x10_807f_f000, fs_base: 0x10_2000_0000, cage_id: 1, ..Default::default() };
 
-        retarget_parent_contexts(&mut stack, 1, 2, guest_stack, 0x100, region, 0x2_0000_0000);
+        retarget_parent_contexts(&mut stack, 1, 2, guest_stack, 0x100, region, 0x2_0000_0000, 0x5555_5551);
 
         assert_eq!(stack.contexts[0].cage_id, 2);
         assert_eq!(stack.contexts[0].rsp, 0x10_807f_f100);
@@ -1239,6 +1277,11 @@ mod tests {
         assert_eq!(stack.contexts[2].rsp, 0x12_3000_0000);
         assert_eq!(stack.contexts[3].rsp, 0x7000);
         assert_eq!(stack.contexts[3].cage_id, 0);
+        // Parent contexts return into the child with the child's PKRU.
+        assert_eq!(unsafe { stack.contexts[0].pkru_guest_fs_slot.pkru }, 0x5555_5551);
+        assert_eq!(unsafe { stack.contexts[2].pkru_guest_fs_slot.pkru }, 0x5555_5551);
+        assert_eq!(unsafe { stack.contexts[1].pkru_guest_fs_slot.pkru }, 0);
+        assert_eq!(unsafe { stack.contexts[3].pkru_guest_fs_slot.pkru }, 0);
         // Inactive entries are only renamed.
         assert_eq!(stack.contexts[5].cage_id, 2);
         assert_eq!(stack.contexts[5].rsp, 0x10_807f_f000);
@@ -1292,7 +1335,7 @@ mod tests {
         }
         let offset = (child_base + PAGE_SIZE * 16).wrapping_sub(parent);
         let copy_lo = parent + stack_size - PAGE_SIZE;
-        create_child_stack((parent, stack_size), copy_lo, real, &[parent], offset, child_base).unwrap();
+        create_child_stack((parent, stack_size), copy_lo, real, &[parent], offset, child_base, None).unwrap();
         let alias = parent.wrapping_add(offset);
         unsafe {
             assert_eq!(*((real + stack_size - 8) as *const u64), 0xfeed);
@@ -1303,7 +1346,7 @@ mod tests {
             *((parent + stack_size - 8) as *mut u64) = 0;
             assert_eq!(*((alias + stack_size - 8) as *const u64), 0xfeed);
         }
-        assert!(create_child_stack((parent, stack_size), copy_lo, real, &[parent + CAGE_RESERVATION_SIZE], offset, child_base).is_err());
+        assert!(create_child_stack((parent, stack_size), copy_lo, real, &[parent + CAGE_RESERVATION_SIZE], offset, child_base, None).is_err());
         unsafe {
             libc::munmap(parent as *mut c_void, stack_size);
             libc::munmap(child_base as *mut c_void, CAGE_RESERVATION_SIZE);
