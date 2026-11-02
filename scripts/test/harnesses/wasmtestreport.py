@@ -82,7 +82,7 @@ DIR_FLAGS = []
 GRATE_PREFIX = None
 GRATE_ARGS = []
 GRATE_CHAIN = []  # raw token list to prepend before the test wasm (set when --grate-prefix is used)
-MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
+MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR", "math_tests")
 
 def running_under_grate():
     return bool(GRATE_CHAIN or GRATE_PREFIX)
