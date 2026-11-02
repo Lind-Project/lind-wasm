@@ -17,7 +17,7 @@ use std::sync::atomic::Ordering::*;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
     MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
@@ -44,6 +44,38 @@ static ALARM_STATE: OnceLock<DashMap<u64, Arc<AlarmState>>> = OnceLock::new();
 
 fn alarm_state_table() -> &'static DashMap<u64, Arc<AlarmState>> {
     ALARM_STATE.get_or_init(DashMap::new)
+}
+
+pub extern "C" fn uname_syscall(
+    _cageid: u64,
+    buf_arg: u64,
+    _buf_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("uname_syscall: unused arguments contain unexpected values -- security violation");
+    }
+
+    // Like gethostname, the buffer is already a host pointer.
+    let ret = unsafe { libc::uname(buf_arg as *mut libc::utsname) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "uname") as i64;
+    }
+    ret as i64
 }
 
 

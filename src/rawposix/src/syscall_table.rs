@@ -31,7 +31,7 @@ use super::sys_calls::{
     alarm_syscall, exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
     getgid_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, gettid_syscall, getuid_syscall,
     kill_syscall, prlimit64_syscall, rseq_syscall, sched_yield_syscall, set_robust_list_syscall,
-    setitimer_syscall, sigaction_syscall, sigprocmask_syscall, sigsuspend_syscall, waitpid_syscall,
+    setitimer_syscall, sigaction_syscall, sigprocmask_syscall, sigsuspend_syscall, uname_syscall, waitpid_syscall,
 };
 use sysdefs::constants::syscall_const;
 
@@ -113,6 +113,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::EXIT_SYSCALL as u64, exit_syscall),
     (syscall_const::WAITPID_SYSCALL as u64, waitpid_syscall),
     (syscall_const::KILL_SYSCALL as u64, kill_syscall),
+    (syscall_const::UNAME_SYSCALL as u64, uname_syscall),
     (syscall_const::SHMDT_SYSCALL as u64, shmdt_syscall),
     (syscall_const::FCNTL_SYSCALL as u64, fcntl_syscall),
     (syscall_const::FLOCK_SYSCALL as u64, flock_syscall),
