@@ -61,6 +61,7 @@ pub const EXEC_SYSCALL: i32 = 59;
 pub const EXIT_SYSCALL: i32 = 60;
 pub const WAITPID_SYSCALL: i32 = 61;
 pub const KILL_SYSCALL: i32 = 62;
+pub const UNAME_SYSCALL: i32 = 63;
 pub const SHMDT_SYSCALL: i32 = 67;
 pub const FCNTL_SYSCALL: i32 = 72;
 pub const FLOCK_SYSCALL: i32 = 73;
