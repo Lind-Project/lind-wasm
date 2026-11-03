@@ -414,6 +414,69 @@ impl Vmmap {
         Some((page_num, npages))
     }
 
+    /// Read-only counterpart of `check_addr_mapping`
+    ///
+    /// Performs the same mapping and protection check but never updates
+    /// `cached_entry`, so callers only need a shared (`read()`) lock on the vmmap.
+    /// The cached entry is still consulted when it is set.
+    ///
+    /// Arguments:
+    /// - page_num: Starting page number
+    /// - npages: Number of pages to check
+    /// - prot: Required protection flags
+    ///
+    /// Returns:
+    /// - Some(end_page) if mapping exists and protection is compatible
+    /// - None if mapping invalid or protection incompatible
+    fn lookup_addr_mapping(&self, page_num: u32, npages: u32, prot: i32) -> Option<u32> {
+        let region_end_page = page_num.checked_add(npages)?;
+
+        // Enforce PROT_READ if any protection exists
+        let effective_prot = |entry: &VmmapEntry| {
+            if entry.prot & (PROT_EXEC | PROT_READ | PROT_WRITE) != PROT_NONE {
+                entry.prot | PROT_READ
+            } else {
+                entry.prot
+            }
+        };
+
+        if let Some(ref cached_entry) = self.cached_entry {
+            let ent_end_page = cached_entry.page_num.saturating_add(cached_entry.npages);
+            if cached_entry.page_num <= page_num
+                && region_end_page <= ent_end_page
+                && prot & !effective_prot(cached_entry) == 0
+            {
+                return Some(ent_end_page);
+            }
+        }
+
+        let mut current_page = page_num;
+        for (_, entry) in self.entries.overlapping(ie(page_num, region_end_page)) {
+            let ent_end_page = entry.page_num.saturating_add(entry.npages);
+            let flags = effective_prot(entry);
+
+            // Region fully inside entry
+            if entry.page_num <= current_page && region_end_page <= ent_end_page {
+                if prot & !flags == 0 {
+                    return Some(ent_end_page);
+                }
+            }
+            // Partial overlap
+            else if entry.page_num <= current_page && current_page < ent_end_page {
+                if prot & !flags != 0 {
+                    return None;
+                }
+                current_page = ent_end_page;
+            }
+            // Gap between entries
+            else if current_page < entry.page_num {
+                return None;
+            }
+        }
+
+        None
+    }
+
     /// Checks if a given address range is readable
     ///
     /// This helper function checks whether a memory range starting at the given address
@@ -427,7 +490,7 @@ impl Vmmap {
     /// # Returns
     /// * `true` - If the entire range is mapped and readable, or if length is 0
     /// * `false` - If any part of the range is unmapped, not readable, or if overflow occurs
-    pub fn check_addr_read(&mut self, addr: u64, length: usize) -> bool {
+    pub fn check_addr_read(&self, addr: u64, length: usize) -> bool {
         // Zero-length check is trivially true
         if length == 0 {
             return true;
@@ -437,7 +500,7 @@ impl Vmmap {
             return false; // Overflow occurred
         };
 
-        self.check_addr_mapping(page_num, npages, PROT_READ)
+        self.lookup_addr_mapping(page_num, npages, PROT_READ)
             .is_some()
     }
 
@@ -454,7 +517,7 @@ impl Vmmap {
     /// # Returns
     /// * `true` - If the entire range is mapped and writable, or if length is 0
     /// * `false` - If any part of the range is unmapped, not writable, or if overflow occurs
-    pub fn check_addr_write(&mut self, addr: u64, length: usize) -> bool {
+    pub fn check_addr_write(&self, addr: u64, length: usize) -> bool {
         // Zero-length check is trivially true
         if length == 0 {
             return true;
@@ -464,7 +527,7 @@ impl Vmmap {
             return false; // Overflow occurred
         };
 
-        self.check_addr_mapping(page_num, npages, PROT_WRITE)
+        self.lookup_addr_mapping(page_num, npages, PROT_WRITE)
             .is_some()
     }
 
@@ -481,7 +544,7 @@ impl Vmmap {
     /// # Returns
     /// * `true` - If the entire range is mapped with both read and write permissions, or if length is 0
     /// * `false` - If any part of the range is unmapped, lacks read/write permissions, or if overflow occurs
-    pub fn check_addr_rw(&mut self, addr: u64, length: usize) -> bool {
+    pub fn check_addr_rw(&self, addr: u64, length: usize) -> bool {
         // Zero-length check is trivially true
         if length == 0 {
             return true;
@@ -491,7 +554,7 @@ impl Vmmap {
             return false; // Overflow occurred
         };
 
-        self.check_addr_mapping(page_num, npages, PROT_READ | PROT_WRITE)
+        self.lookup_addr_mapping(page_num, npages, PROT_READ | PROT_WRITE)
             .is_some()
     }
 }
