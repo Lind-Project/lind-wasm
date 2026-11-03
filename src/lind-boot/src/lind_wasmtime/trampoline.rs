@@ -26,7 +26,7 @@ pub extern "C" fn grate_callback_trampoline(
     arg5cageid: u64,
     arg6: u64,
     arg6cageid: u64,
-) -> i32 {
+) -> i64 {
     // Form the grate request with the provided arguments and the handler address
     let req = GrateRequest {
         handler_addr: in_grate_fn_ptr_u64,
@@ -93,7 +93,7 @@ pub extern "C" fn clone_syscall_entry(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     wasmtime_lind_multi_process::clone_syscall::<HostCtx, CliOptions>(
         cageid,
         clone_arg,
@@ -108,7 +108,7 @@ pub extern "C" fn clone_syscall_entry(
         arg5_cageid,
         arg6,
         arg6_cageid,
-    )
+    ) as i64
 }
 
 pub extern "C" fn exec_syscall_entry(
@@ -125,7 +125,7 @@ pub extern "C" fn exec_syscall_entry(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     wasmtime_lind_multi_process::exec_syscall::<HostCtx, CliOptions>(
         cageid,
         path_arg,
@@ -140,7 +140,7 @@ pub extern "C" fn exec_syscall_entry(
         arg5_cageid,
         arg6,
         arg6_cageid,
-    )
+    ) as i64
 }
 
 pub extern "C" fn exit_syscall_entry(
@@ -157,7 +157,7 @@ pub extern "C" fn exit_syscall_entry(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     wasmtime_lind_multi_process::exit_syscall::<HostCtx, CliOptions>(
         cageid,
         exit_code,
@@ -172,5 +172,5 @@ pub extern "C" fn exit_syscall_entry(
         arg5_cageid,
         arg6,
         arg6_cageid,
-    )
+    ) as i64
 }

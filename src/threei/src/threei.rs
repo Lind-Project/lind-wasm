@@ -35,7 +35,7 @@ pub type RawCallFunc = extern "C" fn(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32;
+) -> i64;
 
 /// In the 3i library, a trampoline function is a runtime-provided function pointer used
 /// to execute grate calls. Each runtime that integrates with 3i supplies its own trampoline
@@ -56,7 +56,7 @@ pub type GrateTrampolineFn = extern "C" fn(
     arg5cageid: u64,
     arg6: u64,
     arg6cageid: u64,
-) -> i32;
+) -> i64;
 
 /// Function pointer type for threei's own interposable calls (e.g.
 /// `register_handler`, `copy_handler_table_to_cage`) registered in the handler
@@ -238,7 +238,7 @@ fn _call_grate_func(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let runtimeid = match get_cage_runtime(grateid) {
         Some(r) => r,
         None => panic!(
@@ -431,7 +431,7 @@ pub fn copy_handler_table_to_cage(
 /// each argument.
 ///
 /// Returns:
-/// - `i32` syscall result of the dispatched handler.
+/// - `i64` syscall result of the dispatched handler.
 /// - Returns `-ESRCH` if the target cage is dead or in `EXITING_TABLE` (unless the syscall
 /// is an exit variant or the caller is the target itself), or if the destination grate is
 /// already dead.
@@ -453,7 +453,7 @@ pub fn make_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Block cross-cage calls to a dead or removed cage (e.g. grate-forwarded
     // syscalls).  The cage's own threads are allowed to keep making
     // syscalls until the epoch kill fires — without the self != target
@@ -466,7 +466,7 @@ pub fn make_syscall(
         && syscall_num != EXIT_GROUP_SYSCALL
         && self_cageid != target_cageid
     {
-        return -(Errno::ESRCH as i32);
+        return -(Errno::ESRCH as i64);
     }
 
     // TODO:
@@ -487,7 +487,7 @@ pub fn make_syscall(
                 && syscall_num != EXIT_GROUP_SYSCALL
                 && self_cageid != target_cageid
             {
-                return -(Errno::ESRCH as i32);
+                return -(Errno::ESRCH as i64);
             }
             let func: RawCallFunc =
                 unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
@@ -527,7 +527,7 @@ pub fn make_syscall(
                 arg5_cageid,
                 arg6,
                 arg6_cageid,
-            );
+            ) as i64;
         }
 
         // Grate case: call into the corresponding grate function
@@ -546,13 +546,13 @@ pub fn make_syscall(
                 grate
                     .grate_inflight
                     .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
-                return -(Errno::ESRCH as i32);
+                return -(Errno::ESRCH as i64);
             }
             0
         });
 
         if cage_dead != Some(0) {
-            return -(Errno::ESRCH as i32);
+            return -(Errno::ESRCH as i64);
         }
 
         let grate_result = _call_grate_func(
