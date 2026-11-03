@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 700" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <!-- Cage A -->
+  <rect x="185" y="10" width="230" height="40" rx="4" fill="none" stroke="#333" stroke-width="1.5"/>
+  <text x="300" y="35" text-anchor="middle" fill="#222" font-size="15" font-weight="600">Cage A</text>
+
+  <line x1="300" y1="50" x2="300" y2="82" stroke="#444" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="310" y="72" fill="#666" font-size="10">system call / grate call</text>
+
+  <!-- 3i -->
+  <rect x="185" y="90" width="230" height="48" rx="4" fill="none" stroke="#333" stroke-width="1.5"/>
+  <text x="300" y="112" text-anchor="middle" fill="#222" font-size="15" font-weight="600">3i</text>
+  <text x="300" y="128" text-anchor="middle" fill="#555" font-size="11">(dispatcher)</text>
+
+  <line x1="300" y1="138" x2="300" y2="170" stroke="#444" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="310" y="160" fill="#666" font-size="10">redirect via MAKE_SYSCALL</text>
+
+  <!-- wasmtime -->
+  <rect x="185" y="178" width="230" height="40" rx="4" fill="none" stroke="#333" stroke-width="1.5"/>
+  <text x="300" y="203" text-anchor="middle" fill="#222" font-size="15" font-weight="600">wasmtime</text>
+
+  <line x1="300" y1="218" x2="300" y2="250" stroke="#444" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="310" y="240" fill="#666" font-size="10">lookup target cage_id</text>
+
+  <!-- Global VMContext Pool -->
+  <rect x="130" y="258" width="340" height="60" rx="4" fill="none" stroke="#333" stroke-width="1.5"/>
+  <text x="300" y="282" text-anchor="middle" fill="#222" font-size="14" font-weight="600">Global VMContext Pool</text>
+  <text x="300" y="302" text-anchor="middle" fill="#444" font-size="12" font-family="'Courier New', monospace">get_vmctx(cage_id = G)</text>
+
+  <line x1="300" y1="318" x2="300" y2="350" stroke="#444" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="310" y="338" fill="#666" font-size="10">returns VmCtxWrapper (raw VMContext*)</text>
+
+  <!-- Wasmtime internals — recover -->
+  <rect x="130" y="358" width="340" height="56" rx="4" fill="none" stroke="#333" stroke-width="1.2" stroke-dasharray="6,3"/>
+  <text x="300" y="380" text-anchor="middle" fill="#222" font-size="13" font-weight="600">Wasmtime Internals</text>
+  <text x="300" y="400" text-anchor="middle" fill="#555" font-size="11">recover Store / Instance from VMContext pointer</text>
+
+  <line x1="300" y1="414" x2="300" y2="446" stroke="#444" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="310" y="436" fill="#666" font-size="10">enter wasm execution</text>
+
+  <!-- Grate G -->
+  <rect x="185" y="454" width="230" height="40" rx="4" fill="none" stroke="#333" stroke-width="1.5"/>
+  <text x="300" y="479" text-anchor="middle" fill="#222" font-size="15" font-weight="600">Grate G</text>
+
+  <line x1="300" y1="494" x2="300" y2="526" stroke="#444" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="310" y="516" fill="#666" font-size="10">Return</text>
+
+  <!-- Wasmtime internals — set_vmctx -->
+  <rect x="130" y="534" width="340" height="64" rx="4" fill="none" stroke="#333" stroke-width="1.2" stroke-dasharray="6,3"/>
+  <text x="300" y="556" text-anchor="middle" fill="#222" font-size="13" font-weight="600">Wasmtime Internals</text>
+  <text x="300" y="574" text-anchor="middle" fill="#444" font-size="12" font-family="'Courier New', monospace">set_vmctx(cageid, VMContext)</text>
+  <text x="300" y="590" text-anchor="middle" fill="#555" font-size="10">put VMContext back to pool</text>
+</svg>
