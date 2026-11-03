@@ -228,6 +228,8 @@ pub(super) fn setup_gs_context(
 /// additional call is needed in the forked child.  For CLONE_VM in-process threads,
 /// each new thread must call this function before its first intercepted syscall.
 pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow::Result<MpkThreadInfo> {
+    crate::lind_mpk::host_rseq::disable_for_current_thread()
+        .context("failed to unregister host rseq before entering an MPK cage")?;
     let (gs_ptr, context_pages, context_pages_size) = setup_gs_context(cageid, os_tid)?;
 
     let total_size = SUPERVISOR_STACK_GUARD + SUPERVISOR_STACK_SIZE;
@@ -762,27 +764,29 @@ extern "C" fn lind_syscall_handler(
 
     let a1_cid = cage_id;
     let a2_cid = cage_id;
-    let retval = threei::make_syscall(
-        cage_id as u64, // self_cageid
-        number as u64,
-        0,                    // _syscall_name: unused for native
-        cage_id as u64, // target_cageid
-        arg1,
-        a1_cid,
-        arg2,
-        a2_cid,
-        arg3,
-        cage_id as u64,
-        arg4,
-        cage_id as u64,
-        arg5,
-        cage_id as u64,
-        arg6,
-        cage_id as u64,
-    );
+    crate::lind_mpk::syscalls::with_guest_fork_return(|| {
+        let retval = threei::make_syscall(
+            cage_id as u64, // self_cageid
+            number as u64,
+            0,                    // _syscall_name: unused for native
+            cage_id as u64, // target_cageid
+            arg1,
+            a1_cid,
+            arg2,
+            a2_cid,
+            arg3,
+            cage_id as u64,
+            arg4,
+            cage_id as u64,
+            arg5,
+            cage_id as u64,
+            arg6,
+            cage_id as u64,
+        );
 
-    crate::lind_mpk::signals::handle_signal(cage_id, None);
-    retval
+        crate::lind_mpk::signals::handle_signal(cage_id, None);
+        retval
+    })
 }
 
 
@@ -791,9 +795,8 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
         crate::lind_mpk::RuntimeInfo::current_vmmap_debug_context,
     );
     mpk_debug("initializing lind-mpk");
-    // Claim the protection keys before any cage memory exists, and re-tag
-    // memory rawposix maps for a cage with that cage's key. Without PKU only
-    // Wasm cages can run; creating an MPK cage then fails.
+    // Claim keys before cages exist and install the cage-mapping hooks.
+    // Without PKU only Wasm cages can run; creating an MPK cage then fails.
     let mpk_available = match crate::lind_mpk::pkeys::init() {
         Ok(()) => true,
         Err(error) => {
@@ -802,6 +805,7 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
         }
     };
     cage::memory::set_cage_map_hook(crate::lind_mpk::pkeys::cage_map_hook);
+    cage::memory::set_cage_mmap_hook(crate::lind_mpk::pkeys::cage_mmap_hook);
     // Publish the manager globally so mpk_clone_syscall_entry can reach it.
     LIND_MANAGER.set(lind_manager).ok();
     set_interpose_handlers(InterposeHandlers {
@@ -1152,6 +1156,8 @@ fn exec_mpk_internal(
     write_initial_stack_to_context_stack(thread_info.gs_data, cage_id, entry_rsp as u64, pkru)?;
     initialize_bootstrap_tls(thread_info.gs_data, Some(pkey))?;
 
+    // The jump abandons any grate dispatch frames that led to this exec.
+    threei::abandon_grate_dispatches();
 
     jmp_into_cage_prepared_gs_naked(loaded.ldso_entrypoint);
     unreachable!("jmp_into_cage_prepared_gs_naked returned unexpectedly");

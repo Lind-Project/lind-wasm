@@ -38,8 +38,8 @@ pub static NO_INTERPOSE: AtomicBool = AtomicBool::new(false);
 // cage is forked; accessed by mpk_clone_syscall_entry to increment the counter.
 pub static LIND_MANAGER: OnceLock<Arc<LindCageManager>> = OnceLock::new();
 
-// glibc's x86-64 jmp_buf stores these registers in this order. The buffer is
-// created on the supervisor stack so clone3's copied stack can use the same address.
+// glibc's x86-64 jmp_buf stores eight registers followed by the signal-mask
+// flag and storage. The exported setjmp also saves the calling thread's mask.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub(super) struct MpkJumpBuffer {
@@ -51,11 +51,60 @@ pub(super) struct MpkJumpBuffer {
     pub(super) r15: libc::c_long,
     pub(super) rsp: libc::c_long,
     pub(super) rip: libc::c_long,
+    mask_was_saved: libc::c_int,
+    mask_padding: libc::c_int,
+    saved_mask: [libc::c_ulong; 16],
 }
+
+const _: () = assert!(size_of::<MpkJumpBuffer>() == 200);
+const _: () = assert!(std::mem::offset_of!(MpkJumpBuffer, mask_was_saved) == 64);
 
 unsafe extern "C" {
     fn setjmp(env: *mut libc::c_long) -> c_int;
     fn longjmp(env: *mut libc::c_long, value: c_int) -> !;
+}
+
+thread_local! {
+    static GUEST_FORK_RETURNS: std::cell::Cell<[*mut MpkJumpBuffer; LIND_MPK_MAX_CONTEXTS]> =
+        const { std::cell::Cell::new([std::ptr::null_mut(); LIND_MPK_MAX_CONTEXTS]) };
+}
+
+struct GuestForkReturn(usize);
+
+impl Drop for GuestForkReturn {
+    fn drop(&mut self) {
+        GUEST_FORK_RETURNS.with(|returns| {
+            let mut entries = returns.get();
+            entries[self.0] = std::ptr::null_mut();
+            returns.set(entries);
+        });
+    }
+}
+
+pub(super) fn guest_fork_return(context: usize) -> Option<*mut MpkJumpBuffer> {
+    GUEST_FORK_RETURNS.with(|returns| {
+        returns.get().get(context).copied().filter(|entry| !entry.is_null())
+    })
+}
+
+/// Keep the original guest entry alive while grates dispatch its syscall.
+/// A forked child can return here without resuming the parent's grate frames.
+#[inline(never)]
+pub(super) fn with_guest_fork_return(dispatch: impl FnOnce() -> i64) -> i64 {
+    let context = unsafe { (*current_context_stack()).current_context };
+    assert!(context > 0 && context < LIND_MPK_MAX_CONTEXTS);
+    let mut buffer = MpkJumpBuffer::default();
+    GUEST_FORK_RETURNS.with(|returns| {
+        let mut entries = returns.get();
+        // exec replaces the guest without unwinding its old syscall entry.
+        entries[context] = &mut buffer;
+        returns.set(entries);
+    });
+    let _entry = GuestForkReturn(context);
+    if unsafe { setjmp((&mut buffer as *mut MpkJumpBuffer).cast()) } != 0 {
+        return 0;
+    }
+    dispatch()
 }
 
 // MPK has no Wasmtime epoch handler, so lind_signal_init receives a pointer to
@@ -449,8 +498,9 @@ pub(super) fn relocate_mangled_stack_pointer(
     remangled as libc::c_long
 }
 
-fn mpk_clone_thread_entry(
+struct CloneThreadLaunch {
     tid_sender: std::sync::mpsc::SyncSender<libc::pid_t>,
+    start_receiver: std::sync::mpsc::Receiver<()>,
     new_gs_data_addr: usize,
     new_stack_base_addr: usize,
     jump_buffer_addr: usize,
@@ -460,13 +510,30 @@ fn mpk_clone_thread_entry(
     thread_info: Arc<MpkThreadInfo>,
     guest_stack: (usize, usize),
     gs_base: usize,
-) -> i32 {
+}
+
+fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
+    let CloneThreadLaunch {
+        tid_sender,
+        start_receiver,
+        new_gs_data_addr,
+        new_stack_base_addr,
+        jump_buffer_addr,
+        old_stack_base,
+        parent_pointer_guard,
+        registered_cage_ids,
+        thread_info,
+        guest_stack,
+        gs_base,
+    } = launch;
     thread_info
         .exit_stack
         .store(current_host_rsp(), Ordering::Release);
     let tid = current_tid();
+    if tid_sender.send(tid).is_err() || start_receiver.recv().is_err() {
+        return -libc::EAGAIN;
+    }
     gs_fork::record_guest_stack(tid, guest_stack.0, guest_stack.1);
-    let _ = tid_sender.send(tid);
     let new_gs_data = new_gs_data_addr as *mut MPKSupervisorCtxStack;
     unsafe {
         (*new_gs_data).os_tid = tid as u64;
@@ -665,6 +732,76 @@ pub(super) fn relocate_cloned_contexts(
             *relocated_slot = caller_fs;
         }
         gs_data.contexts[i].pkru_guest_fs_slot.guest_fs_slot = relocated_slot;
+    }
+}
+
+#[cfg(test)]
+mod guest_fork_return_tests {
+    use super::*;
+
+    struct TestContext {
+        stack: Box<MPKSupervisorCtxStack>,
+        previous: *mut MPKSupervisorCtxStack,
+    }
+
+    impl TestContext {
+        fn new() -> Self {
+            let mut stack = Box::new(MPKSupervisorCtxStack::new(0, InterposeHandlers::default()));
+            stack.current_context = 1;
+            let previous = current_ctx_stack.replace(&mut *stack);
+            Self { stack, previous }
+        }
+    }
+
+    impl Drop for TestContext {
+        fn drop(&mut self) {
+            current_ctx_stack.set(self.previous);
+        }
+    }
+
+    #[test]
+    fn setjmp_writes_the_signal_mask_flag_inside_its_buffer() {
+        #[repr(C)]
+        struct GuardedBuffer {
+            buffer: MpkJumpBuffer,
+            canary: u64,
+        }
+        let mut guarded = GuardedBuffer {
+            buffer: MpkJumpBuffer { mask_was_saved: -1, ..MpkJumpBuffer::default() },
+            canary: u64::MAX,
+        };
+        assert_eq!(unsafe { setjmp((&mut guarded.buffer as *mut MpkJumpBuffer).cast()) }, 0);
+        assert_eq!(guarded.buffer.mask_was_saved, 1);
+        assert_eq!(guarded.canary, u64::MAX);
+    }
+
+    #[test]
+    fn nested_guest_entries_keep_the_original_fork_return() {
+        let mut context = TestContext::new();
+        let result = with_guest_fork_return(|| {
+            let original = guest_fork_return(1).unwrap();
+            context.stack.current_context = 3;
+            let result = with_guest_fork_return(|| {
+                assert_eq!(guest_fork_return(1), Some(original));
+                assert_ne!(guest_fork_return(3).unwrap(), original);
+                10
+            });
+            context.stack.current_context = 1;
+            assert!(guest_fork_return(3).is_none());
+            result
+        });
+        assert_eq!(result, 10);
+        assert!(guest_fork_return(1).is_none());
+    }
+
+    #[test]
+    fn fork_child_bypasses_the_grate_continuation() {
+        let _context = TestContext::new();
+        let result = with_guest_fork_return(|| {
+            unsafe { longjmp(guest_fork_return(1).unwrap().cast(), 1) };
+        });
+        assert_eq!(result, 0);
+        assert!(guest_fork_return(1).is_none());
     }
 }
 
@@ -1290,30 +1427,23 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
         let cage = get_cage(_parent_cageid).expect("mpk_clone: cage not found");
         let rtInfo = cage.runtime_info.read();
         if let Some(mpk_info) = rtInfo.as_any().downcast_ref::<MPKRuntimeInfo>() {
+            let launch_sender = match crate::lind_mpk::host_rseq::prepare_thread(
+                |launch: CloneThreadLaunch| {
+                    let _ = mpk_clone_thread_entry(launch);
+                },
+            ) {
+                Ok(sender) => sender,
+                Err(error) => {
+                    eprintln!("[lind-mpk] mpk_clone: failed to prepare host thread: {error}");
+                    return -libc::EAGAIN;
+                }
+            };
             let next_tid = {
                 let mut tid_lock = mpk_info.next_thread_id.write();
                 let tid = *tid_lock;
                 *tid_lock += 1;
                 tid
             };
-            lind_signal_init(
-                _parent_cageid,
-                MPK_EPOCH.as_ptr(),
-                next_tid as i32,
-                false, /* this is not the main thread */
-            );
-
-            if set_parent_tid && parent_tid_ptr != 0 {
-                unsafe {
-                    *(parent_tid_ptr as *mut i32) = next_tid as i32;
-                }
-            }
-            if set_child_tid && child_tid_ptr != 0 {
-                unsafe {
-                    *(child_tid_ptr as *mut i32) = next_tid as i32;
-                }
-            }
-
 
             let parent_tid = current_tid();
             let parent_thread_info = mpk_info
@@ -1412,31 +1542,58 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             }
 
 
-            // Spawn the child on a normal Rust stack, then switch it to the copied
-            // supervisor stack before resuming at the saved setjmp return point.
+            // Launch the prepared host thread on its normal Rust stack. It waits
+            // for the parent's signal and TID bookkeeping before entering the cage.
             let (tid_sender, tid_receiver) = std::sync::mpsc::sync_channel(1);
+            let (start_sender, start_receiver) = std::sync::mpsc::sync_channel(1);
             let guest_stack = (clone_args.stack as usize, clone_args.stack_size as usize);
-            let handle = thread::spawn(move || {
-                mpk_clone_thread_entry(
-                    tid_sender,
-                    new_gs_data_addr,
-                    new_stack_base_addr,
-                    jump_buffer_addr,
-                    old_stack_base,
-                    parent_pointer_guard,
-                    registered_cage_ids,
-                    thread_info,
-                    guest_stack,
-                    parent_gs_base,
-                )
-            });
-
-
-            //update parent thread's return value
-            let child_os_tid = tid_receiver
-                .recv()
-                .expect("mpk_clone: child thread exited before reporting its tid");
+            let launch = CloneThreadLaunch {
+                tid_sender,
+                start_receiver,
+                new_gs_data_addr,
+                new_stack_base_addr,
+                jump_buffer_addr,
+                old_stack_base,
+                parent_pointer_guard,
+                registered_cage_ids,
+                thread_info,
+                guest_stack,
+                gs_base: parent_gs_base,
+            };
+            if launch_sender.send(launch).is_err() {
+                eprintln!("[lind-mpk] mpk_clone: host thread exited before launch");
+                return -libc::EAGAIN;
+            }
+            let child_os_tid = match tid_receiver.recv() {
+                Ok(tid) => tid,
+                Err(error) => {
+                    eprintln!("[lind-mpk] mpk_clone: child thread did not report its tid: {error}");
+                    return -libc::EAGAIN;
+                }
+            };
+            lind_signal_init(
+                _parent_cageid,
+                MPK_EPOCH.as_ptr(),
+                next_tid as i32,
+                false, /* this is not the main thread */
+            );
             cage.os_tid_map.insert(next_tid as i32, child_os_tid as i64);
+            if set_parent_tid && parent_tid_ptr != 0 {
+                unsafe {
+                    *(parent_tid_ptr as *mut i32) = next_tid as i32;
+                }
+            }
+            if set_child_tid && child_tid_ptr != 0 {
+                unsafe {
+                    *(child_tid_ptr as *mut i32) = next_tid as i32;
+                }
+            }
+            if start_sender.send(()).is_err() {
+                cage.epoch_handler.remove(&(next_tid as i32));
+                cage.os_tid_map.remove(&(next_tid as i32));
+                eprintln!("[lind-mpk] mpk_clone: host thread exited before entering the cage");
+                return -libc::EAGAIN;
+            }
 
             return next_tid as i32;
 
@@ -2138,25 +2295,27 @@ pub extern "C" fn mpk_make_threei_call_wrapper(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
-    let retval = threei::make_syscall(
-        self_cageid,
-        syscall_num,
-        syscall_name,
-        target_cageid,
-        arg1,
-        arg1_cageid,
-        arg2,
-        arg2_cageid,
-        arg3,
-        arg3_cageid,
-        arg4,
-        arg4_cageid,
-        arg5,
-        arg5_cageid,
-        arg6,
-        arg6_cageid,
-    );
-    //TODO: This should check all cages for which we can handle signals in this OS thread, not just self_cageid
-    crate::lind_mpk::signals::handle_signal(self_cageid, None);
-    retval
+    with_guest_fork_return(|| {
+        let retval = threei::make_syscall(
+            self_cageid,
+            syscall_num,
+            syscall_name,
+            target_cageid,
+            arg1,
+            arg1_cageid,
+            arg2,
+            arg2_cageid,
+            arg3,
+            arg3_cageid,
+            arg4,
+            arg4_cageid,
+            arg5,
+            arg5_cageid,
+            arg6,
+            arg6_cageid,
+        );
+        //TODO: This should check all cages for which we can handle signals in this OS thread, not just self_cageid
+        crate::lind_mpk::signals::handle_signal(self_cageid, None);
+        retval
+    })
 }

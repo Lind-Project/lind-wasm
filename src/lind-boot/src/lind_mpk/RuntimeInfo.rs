@@ -134,8 +134,9 @@ fn map_region_in_vmmap(
     )?;
     let region_base = vmmap.page_num_to_sys(start_page);
     let mapping = unsafe {
-        libc::mmap(
-            region_base as *mut c_void,
+        cage::mmap_cage(
+            cage_id,
+            region_base,
             allocation_size,
             libc::PROT_READ | libc::PROT_WRITE,
             flags,
@@ -143,7 +144,7 @@ fn map_region_in_vmmap(
             0,
         )
     };
-    if mapping == libc::MAP_FAILED {
+    if mapping == libc::MAP_FAILED as usize {
         let error = std::io::Error::last_os_error();
         vmmap.remove_entry(start_page, npages).map_err(|cleanup_error| {
             anyhow::anyhow!(
@@ -153,8 +154,6 @@ fn map_region_in_vmmap(
         })?;
         anyhow::bail!("mmap for cage {} region failed: {}", cage_id, error);
     }
-    crate::lind_mpk::pkeys::retag(region_base, allocation_size, libc::PROT_READ | libc::PROT_WRITE);
-
     Ok((region_base, allocation_size))
 }
 

@@ -238,22 +238,173 @@ pub fn key_for_addr(addr: usize) -> Option<u32> {
     (addr - base < CAGE_RESERVATION_SIZE).then_some(key)
 }
 
+/// Creates and tags a temporary mapping before atomically moving it into
+/// place. Mapping directly at the destination would expose key 0 to other
+/// running guest threads until `pkey_mprotect` completes.
+pub(super) unsafe fn mmap_fixed_with_key(
+    addr: usize,
+    len: usize,
+    prot: i32,
+    flags: i32,
+    fd: i32,
+    offset: i64,
+    key: u32,
+) -> std::io::Result<usize> {
+    if flags & libc::MAP_FIXED == 0 {
+        return Err(std::io::Error::from_raw_os_error(libc::EINVAL));
+    }
+    let temporary = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            len,
+            prot,
+            flags & !libc::MAP_FIXED,
+            fd,
+            offset,
+        )
+    };
+    if temporary == libc::MAP_FAILED {
+        return Err(std::io::Error::last_os_error());
+    }
+    let discard = || {
+        if unsafe { libc::munmap(temporary, len) } != 0 {
+            panic!(
+                "failed to unmap temporary MPK mapping at {temporary:p}: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+    };
+    if let Err(error) = tag(temporary as usize, len, prot, key) {
+        discard();
+        return Err(error);
+    }
+    let mapped = unsafe {
+        libc::mremap(
+            temporary,
+            len,
+            len,
+            libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED,
+            addr as *mut libc::c_void,
+        )
+    };
+    if mapped == libc::MAP_FAILED {
+        let error = std::io::Error::last_os_error();
+        discard();
+        return Err(error);
+    }
+    assert_eq!(mapped as usize, addr, "mremap did not honour MREMAP_FIXED");
+    Ok(addr)
+}
+
+/// Handles fixed mappings within MPK reservations; other mappings use libc.
+///
+/// # Safety
+/// The caller must ensure that replacing the requested address range is safe.
+pub unsafe fn cage_mmap_hook(
+    _cageid: u64,
+    addr: usize,
+    len: usize,
+    prot: i32,
+    flags: i32,
+    fd: i32,
+    offset: i64,
+) -> Option<usize> {
+    if flags & libc::MAP_FIXED == 0 {
+        return None;
+    }
+    let key = key_for_addr(addr)?;
+    Some(match unsafe { mmap_fixed_with_key(addr, len, prot, flags, fd, offset, key) } {
+        Ok(mapped) => mapped,
+        Err(error) => {
+            let errno = match error.raw_os_error() {
+                Some(errno) => errno,
+                None => {
+                    eprintln!("[lind-mpk] fixed mapping at {addr:#x} failed: {error}");
+                    libc::EIO
+                }
+            };
+            unsafe { *libc::__errno_location() = errno };
+            libc::MAP_FAILED as usize
+        }
+    })
+}
+
 /// Re-applies the key of the containing reservation to `[addr, addr + len)`,
 /// e.g. after a fresh `mmap` reset it to key 0.
-pub fn retag(addr: usize, len: usize, prot: i32) {
+pub fn retag(addr: usize, len: usize, prot: i32) -> std::io::Result<()> {
     if let Some(key) = key_for_addr(addr) {
-        let _ = tag(addr, len, prot, key);
+        tag(addr, len, prot, key)
+    } else {
+        Ok(())
     }
 }
 
 /// Hook called by rawposix after it maps memory for cage `_cageid`.
 pub fn cage_map_hook(_cageid: u64, addr: usize, len: usize, prot: i32) {
-    retag(addr, len, prot);
+    retag(addr, len, prot)
+        .unwrap_or_else(|error| panic!("failed to tag cage mapping {addr:#x}+{len:#x}: {error}"));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
+    const PAGE: usize = 4096;
+
+    struct TestMapping(usize);
+
+    impl TestMapping {
+        fn new() -> Self {
+            let addr = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    PAGE,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    -1,
+                    0,
+                )
+            };
+            assert_ne!(addr, libc::MAP_FAILED);
+            Self(addr as usize)
+        }
+    }
+
+    impl Drop for TestMapping {
+        fn drop(&mut self) {
+            assert_eq!(unsafe { libc::munmap(self.0 as *mut libc::c_void, PAGE) }, 0);
+        }
+    }
+
+    struct TestKey(u32);
+
+    impl Drop for TestKey {
+        fn drop(&mut self) {
+            assert_eq!(unsafe { libc::syscall(libc::SYS_pkey_free, self.0) }, 0);
+        }
+    }
+
+    fn mapping_key(addr: usize) -> u32 {
+        let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap();
+        let mut found = false;
+        for line in smaps.lines() {
+            if let Some((start, end)) = line.split_whitespace().next().and_then(|s| s.split_once('-')) {
+                if let (Ok(start), Ok(end)) = (
+                    usize::from_str_radix(start, 16),
+                    usize::from_str_radix(end, 16),
+                ) {
+                    found = (start..end).contains(&addr);
+                }
+            }
+            if found {
+                if let Some(key) = line.strip_prefix("ProtectionKey:") {
+                    return key.trim().parse().unwrap();
+                }
+            }
+        }
+        panic!("no protection key found for mapping {addr:#x}");
+    }
 
     #[test]
     fn allocator_never_hands_out_supervisor_key() {
@@ -290,6 +441,82 @@ mod tests {
     fn unassigned_addresses_have_no_key() {
         assert_eq!(key_for_addr(0x1000_0000), None);
         assert_eq!(reservation_key(0x1000_0000), None);
-        retag(0x1000_0000, 0x1000, libc::PROT_READ);
+        retag(0x1000_0000, 0x1000, libc::PROT_READ).unwrap();
+    }
+
+    #[test]
+    fn fixed_mapping_preserves_key_and_file_sharing() {
+        let key = unsafe { libc::syscall(libc::SYS_pkey_alloc, 0, 0) };
+        if key < 0 {
+            let error = std::io::Error::last_os_error();
+            if matches!(error.raw_os_error(), Some(libc::ENOSYS | libc::EINVAL | libc::EOPNOTSUPP)) {
+                eprintln!("skipping protection-key mapping test: {error}");
+                return;
+            }
+            panic!("pkey_alloc failed: {error}");
+        }
+        let key = TestKey(key as u32);
+        let mapping = TestMapping::new();
+        let fd = unsafe { libc::memfd_create(c"lind-pkey-test".as_ptr(), libc::MFD_CLOEXEC) };
+        assert!(fd >= 0);
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        assert_eq!(unsafe { libc::ftruncate(fd.as_raw_fd(), (2 * PAGE) as i64) }, 0);
+        let prot = libc::PROT_READ | libc::PROT_WRITE;
+
+        for sharing in [libc::MAP_SHARED, libc::MAP_PRIVATE] {
+            let original = 0x42u8;
+            assert_eq!(
+                unsafe { libc::pwrite(fd.as_raw_fd(), (&original as *const u8).cast(), 1, PAGE as i64) },
+                1
+            );
+            let result = unsafe {
+                mmap_fixed_with_key(
+                    mapping.0,
+                    PAGE,
+                    prot,
+                    sharing | libc::MAP_FIXED,
+                    fd.as_raw_fd(),
+                    PAGE as i64,
+                    key.0,
+                )
+            };
+            assert_eq!(result.unwrap(), mapping.0);
+            assert_eq!(mapping_key(mapping.0), key.0);
+            unsafe {
+                assert_eq!(*(mapping.0 as *const u8), original);
+                *(mapping.0 as *mut u8) = 0x7a;
+            }
+            let mut stored = 0u8;
+            assert_eq!(
+                unsafe { libc::pread(fd.as_raw_fd(), (&mut stored as *mut u8).cast(), 1, PAGE as i64) },
+                1
+            );
+            assert_eq!(stored, if sharing == libc::MAP_SHARED { 0x7a } else { original });
+        }
+    }
+
+    #[test]
+    fn failed_fixed_mapping_keeps_previous_mapping() {
+        let mapping = TestMapping::new();
+        unsafe { *(mapping.0 as *mut u8) = 0xa5 };
+        for (addr, key) in [
+            (mapping.0 + 1, SUPERVISOR_PKEY),
+            (mapping.0, NUM_PKEYS),
+        ] {
+            let error = unsafe {
+                mmap_fixed_with_key(
+                    addr,
+                    PAGE,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_FIXED,
+                    -1,
+                    0,
+                    key,
+                )
+            }
+            .unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(libc::EINVAL));
+            assert_eq!(unsafe { *(mapping.0 as *const u8) }, 0xa5);
+        }
     }
 }

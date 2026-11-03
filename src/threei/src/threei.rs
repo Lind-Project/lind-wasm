@@ -362,6 +362,33 @@ pub fn copy_handler_table_to_cage(
     copy_handler_table_to_cage_impl(srccage, targetcage)
 }
 
+thread_local! {
+    /// Grates whose dispatch is currently running on this thread, innermost last.
+    static GRATE_DISPATCHES: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn release_grate_dispatch(grateid: u64) {
+    with_cage(grateid, |grate| {
+        let _ = grate.grate_inflight.fetch_update(
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire,
+            |inflight| Some(inflight.saturating_sub(1)),
+        );
+    });
+}
+
+/// Releases the in-flight count of every grate dispatch on this thread.
+///
+/// A runtime must call this when it abandons the host frames of those
+/// dispatches without returning through them (e.g. native exec jumping into
+/// the new program), otherwise `cage_finalize` of the grate waits forever.
+pub fn abandon_grate_dispatches() {
+    let dispatches = GRATE_DISPATCHES.with(|dispatches| std::mem::take(&mut *dispatches.borrow_mut()));
+    for grateid in dispatches {
+        release_grate_dispatch(grateid);
+    }
+}
+
 /// actually performs a call.  Not interposable
 ///
 /// This actually performs a threei call.  It is not interposable.  This
@@ -531,6 +558,7 @@ pub fn make_syscall(
             return -(Errno::ESRCH as i64);
         }
 
+        GRATE_DISPATCHES.with(|dispatches| dispatches.borrow_mut().push(grateid));
         let grate_result = _call_grate_func(
             grateid,
             in_grate_fn_ptr_u64,
@@ -549,15 +577,8 @@ pub fn make_syscall(
         );
 
         // Decrement the in-flight counter now that the dispatch returned.
-        with_cage(grateid, |grate| {
-            let _ = grate
-                .grate_inflight
-                .fetch_update(
-                    std::sync::atomic::Ordering::AcqRel,
-                    std::sync::atomic::Ordering::Acquire,
-                    |inflight| Some(inflight.saturating_sub(1)),
-                );
-        });
+        GRATE_DISPATCHES.with(|dispatches| dispatches.borrow_mut().pop());
+        release_grate_dispatch(grateid);
 
         if let Some(ret) = grate_result {
             return ret;
@@ -988,4 +1009,63 @@ pub fn copy_data_between_cages(
 
     // Return destination address as success indicator
     destaddr
+}
+
+#[cfg(test)]
+mod grate_dispatch_tests {
+    use super::*;
+    use cage::memory::vmmap::Vmmap;
+    use cage::timer::IntervalTimer;
+    use cage::{add_cage, cagetable_init, get_cage, remove_cage, Cage, NullRuntimeInfo};
+    use parking_lot::{Mutex, RwLock};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::Arc;
+    use sysdefs::constants::lind_platform_const::RUNTIME_TYPE_MPK;
+
+    const GRATE: u64 = 7;
+
+    fn grate_cage(inflight: u64) -> Cage {
+        Cage {
+            cageid: GRATE,
+            parent: GRATE,
+            cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+            rev_shm: Mutex::new(Vec::new()),
+            signalhandler: Default::default(),
+            sigset: AtomicU64::new(0),
+            pending_signals: RwLock::new(vec![]),
+            epoch_handler: Default::default(),
+            os_tid_map: Default::default(),
+            main_threadid: RwLock::new(0),
+            interval_timer: IntervalTimer::new(GRATE),
+            zombies: RwLock::new(vec![]),
+            child_num: AtomicU64::new(0),
+            vmmap: RwLock::new(Vmmap::new()),
+            final_exit_status: RwLock::new(None),
+            exit_group_initiated: AtomicBool::new(false),
+            is_dead: AtomicBool::new(false),
+            grate_inflight: AtomicU64::new(inflight),
+            runtime_info: RwLock::new(Box::new(NullRuntimeInfo)),
+            runtime_type: AtomicU64::new(RUNTIME_TYPE_MPK),
+        }
+    }
+
+    #[test]
+    fn abandoning_dispatches_releases_their_inflight_counts() {
+        cagetable_init();
+        add_cage(GRATE, grate_cage(3));
+        // Two nested dispatches into the grate on this thread are abandoned
+        // by an exec; a third one belongs to another thread.
+        GRATE_DISPATCHES.with(|dispatches| dispatches.borrow_mut().extend([GRATE, GRATE]));
+
+        abandon_grate_dispatches();
+        let grate = get_cage(GRATE).unwrap();
+        assert_eq!(grate.grate_inflight.load(Ordering::Acquire), 1);
+        assert!(GRATE_DISPATCHES.with(|dispatches| dispatches.borrow().is_empty()));
+
+        abandon_grate_dispatches();
+        assert_eq!(grate.grate_inflight.load(Ordering::Acquire), 1);
+        drop(grate);
+        remove_cage(GRATE);
+    }
 }

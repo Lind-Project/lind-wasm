@@ -5,7 +5,6 @@ use crate::cage::get_cage;
 
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 pub use parking_lot::Mutex;
-use std::ffi::c_void;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::io::AsRawFd;
 pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
@@ -136,6 +135,21 @@ impl ShmSegment {
     // increase in cage references within attached_cages map
     pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: u64) -> usize {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
+        let result = unsafe {
+            crate::memory::mmap_cage(
+                cageid,
+                shmaddr as usize,
+                self.size as usize,
+                prot,
+                (MAP_SHARED as i32) | (MAP_FIXED as i32),
+                fobjfdno,
+                0,
+            )
+        };
+        if crate::memory::is_mmap_error(result) {
+            return result;
+        }
+
         self.shminfo.shm_nattch += 1;
         self.shminfo.shm_atime = timestamp() as isize;
 
@@ -148,18 +162,6 @@ impl ShmSegment {
             }
         };
 
-        let result = unsafe {
-            libc::mmap(
-                shmaddr as *mut c_void,
-                self.size as usize,
-                prot,
-                (MAP_SHARED as i32) | (MAP_FIXED as i32),
-                fobjfdno,
-                0,
-            ) as usize
-        };
-        crate::memory::notify_cage_mapping(cageid, result, self.size as usize, prot);
-
         result
     }
 
@@ -167,17 +169,20 @@ impl ShmSegment {
     // decrease references within attached cages map
     pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: u64) {
         let mmap_ret = unsafe {
-            (libc::mmap(
-                shmaddr as *mut c_void,
+            crate::memory::mmap_cage(
+                cageid,
+                shmaddr as usize,
                 self.size as usize,
                 PROT_NONE,
                 (MAP_PRIVATE as i32) | (MAP_ANONYMOUS as i32) | (MAP_FIXED as i32),
                 -1,
                 0,
-            ) as usize)
+            )
         };
-        assert!(mmap_ret == shmaddr as usize);
-        crate::memory::notify_cage_mapping(cageid, mmap_ret, self.size as usize, PROT_NONE);
+        assert_eq!(
+            mmap_ret, shmaddr as usize,
+            "failed to detach shared mapping: {}", std::io::Error::last_os_error()
+        );
 
         self.shminfo.shm_nattch -= 1;
         self.shminfo.shm_dtime = timestamp() as isize;
@@ -343,20 +348,20 @@ pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u
 
     let cage = get_cage(cageid).unwrap();
 
-    if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+    let result = if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
         if 0 != (shmflg & SHM_RDONLY) {
             prot = PROT_READ;
         } else {
             prot = PROT_READ | PROT_WRITE;
         }
-        let mut rev_shm = cage.rev_shm.lock();
-        rev_shm.push((shmaddr as u64, shmid));
-        drop(rev_shm);
-
         segment.map_shm(shmaddr, prot, cageid) as usize
     } else {
-        syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") as usize
+        return syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") as usize;
+    };
+    if !crate::memory::is_mmap_error(result) {
+        cage.rev_shm.lock().push((shmaddr as u64, shmid));
     }
+    result
 }
 
 /// Helper function that detaches a shared memory segment from the calling cage’s address space.

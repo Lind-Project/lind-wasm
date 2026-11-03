@@ -34,6 +34,37 @@ pub type CageMapHook = fn(u64, usize, usize, i32);
 
 static CAGE_MAP_HOOK: std::sync::OnceLock<CageMapHook> = std::sync::OnceLock::new();
 
+/// Optionally performs a fixed cage mapping, returning the usual mmap result.
+pub type CageMmapHook = unsafe fn(u64, usize, usize, i32, i32, i32, i64) -> Option<usize>;
+
+static CAGE_MMAP_HOOK: std::sync::OnceLock<CageMmapHook> = std::sync::OnceLock::new();
+
+/// Installs the runtime-specific implementation for fixed cage mappings.
+pub fn set_cage_mmap_hook(hook: CageMmapHook) {
+    let _ = CAGE_MMAP_HOOK.set(hook);
+}
+
+/// Maps cage memory, preserving the `mmap` return value and errno convention.
+///
+/// # Safety
+/// The caller must ensure that replacing the requested address range is safe.
+pub unsafe fn mmap_cage(
+    cageid: u64,
+    addr: usize,
+    len: usize,
+    prot: i32,
+    flags: i32,
+    fd: i32,
+    offset: i64,
+) -> usize {
+    if let Some(hook) = CAGE_MMAP_HOOK.get() {
+        if let Some(result) = unsafe { hook(cageid, addr, len, prot, flags, fd, offset) } {
+            return result;
+        }
+    }
+    unsafe { libc::mmap(addr as *mut libc::c_void, len, prot, flags, fd, offset) as usize }
+}
+
 /// Installs the hook run after cage memory is mapped. Used by the MPK runtime
 /// to re-apply the cage's protection key, which a fresh `mmap` resets.
 pub fn set_cage_map_hook(hook: CageMapHook) {

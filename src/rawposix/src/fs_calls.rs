@@ -1,5 +1,5 @@
 use cage::{
-    get_cage, get_shm_length, is_mmap_error, notify_cage_mapping, new_shm_segment, round_up_page, shmat_helper,
+    get_cage, get_shm_length, is_mmap_error, mmap_cage, new_shm_segment, round_up_page, shmat_helper,
     shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
     SHM_METADATA,
 };
@@ -894,10 +894,12 @@ pub extern "C" fn mmap_syscall(
     // round up length to be multiple of pages
     let rounded_length = round_up_page(len);
 
+    // Keep a selected range reserved until both the host mapping and vmmap
+    // entry are in place, so concurrent allocations cannot choose it as well.
+    let mut vmmap = cage.vmmap.write();
     let mut useraddr = addr as usize;
     // if MAP_FIXED is not set, then we need to find an address for the user
     if flags & MAP_FIXED as i32 == 0 {
-        let vmmap = cage.vmmap.write();
         let result;
 
         // pick an address of appropriate size, anywhere
@@ -928,11 +930,7 @@ pub extern "C" fn mmap_syscall(
         return syscall_error(Errno::EINVAL, "mmap", "invalid flags") as i64;
     }
 
-    let vmmap = cage.vmmap.read();
-
     let sysaddr = vmmap.user_to_sys(useraddr);
-
-    drop(vmmap);
 
     if rounded_length > 0 {
         if flags & MAP_ANONYMOUS as i32 > 0 {
@@ -955,9 +953,7 @@ pub extern "C" fn mmap_syscall(
             return (handle_errno(errno, "mmap")) as i64;
         }
 
-        let vmmap = cage.vmmap.read();
         let result = vmmap.sys_to_user(result);
-        drop(vmmap);
 
         // if mmap addr is positive, that would mean the mapping is successful and we need to update the vmmap entry
         if result >= 0 {
@@ -965,7 +961,6 @@ pub extern "C" fn mmap_syscall(
                 panic!("MAP_FIXED not fixed");
             }
 
-            let mut vmmap = cage.vmmap.write();
             let backing = {
                 if flags as u32 & MAP_ANONYMOUS > 0 {
                     MemoryBackingType::Anonymous
@@ -1036,8 +1031,9 @@ pub extern "C" fn mmap_inner(
         match fdtables::translate_virtual_fd(cageid, vfd_arg as u64) {
             Ok(kernel_fd) => {
                 let ret = unsafe {
-                    libc::mmap(
-                        addr as *mut c_void,
+                    mmap_cage(
+                        cageid,
+                        addr as usize,
                         len,
                         prot,
                         flags,
@@ -1046,7 +1042,6 @@ pub extern "C" fn mmap_inner(
                     ) as i64
                 };
 
-                notify_cage_mapping(cageid, ret as usize, len, prot);
                 // Return raw result (including -1 on error)
                 // Caller will check page alignment to detect errors
                 ret as usize
@@ -1057,8 +1052,7 @@ pub extern "C" fn mmap_inner(
         }
     } else {
         // Handle mmap with fd = -1 (anonymous memory mapping or special case)
-        let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
-        notify_cage_mapping(cageid, ret as usize, len, prot);
+        let ret = unsafe { mmap_cage(cageid, addr as usize, len, prot, flags, -1, off) as i64 };
         // Return raw result (including -1 on error)
         // Caller will check page alignment to detect errors
         ret as usize
@@ -1134,8 +1128,9 @@ pub extern "C" fn munmap_syscall(
         let act_start_addr = vmmap.page_num_to_sys(act_start);
         let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
         let result = unsafe {
-            libc::mmap(
-                act_start_addr as *mut c_void,
+            mmap_cage(
+                cageid,
+                act_start_addr,
                 act_len,
                 PROT_NONE,
                 (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
@@ -1143,17 +1138,16 @@ pub extern "C" fn munmap_syscall(
                 0,
             ) as usize
         };
+        if result as isize == -1 {
+            let errno = get_errno();
+            return (handle_errno(errno, "munmap")) as i64;
+        }
         if result != act_start_addr {
             lind_debug_panic(&format!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
                 result as *const c_void, act_start_addr as *const c_void
             ));
         }
-        if result as isize == -1 {
-            let errno = get_errno();
-            return (handle_errno(errno, "munmap")) as i64;
-        }
-        notify_cage_mapping(cageid, result, act_len, PROT_NONE as i32);
     }
 
     vmmap.remove_entry(req_start, req_end - req_start);
@@ -4919,7 +4913,7 @@ pub extern "C" fn shmat_syscall(
 
     // Initialize the user address from the provided address pointer.
     // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
-    let vmmap = cage.vmmap.write();
+    let mut vmmap = cage.vmmap.write();
     let result;
     if useraddr == 0 {
         // Allocate a suitable space in the virtual memory map for the shared memory segment
@@ -4934,26 +4928,17 @@ pub extern "C" fn shmat_syscall(
             vmmap.user_to_page_num(useraddr),
         );
     }
-    // drop the write lock of vmmap to avoid deadlock
-    drop(vmmap);
-
     if result.is_none() {
         // If no suitable memory space is found, return an error indicating insufficient memory.
         return (syscall_error(Errno::ENOMEM, "shmat", "no memory") as i32) as i64;
     }
     let space = result.unwrap();
     
-    // Convert the user address into a system address.
-    // Read the virtual memory map to access the user address space.
-    let vmmap = cage.vmmap.read();
-    
     // Update the user address to the start of the allocated memory space.
     useraddr = vmmap.page_num_to_user(space.start());
 
     // Convert the user address to the corresponding system address for the shared memory segment.
     let sysaddr = vmmap.user_to_sys(useraddr);
-    // Release the lock on the virtual memory map as we no longer need it.
-    drop(vmmap);
 
     // Call the raw shmat helper to attach the shared memory segment.
     let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
@@ -4964,14 +4949,11 @@ pub extern "C" fn shmat_syscall(
         return (handle_errno(errno, "shmat")) as i64;
     }
 
-    let vmmap = cage.vmmap.read();
     let result = vmmap.sys_to_user(result);
-    drop(vmmap);
 
     if result != useraddr {
         panic!("shmat did not attach at the expected address");
     }
-    let mut vmmap = cage.vmmap.write();
     let backing = MemoryBackingType::SharedMemory(shmid as u64);
     let maxprot = prot;
     let page_num = vmmap.user_to_page_num(useraddr);

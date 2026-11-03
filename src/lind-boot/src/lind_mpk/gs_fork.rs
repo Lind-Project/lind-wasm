@@ -225,26 +225,49 @@ fn apply_memory_ops(ops: Vec<MemoryOp>) {
         match op {
             MemoryOp::Unmap(addr, len) => {
                 gs_debug(format!("unmapping {addr:#x}..{:#x}", addr + len));
-                unsafe { libc::munmap(addr as *mut c_void, len) };
+                if unsafe { libc::munmap(addr as *mut c_void, len) } != 0 {
+                    panic!(
+                        "failed to unmap {addr:#x}+{len:#x}: {}",
+                        std::io::Error::last_os_error()
+                    );
+                }
                 if len == CAGE_RESERVATION_SIZE {
                     pkeys::release_reservation(addr);
                 }
             }
             MemoryOp::Reserve(addr, len) => {
-                unsafe {
-                    libc::mmap(
-                        addr as *mut c_void,
+                let result = unsafe {
+                    cage::mmap_cage(
+                        0,
+                        addr,
                         len,
                         libc::PROT_NONE,
                         libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE | libc::MAP_FIXED,
                         -1,
                         0,
+                    )
+                };
+                if result != addr {
+                    panic!(
+                        "failed to reserve {addr:#x}+{len:#x}: {}",
+                        std::io::Error::last_os_error()
                     );
                 }
-                pkeys::retag(addr, len, libc::PROT_NONE);
             }
         }
     }
+}
+
+fn cleanup_registry(
+    registry: &Mutex<Registry>,
+    release: impl FnOnce(&mut Registry) -> Vec<MemoryOp>,
+    apply: impl FnOnce(Vec<MemoryOp>),
+) {
+    let mut registry = registry.lock().unwrap();
+    let ops = release(&mut registry);
+    // Keep released slots unavailable until their old mappings are gone. In
+    // particular, retagging a reservation must not race with a new stack.
+    apply(ops);
 }
 
 fn registry() -> &'static Mutex<Registry> {
@@ -269,8 +292,7 @@ pub(super) fn forget_guest_stack(tid: pid_t) {
     let Some((lo, _)) = guest_stacks().lock().unwrap().remove(&tid) else {
         return;
     };
-    let ops = registry().lock().unwrap().release_thread_stack(lo);
-    apply_memory_ops(ops);
+    cleanup_registry(registry(), |registry| registry.release_thread_stack(lo), apply_memory_ops);
 }
 
 /// Whether `cage_id` was created by GS fork (and has not exec'd since).
@@ -282,8 +304,7 @@ pub(super) fn is_gs_forked_cage(cage_id: u64) -> bool {
 /// or execs. Memory still needed by a fork family is kept until its last
 /// member is gone.
 pub(super) fn release_cage_memory(cage_id: u64, base: usize) {
-    let ops = registry().lock().unwrap().release(cage_id, base);
-    apply_memory_ops(ops);
+    cleanup_registry(registry(), |registry| registry.release(cage_id, base), apply_memory_ops);
 }
 
 /// Sandbox offset (GS base) of `cage_id`: `region_base - root_base` for a
@@ -384,7 +405,6 @@ pub(super) fn prepare_thread(cage_id: u64, tls: usize, stack_size: usize) -> any
         }
         Err(error) => {
             let ops = registry.release_thread_stack(stack_lo);
-            drop(registry);
             apply_memory_ops(ops);
             Err(error)
         }
@@ -483,7 +503,7 @@ fn duplicate_cage_memory(vmmap: &Vmmap, delta: usize) -> anyhow::Result<()> {
             };
             if ret as usize == dst {
                 // The alias keeps the parent's protection key.
-                pkeys::retag(dst, len, entry.prot);
+                pkeys::retag(dst, len, entry.prot)?;
                 continue;
             }
             gs_debug(format!(
@@ -513,22 +533,16 @@ fn duplicate_cage_memory(vmmap: &Vmmap, delta: usize) -> anyhow::Result<()> {
 
 /// Maps `fd` read/write at `addr`, tagged with `pkey` when MPK is enabled.
 fn map_shared_fixed(fd: libc::c_int, addr: usize, len: usize, pkey: Option<u32>) -> anyhow::Result<()> {
-    let ret = unsafe {
-        libc::mmap(
-            addr as *mut c_void,
-            len,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_SHARED | libc::MAP_FIXED,
-            fd,
-            0,
-        )
+    let prot = libc::PROT_READ | libc::PROT_WRITE;
+    let flags = libc::MAP_SHARED | libc::MAP_FIXED;
+    let ret = if let Some(key) = pkey {
+        unsafe { pkeys::mmap_fixed_with_key(addr, len, prot, flags, fd, 0, key) }
+            .map_err(|error| anyhow::anyhow!("mapping child stack at {addr:#x} failed: {error}"))?
+    } else {
+        unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, fd, 0) as usize }
     };
-    if ret == libc::MAP_FAILED || ret as usize != addr {
+    if ret != addr {
         anyhow::bail!("mapping child stack at {addr:#x} failed: {}", std::io::Error::last_os_error());
-    }
-    if let Some(key) = pkey {
-        pkeys::tag(addr, len, libc::PROT_READ | libc::PROT_WRITE, key)
-            .map_err(|error| anyhow::anyhow!("tagging child stack at {addr:#x} failed: {error}"))?;
     }
     Ok(())
 }
@@ -674,18 +688,24 @@ struct ForkCleanup {
 impl Drop for ForkCleanup {
     fn drop(&mut self) {
         if let Some((root_base, slot)) = self.slot.take() {
-            unsafe {
-                libc::mmap(
-                    slot_addr(root_base, slot) as *mut c_void,
+            let slot_lo = slot_addr(root_base, slot);
+            let result = unsafe {
+                cage::mmap_cage(
+                    0,
+                    slot_lo,
                     STACK_SLOT_SIZE,
                     libc::PROT_NONE,
                     libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE | libc::MAP_FIXED,
                     -1,
                     0,
+                )
+            };
+            if result != slot_lo {
+                panic!(
+                    "failed to reserve stack slot at {slot_lo:#x}: {}",
+                    std::io::Error::last_os_error()
                 );
             }
-            let slot_lo = slot_addr(root_base, slot);
-            pkeys::retag(slot_lo, STACK_SLOT_SIZE, libc::PROT_NONE);
             registry().lock().unwrap().free_slot(root_base, slot);
         }
         if let Some(base) = self.child_region.take() {
@@ -756,11 +776,19 @@ fn gs_fork_inner(
     if parent_thread.gs_data.is_null() || parent_thread.supervisor_stack_size == 0 {
         anyhow::bail!("forking thread has no supervisor context");
     }
+    let launch_sender = prepare_child_thread()?;
     let context_stack = current_context_stack();
-    let caller = unsafe {
+    let (caller_index, caller) = unsafe {
         let index = caller_context_index(&*context_stack, parent_cageid)
             .ok_or_else(|| anyhow::anyhow!("no guest context of the parent on the context stack"))?;
-        (*context_stack).contexts[index]
+        (index, (*context_stack).contexts[index])
+    };
+    let resume_context = caller_index + 1;
+    let jump_buffer = if resume_context != unsafe { (*context_stack).current_context } {
+        crate::lind_mpk::syscalls::guest_fork_return(resume_context)
+            .ok_or_else(|| anyhow::anyhow!("interposed fork has no saved guest return context"))?
+    } else {
+        jump_buffer
     };
     let guest_rsp = caller.rsp as usize;
 
@@ -862,6 +890,9 @@ fn gs_fork_inner(
             region_delta,
             child_pkru,
         );
+        // Only the calling cage is forked. The grates on the parent's call
+        // chain finish there; the child returns zero at its original entry.
+        (*new_gs_data).current_context = resume_context;
     }
     let child_fs = caller.fs_base.wrapping_add(region_delta);
     let field = child_fs.wrapping_add(sandbox_offset_field);
@@ -935,8 +966,7 @@ fn gs_fork_inner(
         .expect("mpk_clone: LIND_MANAGER not set – call init_mpk first")
         .increment();
 
-    // The child resumes in the code that issued the fork, which is a grate
-    // when the fork was interposed.
+    // Resume in the child cage, not in an interposing grate's continuation.
     let resume_gs = active_guest_gs_base(unsafe { &*new_gs_data }).unwrap_or(gs_offset);
 
     let (tid_sender, tid_receiver) = std::sync::mpsc::sync_channel(1);
@@ -954,7 +984,9 @@ fn gs_fork_inner(
         old_supervisor_stack_base: parent_thread.supervisor_stack_base,
         parent_pointer_guard: current_pointer_guard(),
     };
-    spawn_child_thread(launch)?;
+    launch_sender
+        .send(launch)
+        .map_err(|_| anyhow::anyhow!("child thread exited before receiving its launch state"))?;
     let child_tid = tid_receiver
         .recv()
         .map_err(|_| anyhow::anyhow!("child thread exited before reporting its tid"))?;
@@ -962,16 +994,13 @@ fn gs_fork_inner(
     Ok(child_cageid)
 }
 
-/// Starts the child's host thread and detaches it by dropping its join handle.
-fn spawn_child_thread(launch: ChildLaunch) -> anyhow::Result<()> {
-    let thread = std::thread::Builder::new()
-        .spawn(move || {
-            let launch = Box::into_raw(Box::new(launch));
-            let _ = gs_fork_thread_start(launch.cast());
-        })
-        .map_err(|error| anyhow::anyhow!("failed to spawn child thread: {error}"))?;
-    drop(thread);
-    Ok(())
+/// Checks the new host thread before committing the child's cage resources.
+fn prepare_child_thread() -> anyhow::Result<std::sync::mpsc::SyncSender<ChildLaunch>> {
+    crate::lind_mpk::host_rseq::prepare_thread(|launch: ChildLaunch| {
+        let launch = Box::into_raw(Box::new(launch));
+        let _ = gs_fork_thread_start(launch.cast());
+    })
+    .map_err(|error| anyhow::anyhow!("failed to prepare forked host thread: {error}"))
 }
 
 /// Where `gs_fork_thread_start` resumes the child.
@@ -1204,6 +1233,40 @@ mod tests {
         );
         assert!(registry.thread_stacks.is_empty());
         assert_eq!(registry.alloc_slot(ROOT), Some(0));
+    }
+
+    #[test]
+    fn released_stack_slot_stays_locked_until_mappings_are_cleaned() {
+        let mut state = Registry::default();
+        let slot = state.alloc_slot(ROOT).unwrap();
+        let lo = slot_stack_lo(ROOT, slot, CAGE_STACK_SIZE);
+        state.thread_stacks.insert(lo, ThreadStack {
+            cage_id: 2,
+            root_base: ROOT,
+            slot,
+            offset: CAGE_RESERVATION_SIZE,
+        });
+        let registry = Arc::new(Mutex::new(state));
+        let worker_registry = Arc::clone(&registry);
+        let (started_sender, started_receiver) = std::sync::mpsc::sync_channel(1);
+        let (finish_sender, finish_receiver) = std::sync::mpsc::sync_channel(1);
+        let worker = std::thread::spawn(move || {
+            cleanup_registry(
+                &worker_registry,
+                |registry| registry.release_thread_stack(lo),
+                |ops| {
+                    assert_eq!(ops.len(), 2);
+                    started_sender.send(()).unwrap();
+                    finish_receiver.recv().unwrap();
+                },
+            );
+        });
+
+        started_receiver.recv().unwrap();
+        assert!(matches!(registry.try_lock(), Err(std::sync::TryLockError::WouldBlock)));
+        finish_sender.send(()).unwrap();
+        worker.join().unwrap();
+        assert_eq!(registry.lock().unwrap().alloc_slot(ROOT), Some(slot));
     }
 
     #[test]

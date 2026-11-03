@@ -6,6 +6,7 @@ pub mod RuntimeInfo;
 pub mod trampoline;
 pub mod signals;
 pub mod pkeys;
+mod host_rseq;
 pub use execute::execute_mpk;
 pub use execute::init_mpk;
 pub use syscalls::mpk_clone_syscall_entry;
