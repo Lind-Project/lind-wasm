@@ -48,6 +48,36 @@ CBLAS_A="$(ls "$GSL_NATIVE"/cblas/.libs/libgslcblas.a 2>/dev/null || true)"
 HARNESS_SRC="$GSL_SRC/test/results.c"
 [[ -f "$HARNESS_SRC" ]] || { echo "GSL test harness not found at $HARNESS_SRC (check GSL_SRC)"; exit 2; }
 
+BUILD="$HERE/build-tests"; mkdir -p "$BUILD"
+
+# --- Force the stub to win for every symbol we actually wrap (honest sandboxing) ---
+# The native libgsl.a FILLS symbols we don't wrap (e.g. gsl_sort_vector, gsl_heapsort). But GSL
+# compiles related functions into the same object, so pulling an unwrapped function DRAGS a
+# wrapped one (e.g. gsl_sort) into the exe as a strong definition that overrides our .so —
+# silently running it native. (Localizing it does NOT help: a local definition still satisfies
+# the exe's own reference.) Fix: RENAME our wrapped symbols in a filtered copy of libgsl.a
+# (gsl_sort -> __lindshadow_gsl_sort). objcopy renames both definitions AND internal references,
+# so: the test's `gsl_sort` reference no longer matches the archive and binds our .so (sandboxed),
+# while a native caller's internal use (gsl_sort_vector -> gsl_sort) was renamed too and still
+# resolves to the native copy inside its own object (stays native, as intended).
+# Set LIND_NO_ARCHIVE_FILTER=1 to skip and reproduce the old shadowing behavior.
+GSL_A_LINK="$GSL_A"
+if [[ "$NATIVE_BASELINE" != 1 && "${LIND_NO_ARCHIVE_FILTER:-0}" != 1 ]]; then
+    OBJCOPY="${OBJCOPY:-objcopy}"
+    REDEF="$BUILD/redefine_syms.txt"
+    # `<old> <new>` per line for each gsl_* function our stub .so actually exports (T/W):
+    nm -D "$STUB_DIR/libgsl.so" | awk '($2=="T"||$2=="W") && $3 ~ /^gsl_/ {print $3" __lindshadow_"$3}' \
+        | sort -u > "$REDEF"
+    GSL_A_LINK="$BUILD/libgsl_filtered.a"
+    cp -f "$GSL_A" "$GSL_A_LINK"
+    if ! "$OBJCOPY" --redefine-syms="$REDEF" "$GSL_A_LINK" 2>/dev/null; then
+        echo "warning: objcopy --redefine-syms failed; falling back to unfiltered archive (wrapped syms may run native)"
+        GSL_A_LINK="$GSL_A"
+    else
+        echo "archive filter: renamed $(wc -l < "$REDEF") wrapped gsl_* symbols out of the native fill -> stub wins"
+    fi
+fi
+
 # -I the native build dir so assembled <gsl/gsl_xxx.h> resolve, plus the source root.
 INCLUDES=(-I"$GSL_NATIVE" -I"$GSL_SRC")
 
@@ -56,7 +86,6 @@ if [[ ${#MODULES[@]} -eq 0 ]]; then
     MODULES=(poly blas vector matrix block sort statistics permutation sys const)
 fi
 
-BUILD="$HERE/build-tests"; mkdir -p "$BUILD"
 run_lind() { LIND_MODULE="$LIND_MODULE" LIND_PRELOAD="$LIND_PRELOAD" \
     LIND_ENABLE_FPCAST="$LIND_ENABLE_FPCAST" LD_LIBRARY_PATH="$STUB_DIR" "$@"; }
 
@@ -95,7 +124,7 @@ for m in "${MODULES[@]}"; do
     else
         echo "=== [$m] SANDBOXED (stub wins -> lind) ==="
         "$CC" "${INCLUDES[@]}" "${SRCS[@]}" "$HARNESS_SRC" \
-            -L"$STUB_DIR" -lgsl "$GSL_A" "$CBLAS_A" -lm -o "$out" \
+            -L"$STUB_DIR" -lgsl "$GSL_A_LINK" "$CBLAS_A" -lm -o "$out" \
             || { echo "  link FAILED"; fail=$((fail+1)); continue; }
         if run_lind "$out"; then echo "  [$m] PASS (sandboxed)"; pass=$((pass+1));
         else echo "  [$m] FAIL (sandboxed)"; fail=$((fail+1)); fi
@@ -104,3 +133,4 @@ done
 
 echo
 echo "RESULTS: modules ok=$pass fail=$fail skipped=$skip"
+

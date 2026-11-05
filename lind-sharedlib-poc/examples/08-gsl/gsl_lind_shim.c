@@ -42,3 +42,6 @@ int lind_gsl_poly_eval_derivs(const double c[], size_t lenc, double x, double re
 
 // GSL sort module — generated forwarders (see gen_gsl_sort.py).
 #include "generated/sort_shim.inc.c"
+
+// GSL statistics module — generated forwarders (see gen_gsl_stats.py).
+#include "generated/stats_shim.inc.c"

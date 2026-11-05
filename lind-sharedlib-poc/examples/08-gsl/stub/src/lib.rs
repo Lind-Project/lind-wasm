@@ -28,12 +28,31 @@ fn lib() -> &'static Mutex<SandboxedLib> {
     })
 }
 
+/// Print `[sandbox] <name>` to stderr when LIND_TRACE is set — a per-call audit trail
+/// proving the symbol ran through the guest (not the native fallback).
+fn trace(name: &str) {
+    if std::env::var_os("LIND_TRACE").is_some() {
+        eprintln!("[sandbox] {name}");
+    }
+}
+
 /// Call a guest export; returns the guest's integer return value.
 fn call(name: &str, args: &mut [Arg]) -> i64 {
+    trace(name);
     lib()
         .lock()
         .unwrap()
         .call(name, args)
+        .unwrap_or_else(|e| panic!("lind call `{name}` failed: {e:?}"))
+}
+
+/// Call a guest export that returns `double` (used by the generated statistics wrappers).
+fn call_f64(name: &str, args: &mut [Arg]) -> f64 {
+    trace(name);
+    lib()
+        .lock()
+        .unwrap()
+        .call_f64(name, args)
         .unwrap_or_else(|e| panic!("lind call `{name}` failed: {e:?}"))
 }
 
@@ -122,3 +141,6 @@ pub extern "C" fn gsl_poly_eval_derivs(
 
 // GSL sort module — generated marshalling (see gen_gsl_sort.py).
 include!("sort_generated.rs");
+
+// GSL statistics module — generated marshalling (see gen_gsl_stats.py).
+include!("stats_generated.rs");
