@@ -2,6 +2,7 @@
  * gsl_poly_solve_cubic with no idea the math runs inside the lind sandbox. */
 #include <stdio.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, double *x1);
 int gsl_poly_solve_cubic(double a, double b, double c, double *x0, double *x1, double *x2);
@@ -11,6 +12,14 @@ int gsl_poly_eval_derivs(const double c[], unsigned long lenc, double x,
  * resolve to the sandboxed wrappers — a clean check independent of GSL's own test coverage. */
 void   gsl_sort(double *data, size_t stride, size_t n);
 double gsl_stats_mean(const double data[], size_t stride, size_t n);
+/* opaque handle: gsl_vector is never dereferenced here — we hold the stub's token as a
+ * void* and only ever pass it to wrapped functions. (Declaring it void* also keeps the
+ * GSL header, and its inline accessors, out of this translation unit entirely.) */
+void   *gsl_vector_alloc(size_t n);
+void    gsl_vector_set(void *v, size_t i, double x);
+double  gsl_vector_get(const void *v, size_t i);
+void    gsl_sort_vector(void *v);
+void    gsl_vector_free(void *v);
 
 int main(void) {
     double x0, x1, x2;
@@ -39,6 +48,24 @@ int main(void) {
     /* statistics: reduction array -> scalar */
     double s[5] = {2.0, 4.0, 4.0, 4.0, 6.0};
     printf("gsl_stats_mean -> %g   (expect 4)\n", gsl_stats_mean(s, 1, 5));
+
+    /* opaque handle: alloc -> set -> sort -> get -> free, entirely sandboxed. The vector
+     * lives in guest memory; `v` is only ever an opaque token. */
+    double vin[5] = {3.1, 1.2, 4.8, 1.5, 2.6};
+    void *v = gsl_vector_alloc(5);
+    for (size_t i = 0; i < 5; i++) gsl_vector_set(v, i, vin[i]);
+    /* Negative control: set LIND_BREAK_HANDLE=1 to corrupt the token before sorting. The
+     * handle table must FAIL CLOSED ("invalid handle"), not silently pass — proving the
+     * token is validated and a forged/stale handle never reaches a sandboxed call. */
+    if (getenv("LIND_BREAK_HANDLE")) {
+        fprintf(stderr, "[demo] corrupting handle (expect a fail-closed abort below)\n");
+        v = (void *)((size_t)v ^ (size_t)0xdeadbeef);
+    }
+    gsl_sort_vector(v);
+    printf("gsl_sort_vector -> %g %g %g %g %g   (expect 1.2 1.5 2.6 3.1 4.8)\n",
+           gsl_vector_get(v, 0), gsl_vector_get(v, 1), gsl_vector_get(v, 2),
+           gsl_vector_get(v, 3), gsl_vector_get(v, 4));
+    gsl_vector_free(v);
     return 0;
 }
 

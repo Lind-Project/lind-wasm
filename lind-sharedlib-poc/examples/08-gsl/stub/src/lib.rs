@@ -56,6 +56,74 @@ fn call_f64(name: &str, args: &mut [Arg]) -> f64 {
         .unwrap_or_else(|e| panic!("lind call `{name}` failed: {e:?}"))
 }
 
+/// Call a guest **constructor** that returns a pointer to an opaque object; register the
+/// returned guest offset as a handle of `class` and hand the caller the opaque token.
+fn call_handle(name: &str, args: &mut [Arg], class: u32) -> u64 {
+    trace(name);
+    lib()
+        .lock()
+        .unwrap()
+        .call_handle(name, args, class)
+        .unwrap_or_else(|e| panic!("lind call `{name}` failed: {e:?}"))
+}
+
+// ---------------------------------------------------------------------------
+// Opaque handles (gsl_vector) — proving the Arg::Handle path.
+//
+// A gsl_vector lives entirely in guest memory; the native app only ever gets back an
+// opaque token (cast to `gsl_vector *`), never a real pointer. The token is translated
+// to the guest offset on each call. IMPORTANT: this works only while the app reaches the
+// vector exclusively through wrapped FUNCTIONS — gsl_vector_get / gsl_vector_set are
+// `inline` in GSL headers under HAVE_INLINE, and an app compiled with -DHAVE_INLINE would
+// inline them and dereference the token as a real pointer. The demo/tests must be built
+// WITHOUT HAVE_INLINE so the extern accessors (which we forward) are used.
+const CLASS_VECTOR: u32 = 1;
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_vector_alloc(n: usize) -> *mut c_void {
+    call_handle("lind_gsl_vector_alloc", &mut [Arg::USize(n)], CLASS_VECTOR) as *mut c_void
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_vector_set(v: *mut c_void, i: usize, x: f64) {
+    call(
+        "lind_gsl_vector_set",
+        &mut [
+            Arg::Handle { class: CLASS_VECTOR, token: v as u64, release: false },
+            Arg::USize(i),
+            Arg::F64(x),
+        ],
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_vector_get(v: *const c_void, i: usize) -> f64 {
+    call_f64(
+        "lind_gsl_vector_get",
+        &mut [
+            Arg::Handle { class: CLASS_VECTOR, token: v as u64, release: false },
+            Arg::USize(i),
+        ],
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_sort_vector(v: *mut c_void) {
+    call(
+        "lind_gsl_sort_vector",
+        &mut [Arg::Handle { class: CLASS_VECTOR, token: v as u64, release: false }],
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_vector_free(v: *mut c_void) {
+    // release: true — the guest frees the object; the token is retired so reuse fails closed.
+    call(
+        "lind_gsl_vector_free",
+        &mut [Arg::Handle { class: CLASS_VECTOR, token: v as u64, release: true }],
+    );
+}
+
 /// Write an out-double back to a caller pointer (if non-null). The roots are only written by
 /// GSL when they exist; for the no-real-root case the caller ignores them, so a copy-back of
 /// whatever the guest left is harmless.

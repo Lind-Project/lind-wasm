@@ -178,6 +178,21 @@ pub enum Arg<'a> {
     /// each field at its guest offset (converting widths, nested-allocating any pointer),
     /// and passes the struct's guest offset. Input only: not copied back.
     StructIn(&'a [Field<'a>]),
+    /// An **opaque handle** argument (e.g. a `gsl_vector *`).
+    ///
+    /// The object it refers to already lives in *guest* memory — it was created by a
+    /// sandboxed constructor (see [`SandboxedLib::call_handle`]) that returned a guest
+    /// offset. The native caller never holds that offset or a real pointer; it holds an
+    /// opaque `token`, which the engine translates back to the guest offset here. The
+    /// pointee is **never copied** in or out — because it lives in the guest and is only
+    /// ever touched by sandboxed calls, any in-place mutation is already visible to later
+    /// calls. `token == 0` is passed through as guest `NULL` (0). A nonzero token that
+    /// fails to translate (unknown, stale, or wrong `class`) aborts the call *before* the
+    /// guest runs — never passing an unvalidated handle through. `release` marks a call
+    /// that destroys the object (e.g. `gsl_vector_free`): the token is invalidated
+    /// afterward so it can't be reused. `class` is a per-opaque-type namespace that keeps
+    /// one handle kind from being accepted where another is expected.
+    Handle { class: u32, token: u64, release: bool },
 }
 
 /// One field of a struct being marshalled into the guest (see [`Arg::StructIn`]), in
@@ -210,12 +225,65 @@ pub enum OutLen {
     FromArg(usize),
 }
 
+/// Maps app-facing opaque tokens to guest linear-memory offsets, for [`Arg::Handle`].
+///
+/// A sandboxed constructor (e.g. `gsl_vector_alloc`) returns a *guest offset* into the
+/// resident cage's linear memory. We can't hand that to the native application — it
+/// would dereference it as a host pointer. Instead we [`register`](Self::register) the
+/// offset and return an opaque `token`; the application passes the token back on later
+/// calls, and the engine [`translate`](Self::translate)s it to the offset. Lookups are
+/// keyed by `(class, token)` and **fail closed**: an unknown, released, or wrong-class
+/// token is an error, not a silent `NULL`, so a forged or stale token can never reach a
+/// sandboxed call. This is the single-cage analogue of `lind_marshal.h`'s per-grate
+/// handle table (there the entry is a real grate-cage pointer; here it is a guest offset).
+#[derive(Default)]
+struct HandleTable {
+    entries: Vec<HandleEntry>,
+    next_token: u64,
+}
+
+struct HandleEntry {
+    token: u64,
+    guest_offset: u32,
+    class: u32,
+}
+
+impl HandleTable {
+    /// Register a guest object and return a fresh, nonzero token. Tokens are never
+    /// reused within a process, so a stale token can't alias a later object.
+    fn register(&mut self, class: u32, guest_offset: u32) -> u64 {
+        self.next_token += 1; // first token is 1; 0 is reserved for NULL
+        let token = self.next_token;
+        self.entries.push(HandleEntry { token, guest_offset, class });
+        token
+    }
+
+    /// Translate a token to its guest offset, or fail if it is unknown, already
+    /// released, or registered under a different `class`.
+    fn translate(&self, class: u32, token: u64) -> Result<u32> {
+        self.entries
+            .iter()
+            .find(|e| e.token == token && e.class == class)
+            .map(|e| e.guest_offset)
+            .ok_or_else(|| {
+                anyhow!("invalid handle: token {token} (class {class}) is unknown, released, or wrong-class")
+            })
+    }
+
+    /// Invalidate a token so it can't be used again (called after a destructor).
+    fn release(&mut self, class: u32, token: u64) {
+        self.entries.retain(|e| !(e.token == token && e.class == class));
+    }
+}
+
 /// A sandboxed wasm library: the live `Store` + `Instance`, kept alive together with
 /// the engine/linker/module/cage-manager they depend on, so exports can be called
 /// repeatedly without re-instantiating or re-initializing the runtime.
 pub struct SandboxedLib {
     store: Store<HostCtx>,
     instance: Instance,
+    /// App-token ↔ guest-offset map for opaque [`Arg::Handle`] arguments.
+    handles: HandleTable,
     // Kept alive for the lifetime of the sandboxed-lib instance.
     _cageid: u64,
     _linker: Arc<Mutex<Linker<HostCtx>>>,
@@ -273,6 +341,7 @@ pub fn init_sandboxed_lib(cli: CliOptions) -> Result<SandboxedLib> {
     Ok(SandboxedLib {
         store,
         instance,
+        handles: HandleTable::default(),
         _cageid: cageid,
         _linker: linker,
         _engine: engine,
@@ -347,6 +416,26 @@ impl SandboxedLib {
             Some(Val::F32(bits)) => Ok(f32::from_bits(*bits)),
             other => Err(anyhow!("expected an f32 result from `{}`, got {:?}", name, other)),
         }
+    }
+
+    /// Call a **constructor** that returns a pointer to an opaque object (e.g.
+    /// `gsl_vector_alloc`). The guest returns a guest-memory offset; this registers it
+    /// as a handle of `class` and returns the opaque token for the native caller to hold
+    /// and pass back later via [`Arg::Handle`]. A guest `NULL` (offset 0) stays token 0,
+    /// so allocation failure is reported as a `NULL` return rather than a live handle.
+    pub fn call_handle(&mut self, name: &str, args: &mut [Arg], class: u32) -> Result<u64> {
+        let results = self.call_collect(name, args)?;
+        let off = match results.first() {
+            Some(Val::I32(v)) => *v as u32,
+            other => {
+                return Err(anyhow!(
+                    "expected a pointer (i32) result from constructor `{}`, got {:?}",
+                    name,
+                    other
+                ));
+            }
+        };
+        Ok(if off == 0 { 0 } else { self.handles.register(class, off) })
     }
 
     /// Call an exported function, marshalling arguments through guest memory, and
@@ -429,6 +518,18 @@ impl SandboxedLib {
                     }
                     params.push(Val::I32(base as i32));
                 }
+                // Opaque handle: translate the app token to the guest offset of an
+                // object already resident in guest memory. No allocation, no copy — the
+                // pointee lives in the guest and is mutated in place by the call. A
+                // nonzero token that fails to translate errors out here, before invoke.
+                Arg::Handle { class, token, .. } => {
+                    let off = if *token == 0 {
+                        0
+                    } else {
+                        self.handles.translate(*class, *token)?
+                    };
+                    params.push(Val::I32(off as i32));
+                }
             }
         }
 
@@ -500,6 +601,17 @@ impl SandboxedLib {
         // Phase 5: free.
         for ptr in to_free {
             let _ = self.guest_free(ptr);
+        }
+
+        // Phase 6: retire released handles. A destructor call (e.g. gsl_vector_free)
+        // marks its handle `release`; the guest has now freed the object, so invalidate
+        // the token — any later use is a fail-closed error rather than a dangling offset.
+        for a in args.iter() {
+            if let Arg::Handle { class, token, release: true } = a {
+                if *token != 0 {
+                    self.handles.release(*class, *token);
+                }
+            }
         }
         Ok(results)
     }
