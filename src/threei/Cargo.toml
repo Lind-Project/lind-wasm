@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 libc = "0.2"
+memchr = "2"
 sysdefs = { path = "../sysdefs" }
 typemap = { path = "../typemap" }
 cage = { path = "../cage" }
@@ -26,4 +27,8 @@ serial_test = "3"
 
 [[bench]]
 name = "handler_lookup"
+harness = false
+
+[[bench]]
+name = "cage_copy"
 harness = false
