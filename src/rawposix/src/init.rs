@@ -1,14 +1,10 @@
 use crate::fs_calls::kernel_close;
 use crate::sys_calls::exit_group_syscall;
 use crate::syscall_table::*;
-use cage::{add_cage, cagetable_clear, cagetable_init, timer::IntervalTimer, Cage, Vmmap};
-use dashmap::DashMap;
+use cage::{add_cage, cagetable_clear, cagetable_init, Cage};
 use fdtables;
-use parking_lot::{Condvar, Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering::*};
-use std::sync::Arc;
 use sysdefs::constants::{
     EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
     STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID, VERBOSE,
@@ -268,27 +264,7 @@ pub fn rawposix_start(verbosity: isize) {
     }
 
     //init cage is its own parent
-    let initcage = Cage {
-        cageid: INIT_CAGEID,
-        cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
-        parent: INIT_CAGEID,
-        rev_shm: Mutex::new(Vec::new()),
-        main_threadid: RwLock::new(0),
-        interval_timer: IntervalTimer::new(INIT_CAGEID),
-        epoch_handler: DashMap::new(),
-        os_tid_map: DashMap::new(),
-        signalhandler: DashMap::new(),
-        pending_signals: RwLock::new(vec![]),
-        sigset: AtomicU64::new(0),
-        zombies: Mutex::new(vec![]),
-        wait_cond: Condvar::new(),
-        child_num: AtomicU64::new(0),
-        vmmap: RwLock::new(Vmmap::new()),
-        final_exit_status: RwLock::new(None),
-        exit_group_initiated: AtomicBool::new(false),
-        is_dead: AtomicBool::new(false),
-        grate_inflight: AtomicU64::new(0),
-    };
+    let initcage = Cage::new(INIT_CAGEID, INIT_CAGEID, PathBuf::from("/"));
 
     // Add cage to cagetable
     add_cage(
