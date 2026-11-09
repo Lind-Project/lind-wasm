@@ -1,0 +1,191 @@
+Lind-MPK geteuid grate: CPU profile
+==================================
+Measured 2026-11-08 / 2026-11-09 UTC in cranky_keldysh.
+CPU 8, Intel Xeon Gold 5416S, kernel 6.11.0-24-generic.
+Release runtime, no debug features or debug environment variables.
+Runtime SHA256: 38f97a5bf3e7d178fb1c9cb5cfd16d426dbbb8e9b76f60719edaf47cc1eed2bd
+Guest libc.gs SHA256: ac71d4296299b399d45e63efd2a13e1a07befbb9cc36aa8107be69b58a304287
+
+Same test as the latency benchmark: silent return-10 grate, cage-side fenced
+RDTSC, sleeping/nonblocking grate parent, optimized native cage and grate.
+Long profiling runs increase only the batch size to 100,000 calls, with 1,000
+batches, 1,000 individual measurements, and 20,000 warmup calls.
+There are 100,021,000 dispatched calls in each long invocation.
+
+Main findings
+-------------
+The handler's useful work is negligible. Most cost is supervisor bookkeeping,
+lookups, synchronization, and guest/supervisor transitions.
+
+Steady-state cycles profile, 38,001 samples, weighted by event sample period:
+  Supervisor/runtime                    71.38%
+  Host kernel                           14.18%
+  Cage libc geteuid + inline MPK shim     9.39%
+  Host libraries                         3.85%
+  Grate return-10 function                0.72%
+  Cage benchmark loop                    0.47%
+
+The kernel time is real, despite the grate not forwarding geteuid:
+with_guest_fork_return calls host setjmp on EVERY syscall entry. Host setjmp
+saves the thread's signal mask, invoking pthread_sigmask/rt_sigprocmask.
+The empty grate therefore still causes about one host syscall per dispatch.
+
+Perf syscall-count confirmation on 1,021,000 dispatched calls:
+  rt_sigprocmask    1,021,251 (extra 251 include startup and parent bookkeeping)
+  arch_prctl               9 (startup, not one per call)
+  host geteuid             2 (startup, not one per call)
+  sched_yield              0 (sleeping parent avoids blocking-wait artifact)
+These exact counts were reproduced in the repository perf-mode validation.
+
+Largest self-overhead functions (% of TOTAL user+kernel sampled cycles)
+----------------------------------------------------------------------
+  grate_callback_trampoline                 11.54%
+  is_cage_dead                               9.97%
+  cage libc geteuid / inline MPK shim         9.39%
+  inner_grate_callback_trampoline_asm         8.73%
+  handler_table::hashmap_impl::_get_handler   6.10%
+  cage_gs_offset                             6.08%
+  lind_get_first_signal                      5.80%
+  threei::make_syscall                       5.57%
+  with_guest_fork_return                     5.21%
+  host pthread_sigmask                       3.38%
+  get_cage_runtime                           3.10%
+  EXITING_TABLE DashMap lookup                3.00%
+  runtime trampoline DashMap lookup           2.38%
+  geteuid_grate                              0.72%
+Kernel functions are counted in the 14.18% kernel category above, not added
+again here. This is SELF overhead, not an inclusive call tree.
+
+Source and instruction-level explanation
+----------------------------------------
+src/lind-boot/src/lind_mpk/execute.rs:767
+  Every syscall is wrapped in with_guest_fork_return. After dispatch,
+  handle_signal is called even when no signal is pending.
+
+src/lind-boot/src/lind_mpk/syscalls.rs:93
+  with_guest_fork_return clears a 200-byte jump buffer, installs/removes a
+  thread-local continuation, and calls host setjmp. Together with host
+  pthread_sigmask and the kernel category, this path accounts for about 23%
+  of the profile; this is not a measured isolated inclusive stack cost.
+
+src/cage/src/cage.rs:127,340
+  is_cage_dead obtains an Arc<Cage> through get_cage, incrementing and
+  decrementing the strong reference count just to read is_dead.
+  Annotation: about 96.6% of this function's samples fall immediately after
+  its locked increment/decrement. PMU skid means that instruction percentages
+  identify the atomic region, not exact single-instruction cycle costs.
+
+src/lind-boot/src/lind_mpk/trampoline.rs:168
+  grate_callback_trampoline looks up the cage and OS-thread grate context,
+  takes runtime/thread read locks, downcasts runtime info, reads stack/TLS/PKRU,
+  prepares the next supervisor context, and arranges GS restoration.
+  Samples cluster around Arc reference counting and lock atomics.
+
+src/lind-boot/src/lind_mpk/trampoline.rs:251
+  inner_grate_callback_trampoline_asm handles stack/TLS switches, stack argument
+  copying, two WRPKRU instructions, guest call, and supervisor restoration.
+  Its two post-WRPKRU sites receive about 41.6% of this function's samples.
+  Significant samples also fall around REP MOVSQ and RDFSBASE/restoration.
+
+Native libc.gs geteuid at ELF symbol offset 0xf9ca0:
+  The guest wrapper itself contains supervisor-entry/return PKRU and FS changes.
+  Do not mistake its 9.39% for ordinary libc UID work: much of it is the inline
+  Lind transition shim. Dominant addresses 0xf9cbb and 0xf9dc3 are immediately
+  after WRPKRU. Host geteuid counts confirm this path does not enter the kernel
+  for every UID request.
+
+src/threei/src/handler_table/hashmap_impl.rs:76
+  Handler lookup uses a global mutex and nested HashMaps. This measured build
+  uses threei's hashmap_impl; fdtables-dashmaparray selects the FD backend, not
+  the 3i handler-table backend.
+
+src/lind-boot/src/lind_mpk/gs_fork.rs:312,331
+  Grate entry/return looks up sandbox offsets in a mutex-protected GS-fork
+  registry, including the return context. This costs about 6.08% even though
+  the timed handler never forks.
+
+src/cage/src/signal/signal.rs:493
+  No-pending-signal polling still clones the cage Arc and takes a write lock
+  on pending_signals. The signal polling function and handle_signal self
+  overhead together are about 6.15%.
+
+Hardware-counter run (no syscall tracepoints enabled)
+-----------------------------------------------------
+Wall time:       39.677 s
+Task time:       39.671 s (includes all runtime threads)
+User time:       35.331 s
+System time:      4.341 s
+User cycles:    135,722,441,452 (~1,357 per dispatched call)
+Instructions:   182,894,834,186 (~1,829 per dispatched call)
+IPC:              1.35
+Branches:        20,522,407,335 (~205 per dispatched call)
+Branch misses:          86,650 (~0.00042% of branches)
+Context switches:       12,416
+CPU migrations:              1 (initial taskset pinning, not steady-state drift)
+
+The batch local-control loop is included in these counters; timing measurements
+put its cost near 1 ns/call. Do not treat totals as an exact isolated dispatch
+instruction count. Branch misprediction is not a material aggregate bottleneck.
+
+Validation and interpretation limits
+------------------------------------
+- perf 5.15.222 executable works with the 6.11 host; /usr/bin/perf is a wrapper
+  looking for a missing kernel-specific executable in this container.
+- cycles:u sampled once and cycles (user+kernel) sampled separately at 999Hz.
+  Full profile recorded about 40,000 samples and zero lost samples.
+- First and last second excluded from the detailed breakdown to remove startup,
+  compilation/loading, output, and teardown. Percentages use sample-period
+  weights, not unweighted sample counts.
+- 99.989% of steady-state cycle weight belongs to the measuring cage thread,
+  so the parent/reaper no longer dominate the result.
+- All guest-code samples resolved: file-backed libc.gs using captured maps and
+  ELF symbols; both anonymous benchmark/grate executable segments matched
+  byte-for-byte against their rewritten ELF binaries.
+- No frame-pointer or DWARF call-graph unwinding was attempted across custom
+  MPK stack/FS transitions. Source attribution uses self samples and direct
+  inspection of the corresponding dispatch source/assembly.
+- PMU sample skid and per-instruction sampling bias matter, especially for the
+  tiny handler and serializing transitions. Its 0.72% is not an exact cost of
+  "return 10". Do not convert these shares into exact additive nanoseconds.
+- A second, independent repository perf-mode run reproduced the major
+  functions: grate context 11.56%, cage-dead 10.33%, transition assembly 8.58%,
+  GS offsets 6.21%, signal polling 5.79%, handler lookup 5.63%, fork-return 5.29%.
+- That run's unprofiled statistical baseline was 386.95 ns, 95% CI
+  [385.80,388.30] ns, consistent with the earlier ~386 ns measurements.
+- Syscall tracepoints increase cost: use their run to validate COUNTS only,
+  not to estimate the original latency.
+
+Optimization priorities (not implemented)
+-----------------------------------------
+1. Investigate avoiding full signal-mask-saving setjmp on calls that cannot
+   need a fork-return continuation, or use a continuation design that avoids a
+   host syscall. Preserve fork, interposed fork, exec, and signal semantics:
+   blindly replacing setjmp or deleting the wrapper is not a safe change.
+2. Reduce repeated Arc reference churn and routing/context lookups where
+   lifetimes and invalidation can be proven safe. The code already provides
+   with_cage for scoped borrowing, but it requires a valid lifetime invariant.
+3. Add a safe no-pending-signals fast path; preserve asynchronous delivery and
+   ordering. Do not simply skip signal polling.
+4. Investigate caching the per-thread grate context, runtime trampoline, and GS
+   offset with correct fork/exec/exit invalidation; reduce table hashing/locks.
+5. Only then optimize the required stack/FS/PKRU transition assembly. WRPKRU is
+   important but is not the whole ~386 ns dispatch path.
+
+Reproduce
+----------
+From the host repository root:
+
+python3 tools/mpk-dispatch-benchmark/run_mpk_dispatch.py \
+  --container cranky_keldysh --cpu 8 --runs 20 \
+  --perf-bin /usr/lib/linux-tools/5.15.0-202-generic/perf \
+  --output build/mpk-dispatch-perf
+
+This builds/verifies release, performs the normal statistical benchmark, then
+runs hardware stat, full cycle sampling, runtime instruction annotations, and
+host syscall counters. It leaves reports/raw perf.data under the new host
+output directory and cleans up its temporary sources/binaries.
+
+The normal perf report can still show unknown/JIT guest symbols because guest
+ELFs are mapped manually. The original analysis archive contains the resolved
+profile, captured executable maps/code, symbol tables, raw samples, instruction
+annotations, and the independent validation outputs.
