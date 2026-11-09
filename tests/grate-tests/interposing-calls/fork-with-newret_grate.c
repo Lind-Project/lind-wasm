@@ -8,7 +8,7 @@
 #include <assert.h>
 
 // Dispatcher function
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
+long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
                     uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
                     uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
@@ -21,10 +21,10 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
   printf("[Grate|interpose-fork] Handling function ptr: %llu from cage: %llu\n",
          fn_ptr_uint, cageid);
 
-  int (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+  int64_t (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
               uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
               uint64_t, uint64_t, uint64_t) =
-        (int (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+        (int64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                  uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                  uint64_t, uint64_t, uint64_t))(uintptr_t)fn_ptr_uint;
 
@@ -33,7 +33,7 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
               arg5, arg5cage, arg6, arg6cage);
 }
 
-int fork_grate(uint64_t cageid, 
+int64_t fork_grate(uint64_t cageid,
     uint64_t arg1, uint64_t arg1cage, 
     uint64_t arg2, uint64_t arg2cage,
     uint64_t arg3, uint64_t arg3cage, 
@@ -43,7 +43,7 @@ int fork_grate(uint64_t cageid,
   printf("[Grate|interpose-fork] In fork_grate %d handler for cage: %llu\n",
          getpid(), cageid);
   int self_grate_id = getpid();
-  int new_cageid = make_threei_call(
+  int64_t new_cageid = make_threei_call(
     56, // syscallnum for clone
     0,    // callname is not used in the trampoline, set to 0
     self_grate_id,    // self_grate_id is not used in the trampoline, set to 0

@@ -111,7 +111,7 @@ fn add_syscall_to_linker<
               arg5cageid: u64,
               arg6: u64,
               arg6cageid: u64|
-              -> wasmtime::Result<i32> {
+              -> wasmtime::Result<i64> {
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
@@ -139,11 +139,11 @@ fn add_syscall_to_linker<
                             // Only override the return value with the pending visible retval if it is actually set.
                             // If it's not set, that means the clone syscall being replayed on rewind is the one in the child process, and we should return the actual syscall return value (0) instead of the pending visible retval from the parent process.
                             if retval > 0 {
-                                return Ok(retval);
+                                return Ok(retval as i64);
                             }
                         }
                     }
-                    return Ok(rewind_res);
+                    return Ok(rewind_res as i64);
                 }
             }
 
@@ -162,7 +162,7 @@ fn add_syscall_to_linker<
                 };
                 // let signal handler finish rest of the rewinding process
                 wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
-                return Ok(retval);
+                return Ok(retval as i64);
             }
 
             // Some thread-related operations must be executed against a specific thread's
@@ -208,7 +208,7 @@ fn add_syscall_to_linker<
                 // Save the grate-defined return value produced by the normal clone execution. 
                 // The guest-visible parent return is produced later during Asyncify rewind 
                 // replay, so this value must be carried across that boundary.
-                wasmtime_lind_multi_process::set_pending_clone_visible_retval(&mut caller, retval).unwrap_or_else(|e| {
+                wasmtime_lind_multi_process::set_pending_clone_visible_retval(&mut caller, retval as i32).unwrap_or_else(|e| {
                     panic!("{}", format!(
                         "failed to set pending_clone_visible_retval for retval={retval} with error: {e}"
                     ));
@@ -218,10 +218,9 @@ fn add_syscall_to_linker<
             // If the syscall was interrupted by a signal (EINTR), invoke the signal handler.
             // If fork is called within the signal handler, asyncify will unwind the stack;
             // we save the syscall return value so it can be restored on rewind.
-            // Only negate `retval` if it falls within the valid errno range;
-            // since negating `I32::MIN` would cause an overflow panic.
-            if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i32 {
-                caller.as_context_mut().append_syscall_asyncify_data(retval);
+            // Only negate `retval` if it falls within the valid errno range.
+            if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i64 {
+                caller.as_context_mut().append_syscall_asyncify_data(retval as i32);
                 if let Err(e) =
                     wasmtime_lind_multi_process::signal::signal_handler(&mut caller)
                 {

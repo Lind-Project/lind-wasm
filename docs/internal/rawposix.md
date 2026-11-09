@@ -43,7 +43,7 @@ read() in lind-glibc
 3. **Wasmtime.** The runtime supplies that import: `add_syscall_to_linker` in `src/wasmtime/crates/lind-common/src/lib.rs` registers a host function for `lind::make-syscall`. After handling Asyncify replay cases (relevant for `fork`/`exec`/`exit`), it forwards the call to 3i's `make_syscall`.
 4. **3i dispatch.** 3i looks up the handler registered for this cage and syscall number in the cage's handler table. For a cage with no interposition, that handler is the RawPOSIX implementation registered at startup. A grate may be registered instead, in which case the grate decides whether and how to forward the call.
 5. **RawPOSIX handler.** `read_syscall` in `src/rawposix/src/fs_calls.rs` converts the virtual fd to a kernel fd (`convert_fd_to_host`), converts the buffer pointer and count (`sc_convert_buf`, `sc_convert_sysarg_to_usize` from the `typemap` crate), verifies that unused argument slots are actually unused, and calls `libc::read`.
-6. **Return path.** Handlers return an `i32`, with errors encoded as `-errno`. Back in glibc, `make_threei_call` translates a negative return into `errno` plus a `-1` return value, following the usual POSIX convention. A few call sites (such as futex operations) opt out of this translation and consume the raw value.
+6. **Return path.** Handlers return an `i64`, with errors encoded as `-errno`. Back in glibc, `make_threei_call` translates a negative return into `errno` plus a `-1` return value, following the usual POSIX convention. A few call sites (such as futex operations) opt out of this translation and consume the raw value.
 
 ## Per-cage state
 
