@@ -4,16 +4,12 @@
 use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
-use cage::timer::IntervalTimer;
 use cage::{add_cage, encode_wait_status, get_cage, remove_cage, Cage, ExitStatus};
-use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
-use parking_lot::{Condvar, Mutex, RwLock};
+use parking_lot::RwLock;
 use std::ffi::CString;
-use std::path::PathBuf;
 use std::sync::atomic::Ordering::*;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
@@ -128,28 +124,11 @@ pub extern "C" fn fork_syscall(
         let parent_vmmap = selfcage.vmmap.read();
         let new_vmmap = parent_vmmap.clone();
 
-        // Creat the child cage object
-        let cageobj = Cage {
-            cageid: child_cageid,
-            cwd: RwLock::new(selfcage.cwd.read().clone()),
-            parent: parent_cageid,
-            rev_shm: Mutex::new(Vec::new()),
-            main_threadid: RwLock::new(0),
-            interval_timer: IntervalTimer::new(child_cageid),
-            epoch_handler: DashMap::new(),
-            os_tid_map: DashMap::new(),
-            pending_signals: RwLock::new(vec![]),
-            signalhandler: selfcage.signalhandler.clone(),
-            sigset: AtomicU64::new(0),
-            zombies: Mutex::new(vec![]),
-            wait_cond: Condvar::new(),
-            child_num: AtomicU64::new(0),
-            vmmap: RwLock::new(new_vmmap),
-            final_exit_status: RwLock::new(None),
-            exit_group_initiated: AtomicBool::new(false),
-            is_dead: AtomicBool::new(false),
-            grate_inflight: AtomicU64::new(0),
-        };
+        // Create the child cage. Fork inherits the parent's signal handlers
+        // and address space; every other field starts empty.
+        let mut cageobj = Cage::new(child_cageid, parent_cageid, (**selfcage.cwd.read()).clone());
+        cageobj.signalhandler = selfcage.signalhandler.clone();
+        cageobj.vmmap = RwLock::new(new_vmmap);
 
         // increment child counter for parent
         selfcage.child_num.fetch_add(1, SeqCst);
