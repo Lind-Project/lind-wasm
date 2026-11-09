@@ -56,6 +56,16 @@ fn call_f64(name: &str, args: &mut [Arg]) -> f64 {
         .unwrap_or_else(|e| panic!("lind call `{name}` failed: {e:?}"))
 }
 
+/// Call a guest export that returns `float` (used by the generated `_float` handle modules).
+fn call_f32(name: &str, args: &mut [Arg]) -> f32 {
+    trace(name);
+    lib()
+        .lock()
+        .unwrap()
+        .call_f32(name, args)
+        .unwrap_or_else(|e| panic!("lind call `{name}` failed: {e:?}"))
+}
+
 /// Call a guest **constructor** that returns a pointer to an opaque object; register the
 /// returned guest offset as a handle of `class` and hand the caller the opaque token.
 fn call_handle(name: &str, args: &mut [Arg], class: u32) -> u64 {
@@ -68,59 +78,17 @@ fn call_handle(name: &str, args: &mut [Arg], class: u32) -> u64 {
 }
 
 // ---------------------------------------------------------------------------
-// Opaque handles (gsl_vector) — proving the Arg::Handle path.
-//
-// A gsl_vector lives entirely in guest memory; the native app only ever gets back an
-// opaque token (cast to `gsl_vector *`), never a real pointer. The token is translated
-// to the guest offset on each call. IMPORTANT: this works only while the app reaches the
-// vector exclusively through wrapped FUNCTIONS — gsl_vector_get / gsl_vector_set are
-// `inline` in GSL headers under HAVE_INLINE, and an app compiled with -DHAVE_INLINE would
-// inline them and dereference the token as a real pointer. The demo/tests must be built
-// WITHOUT HAVE_INLINE so the extern accessors (which we forward) are used.
-const CLASS_VECTOR: u32 = 1;
-
-#[unsafe(no_mangle)]
-pub extern "C" fn gsl_vector_alloc(n: usize) -> *mut c_void {
-    call_handle("lind_gsl_vector_alloc", &mut [Arg::USize(n)], CLASS_VECTOR) as *mut c_void
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn gsl_vector_set(v: *mut c_void, i: usize, x: f64) {
-    call(
-        "lind_gsl_vector_set",
-        &mut [
-            Arg::Handle { class: CLASS_VECTOR, token: v as u64, release: false },
-            Arg::USize(i),
-            Arg::F64(x),
-        ],
-    );
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn gsl_vector_get(v: *const c_void, i: usize) -> f64 {
-    call_f64(
-        "lind_gsl_vector_get",
-        &mut [
-            Arg::Handle { class: CLASS_VECTOR, token: v as u64, release: false },
-            Arg::USize(i),
-        ],
-    )
-}
-
+// gsl_sort_vector — kept hand-written: it belongs to the SORT module, not the vector
+// module. The gsl_vector object itself is now owned by the GENERATED vector module
+// (see gen_gsl_handle.py), which defines the CLASS_VECTOR constant used here. The opaque
+// handle still only works while the app reaches the vector through wrapped FUNCTIONS
+// (gsl_vector_get/set are inline under HAVE_INLINE — the app must be built without it).
+// ---------------------------------------------------------------------------
 #[unsafe(no_mangle)]
 pub extern "C" fn gsl_sort_vector(v: *mut c_void) {
     call(
         "lind_gsl_sort_vector",
         &mut [Arg::Handle { class: CLASS_VECTOR, token: v as u64, release: false }],
-    );
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn gsl_vector_free(v: *mut c_void) {
-    // release: true — the guest frees the object; the token is retired so reuse fails closed.
-    call(
-        "lind_gsl_vector_free",
-        &mut [Arg::Handle { class: CLASS_VECTOR, token: v as u64, release: true }],
     );
 }
 
@@ -329,3 +297,22 @@ include!("scalar_generated.rs");
 
 // GSL special-function `_e` forms (gsl_sf_*_e, result-struct out) — see gen_gsl_sf_result.py.
 include!("sf_result_generated.rs");
+
+// GSL opaque-handle modules (Tier 2) — generated marshalling (see gen_gsl_handle.py).
+include!("vector_generated.rs"); // defines CLASS_VECTOR, used by gsl_sort_vector above
+include!("vector_float_generated.rs");
+include!("vector_int_generated.rs");
+include!("vector_uint_generated.rs");
+include!("matrix_generated.rs");
+include!("matrix_float_generated.rs");
+include!("matrix_int_generated.rs");
+include!("matrix_uint_generated.rs");
+include!("permutation_generated.rs");
+include!("combination_generated.rs");
+include!("histogram_generated.rs");
+include!("linalg_generated.rs"); // free functions over matrix/permutation/vector handles
+include!("eigen_symm_ws_generated.rs");  // eigen workspaces (opaque handles)
+include!("eigen_symmv_ws_generated.rs");
+include!("eigen_generated.rs");           // free-function solvers (matrix+vector+workspace)
+include!("multifit_linear_ws_generated.rs");
+include!("multifit_generated.rs");        // linear least-squares (workspace + matrix/vector)

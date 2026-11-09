@@ -19,16 +19,11 @@ extern int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, do
 extern int gsl_poly_solve_cubic(double a, double b, double c, double *x0, double *x1, double *x2);
 extern int gsl_poly_eval_derivs(const double c[], size_t lenc, double x, double res[], size_t lenres);
 
-// Opaque handle type: forward-declared (incomplete) so it can only ever be passed by
-// pointer, never dereferenced here. gsl_vector_get/set are inline in the GSL headers, so
-// we deliberately do NOT #include <gsl/...>; forward-declaring keeps them as dynamic
-// imports resolved from the preloaded GSL (same reason as the poly functions above).
+// gsl_sort_vector belongs to the sort module; the gsl_vector object itself is owned by the
+// generated vector module (generated/vector_shim.inc.c). Forward-declare the opaque struct
+// (incomplete, pointer-only) just for this one forwarder.
 struct gsl_vector;
-extern struct gsl_vector *gsl_vector_alloc(size_t n);
-extern void   gsl_vector_set(struct gsl_vector *v, size_t i, double x);
-extern double gsl_vector_get(const struct gsl_vector *v, size_t i);
-extern void   gsl_sort_vector(struct gsl_vector *v);
-extern void   gsl_vector_free(struct gsl_vector *v);
+extern void gsl_sort_vector(struct gsl_vector *v);
 
 __attribute__((export_name("guest_malloc")))
 void *guest_malloc(size_t n) { return malloc(n); }
@@ -51,22 +46,10 @@ int lind_gsl_poly_eval_derivs(const double c[], size_t lenc, double x, double re
     return gsl_poly_eval_derivs(c, lenc, x, res, lenres);
 }
 
-// GSL opaque-handle forwarders (gsl_vector). Each just passes the guest pointer through
-// to the real preloaded GSL; the host side (Arg::Handle) does the token<->offset mapping.
-__attribute__((export_name("lind_gsl_vector_alloc")))
-struct gsl_vector *lind_gsl_vector_alloc(size_t n) { return gsl_vector_alloc(n); }
-
-__attribute__((export_name("lind_gsl_vector_set")))
-void lind_gsl_vector_set(struct gsl_vector *v, size_t i, double x) { gsl_vector_set(v, i, x); }
-
-__attribute__((export_name("lind_gsl_vector_get")))
-double lind_gsl_vector_get(const struct gsl_vector *v, size_t i) { return gsl_vector_get(v, i); }
-
+// gsl_sort_vector forwarder (the gsl_vector module itself is generated; see
+// generated/vector_shim.inc.c). Passes the guest pointer straight through.
 __attribute__((export_name("lind_gsl_sort_vector")))
 void lind_gsl_sort_vector(struct gsl_vector *v) { gsl_sort_vector(v); }
-
-__attribute__((export_name("lind_gsl_vector_free")))
-void lind_gsl_vector_free(struct gsl_vector *v) { gsl_vector_free(v); }
 
 // GSL sort module — generated forwarders (see gen_gsl_sort.py).
 #include "generated/sort_shim.inc.c"
@@ -79,6 +62,25 @@ void lind_gsl_vector_free(struct gsl_vector *v) { gsl_vector_free(v); }
 
 // GSL special-function `_e` forms (gsl_sf_*_e) — generated forwarders (see gen_gsl_sf_result.py).
 #include "generated/sf_result_shim.inc.c"
+
+// GSL opaque-handle modules (Tier 2) — generated forwarders (see gen_gsl_handle.py).
+#include "generated/vector_shim.inc.c"
+#include "generated/vector_float_shim.inc.c"
+#include "generated/vector_int_shim.inc.c"
+#include "generated/vector_uint_shim.inc.c"
+#include "generated/matrix_shim.inc.c"
+#include "generated/matrix_float_shim.inc.c"
+#include "generated/matrix_int_shim.inc.c"
+#include "generated/matrix_uint_shim.inc.c"
+#include "generated/permutation_shim.inc.c"
+#include "generated/combination_shim.inc.c"
+#include "generated/histogram_shim.inc.c"
+#include "generated/linalg_shim.inc.c"
+#include "generated/eigen_symm_ws_shim.inc.c"
+#include "generated/eigen_symmv_ws_shim.inc.c"
+#include "generated/eigen_shim.inc.c"
+#include "generated/multifit_linear_ws_shim.inc.c"
+#include "generated/multifit_shim.inc.c"
 
 // ---------------------------------------------------------------------------
 // Tier-1 tail: hand-written forwarders for the irregular flat functions. Placed AFTER

@@ -32,6 +32,40 @@ int gsl_sf_bessel_J0_e(double x, struct demo_sf_result *result);
 /* Tier-1 tail (hand-written): polynomial divided differences */
 int    gsl_poly_dd_init(double dd[], const double xa[], const double ya[], size_t size);
 double gsl_poly_dd_eval(const double dd[], const double xa[], size_t size, double x);
+/* Tier-2 opaque handle (generated): gsl_matrix — second handle class, held as an opaque token */
+void  *gsl_matrix_alloc(size_t n1, size_t n2);
+void   gsl_matrix_set(void *m, size_t i, size_t j, double x);
+double gsl_matrix_get(const void *m, size_t i, size_t j);
+int    gsl_matrix_transpose(void *m);
+void   gsl_matrix_free(void *m);
+/* Tier-2 opaque handle (generated): gsl_permutation — a third handle class */
+void   *gsl_permutation_alloc(size_t n);
+void    gsl_permutation_init(void *p);
+int     gsl_permutation_swap(void *p, size_t i, size_t j);
+size_t  gsl_permutation_get(const void *p, size_t i);
+void    gsl_permutation_free(void *p);
+/* Tier-2 element-typed handle (generated): gsl_matrix_int — int elements, its own class */
+void  *gsl_matrix_int_alloc(size_t n1, size_t n2);
+void   gsl_matrix_int_set(void *m, size_t i, size_t j, int x);
+int    gsl_matrix_int_get(const void *m, size_t i, size_t j);
+void   gsl_matrix_int_free(void *m);
+/* Tier-2 cross-class free functions (generated): gsl_linalg LU over matrix+permutation+vector.
+ * (gsl_vector_alloc/set/get/free already declared above with the committed handle slice.) */
+int    gsl_linalg_LU_decomp(void *A, void *p, int *signum);
+int    gsl_linalg_LU_solve(const void *LU, const void *p, const void *b, void *x);
+/* Tier-2 handle (generated): gsl_histogram — single class, arrays + double outputs */
+void  *gsl_histogram_alloc(size_t n);
+int    gsl_histogram_set_ranges_uniform(void *h, double xmin, double xmax);
+int    gsl_histogram_increment(void *h, double x);
+double gsl_histogram_get(const void *h, size_t i);
+void   gsl_histogram_free(void *h);
+/* Tier-2 workspace + solver (generated): gsl_eigen — workspace handle + matrix+vector+workspace fn */
+void  *gsl_eigen_symm_alloc(size_t n);
+int    gsl_eigen_symm(void *A, void *eval, void *w);
+void   gsl_eigen_symm_free(void *w);
+/* Tier-2 linalg QR (generated, free fns) */
+int    gsl_linalg_QR_decomp(void *A, void *tau);
+int    gsl_linalg_QR_solve(const void *QR, const void *tau, const void *b, void *x);
 
 int main(void) {
     double x0, x1, x2;
@@ -75,6 +109,78 @@ int main(void) {
     double dd_xa[3] = {0.0, 1.0, 2.0}, dd_ya[3] = {0.0, 1.0, 4.0}, dd_c[3];
     gsl_poly_dd_init(dd_c, dd_xa, dd_ya, 3);
     printf("gsl_poly_dd_eval @1.5 -> %g   (expect 2.25)\n", gsl_poly_dd_eval(dd_c, dd_xa, 3, 1.5));
+
+    /* Tier-2 handle: gsl_matrix alloc -> set -> transpose -> get -> free (second handle class) */
+    void *mat = gsl_matrix_alloc(2, 2);
+    gsl_matrix_set(mat, 0, 0, 1.0); gsl_matrix_set(mat, 0, 1, 2.0);
+    gsl_matrix_set(mat, 1, 0, 3.0); gsl_matrix_set(mat, 1, 1, 4.0);
+    gsl_matrix_transpose(mat);
+    printf("gsl_matrix transpose [0,1]=%g [1,0]=%g   (expect 3, 2)\n",
+           gsl_matrix_get(mat, 0, 1), gsl_matrix_get(mat, 1, 0));
+    gsl_matrix_free(mat);
+
+    /* Tier-2 handle: gsl_permutation init -> swap -> get -> free */
+    void *perm = gsl_permutation_alloc(4);
+    gsl_permutation_init(perm);           /* identity: 0 1 2 3 */
+    gsl_permutation_swap(perm, 0, 3);     /* -> 3 1 2 0 */
+    printf("gsl_permutation swap(0,3): [0]=%zu [3]=%zu   (expect 3, 0)\n",
+           gsl_permutation_get(perm, 0), gsl_permutation_get(perm, 3));
+    gsl_permutation_free(perm);
+
+    /* Tier-2 element-typed handle: gsl_matrix_int (int elements) */
+    void *mi = gsl_matrix_int_alloc(2, 2);
+    gsl_matrix_int_set(mi, 0, 0, 7);
+    printf("gsl_matrix_int_get(0,0) -> %d   (expect 7)\n", gsl_matrix_int_get(mi, 0, 0));
+    gsl_matrix_int_free(mi);
+
+    /* Tier-2 cross-class: solve A x = b with LU over matrix + permutation + 2 vectors.
+     * A=[[2,1],[1,3]], b=[3,5] -> x=[0.8,1.4]. Four handle classes in one flow. */
+    void *A = gsl_matrix_alloc(2, 2);
+    gsl_matrix_set(A, 0, 0, 2); gsl_matrix_set(A, 0, 1, 1);
+    gsl_matrix_set(A, 1, 0, 1); gsl_matrix_set(A, 1, 1, 3);
+    void *bvec = gsl_vector_alloc(2); gsl_vector_set(bvec, 0, 3); gsl_vector_set(bvec, 1, 5);
+    void *xvec = gsl_vector_alloc(2);
+    void *lup = gsl_permutation_alloc(2);
+    int signum;
+    gsl_linalg_LU_decomp(A, lup, &signum);
+    gsl_linalg_LU_solve(A, lup, bvec, xvec);
+    printf("gsl_linalg_LU_solve -> x0=%g x1=%g   (expect 0.8, 1.4)\n",
+           gsl_vector_get(xvec, 0), gsl_vector_get(xvec, 1));
+    gsl_matrix_free(A); gsl_vector_free(bvec); gsl_vector_free(xvec); gsl_permutation_free(lup);
+
+    /* Tier-2 handle: gsl_histogram over [0,4) in 4 bins; count values into bins */
+    void *hist = gsl_histogram_alloc(4);
+    gsl_histogram_set_ranges_uniform(hist, 0.0, 4.0);
+    gsl_histogram_increment(hist, 1.5);
+    gsl_histogram_increment(hist, 1.2);
+    gsl_histogram_increment(hist, 2.5);
+    printf("gsl_histogram bin1=%g bin2=%g   (expect 2, 1)\n",
+           gsl_histogram_get(hist, 1), gsl_histogram_get(hist, 2));
+    gsl_histogram_free(hist);
+
+    /* Tier-2 workspace + solver: eigenvalues of symmetric [[2,1],[1,2]] are 1 and 3. */
+    void *S = gsl_matrix_alloc(2, 2);
+    gsl_matrix_set(S, 0, 0, 2); gsl_matrix_set(S, 0, 1, 1);
+    gsl_matrix_set(S, 1, 0, 1); gsl_matrix_set(S, 1, 1, 2);
+    void *eval = gsl_vector_alloc(2);
+    void *ews = gsl_eigen_symm_alloc(2);
+    gsl_eigen_symm(S, eval, ews);   /* note: destroys S */
+    printf("gsl_eigen_symm -> %g, %g   (expect 1 and 3, any order)\n",
+           gsl_vector_get(eval, 0), gsl_vector_get(eval, 1));
+    gsl_eigen_symm_free(ews); gsl_matrix_free(S); gsl_vector_free(eval);
+
+    /* Tier-2 QR: solve the same A x = b (A=[[2,1],[1,3]], b=[3,5]) -> x=[0.8,1.4] via QR. */
+    void *Aq = gsl_matrix_alloc(2, 2);
+    gsl_matrix_set(Aq, 0, 0, 2); gsl_matrix_set(Aq, 0, 1, 1);
+    gsl_matrix_set(Aq, 1, 0, 1); gsl_matrix_set(Aq, 1, 1, 3);
+    void *tau = gsl_vector_alloc(2);
+    void *bq = gsl_vector_alloc(2); gsl_vector_set(bq, 0, 3); gsl_vector_set(bq, 1, 5);
+    void *xq = gsl_vector_alloc(2);
+    gsl_linalg_QR_decomp(Aq, tau);
+    gsl_linalg_QR_solve(Aq, tau, bq, xq);
+    printf("gsl_linalg_QR_solve -> x0=%g x1=%g   (expect 0.8, 1.4)\n",
+           gsl_vector_get(xq, 0), gsl_vector_get(xq, 1));
+    gsl_matrix_free(Aq); gsl_vector_free(tau); gsl_vector_free(bq); gsl_vector_free(xq);
 
     /* opaque handle: alloc -> set -> sort -> get -> free, entirely sandboxed. The vector
      * lives in guest memory; `v` is only ever an opaque token. */
