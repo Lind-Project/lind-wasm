@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <sys/wait.h>
 
 // This function will be called from the shared library
 void hello_from_main(void) {
@@ -27,7 +28,21 @@ int main(void) {
         return 1;
     }
 
-    fork();
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork failed");
+        return 1;
+    }
+
+    // parent waits for the child to finish before calling into the plugin,
+    // so the child's output always comes first and the output is deterministic
+    if (pid > 0) {
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            perror("waitpid failed");
+            return 1;
+        }
+    }
 
     // Call into the plugin
     plugin_entry();

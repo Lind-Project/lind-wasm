@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <sys/wait.h>
 
 int main(void) {
     void *handle;
@@ -28,6 +29,11 @@ int main(void) {
     }
 
     int pid = fork();
+    if (pid < 0) {
+        perror("fork failed");
+        dlclose(handle);
+        return 1;
+    }
 
     if(pid == 0)
     {
@@ -55,6 +61,15 @@ int main(void) {
     else
     {
         // parent routine
+
+        // wait for the child to finish first so the output order is
+        // deterministic (child lines always come before parent lines)
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            perror("waitpid failed");
+            dlclose(handle);
+            return 1;
+        }
 
         hello_func("parent in main module");
 
