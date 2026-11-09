@@ -37,6 +37,10 @@ def SD(name):            return ("sd",    name)
 def SZ(name):            return ("sz",    name)
 def OD(name):            return ("od",    name)
 def OI(name):            return ("oi",    name)
+# Caller-allocated SCRATCH work buffers: contiguous (no stride), `count` elements. The
+# function uses them internally; the caller never reads them back, so copy-back is harmless.
+def WK(name, count):     return ("wk",    name, count)   # double work[]   -> count doubles
+def WKI(name, count):    return ("wki",   name, count)   # int    work[]   -> count ints
 
 # (tail, return, [params in C order])
 FUNCS = []
@@ -92,7 +96,31 @@ FUNCS.append(("select", "d",
 # --- median: f(sorted_data[], stride, n) -> double  (non-const) ---
 FUNCS.append(("median", "d", [AIO("sorted_data", "stride", "n"), SZ("stride"), SZ("n")]))
 
-DEFERRED = ["weighted w* (float-only)", "work-array: mad, mad0, Sn, Sn0, Qn, Qn0, spearman"]
+# --- weighted: f(w, wstride, data, stride, n[, extra scalars]) -> double ---
+#     (the weight array is just another strided const array; no new token needed)
+_WBASE = [A("w", "wstride", "n"), SZ("wstride"), A("data", "stride", "n"), SZ("stride"), SZ("n")]
+for tail in ["wmean", "wvariance", "wsd", "wtss", "wabsdev", "wskew", "wkurtosis"]:
+    FUNCS.append((tail, "d", list(_WBASE)))
+for tail in ["wvariance_m", "wsd_m", "wabsdev_m", "wtss_m"]:            # + wmean
+    FUNCS.append((tail, "d", _WBASE + [SD("wmean")]))
+for tail in ["wvariance_with_fixed_mean", "wsd_with_fixed_mean"]:       # + mean
+    FUNCS.append((tail, "d", _WBASE + [SD("mean")]))
+for tail in ["wskew_m_sd", "wkurtosis_m_sd"]:                           # + wmean, wsd
+    FUNCS.append((tail, "d", _WBASE + [SD("wmean"), SD("wsd")]))
+
+# --- work-array (robust) estimators: a caller-sized scratch buffer sized from n ---
+for tail in ["mad", "mad0"]:
+    FUNCS.append((tail, "d", [A("data", "stride", "n"), SZ("stride"), SZ("n"), WK("work", "n")]))
+for tail in ["Sn_from_sorted_data", "Sn0_from_sorted_data"]:
+    FUNCS.append((tail, "d", [A("sorted_data", "stride", "n"), SZ("stride"), SZ("n"), WK("work", "n")]))
+for tail in ["Qn_from_sorted_data", "Qn0_from_sorted_data"]:
+    FUNCS.append((tail, "d", [A("sorted_data", "stride", "n"), SZ("stride"), SZ("n"),
+                              WK("work", "3 * n"), WKI("work_int", "5 * n")]))
+FUNCS.append(("spearman", "d", [A("data1", "stride1", "n"), SZ("stride1"),
+                                A("data2", "stride2", "n"), SZ("stride2"), SZ("n"),
+                                WK("work", "2 * n")]))
+
+DEFERRED = ["other element types (float/int/uint/… — one TYPES loop away)"]
 
 RET_C = {"d": "double", "sz": "size_t", "v": "void"}
 
@@ -107,6 +135,8 @@ def c_params(params):
         elif k == "sz":  out.append(f"const size_t {p[1]}")
         elif k == "od":  out.append(f"double * {p[1]}")
         elif k == "oi":  out.append(f"size_t * {p[1]}")
+        elif k == "wk":  out.append(f"double {p[1]}[]")
+        elif k == "wki": out.append(f"int {p[1]}[]")
     return ", ".join(out)
 
 
@@ -137,6 +167,8 @@ def rust_params(params):
         elif k == "sz":     out.append(f"{p[1]}: usize")
         elif k == "od":     out.append(f"{p[1]}: *mut f64")
         elif k == "oi":     out.append(f"{p[1]}: *mut usize")
+        elif k == "wk":     out.append(f"{p[1]}: *mut f64")
+        elif k == "wki":    out.append(f"{p[1]}: *mut i32")
     return ", ".join(out)
 
 
@@ -170,6 +202,14 @@ def rust_fn(tail, ret, params):
             pre.append(f"    let mut {p[1]}_o = [0u8; {GUEST_SIZE_T}];")
             argexprs.append(f"Arg::Out {{ dst: &mut {p[1]}_o, len: OutLen::Cap }}")
             post.append(f"    if !{p[1]}.is_null() {{ unsafe {{ *{p[1]} = u32::from_le_bytes({p[1]}_o) as usize; }} }}")
+        elif k == "wk":
+            # caller-sized scratch of `count` doubles; guest-allocated, written by the
+            # function, copied back into the caller's buffer (harmless — it is scratch).
+            pre.append(f"    let {p[1]}_b = unsafe {{ core::slice::from_raw_parts_mut({p[1]} as *mut u8, ({p[2]}) * {ESIZE}) }};")
+            argexprs.append(f"Arg::Out {{ dst: {p[1]}_b, len: OutLen::Cap }}")
+        elif k == "wki":
+            pre.append(f"    let {p[1]}_b = unsafe {{ core::slice::from_raw_parts_mut({p[1]} as *mut u8, ({p[2]}) * 4) }};")
+            argexprs.append(f"Arg::Out {{ dst: {p[1]}_b, len: OutLen::Cap }}")
         oidx += 1
     L += pre
     args_join = ", ".join(argexprs)

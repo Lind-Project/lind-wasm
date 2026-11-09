@@ -135,3 +135,91 @@ double lind_gsl_stats_select(double data[], const size_t stride, const size_t n,
 extern double gsl_stats_median(double sorted_data[], const size_t stride, const size_t n);
 __attribute__((export_name("lind_gsl_stats_median")))
 double lind_gsl_stats_median(double sorted_data[], const size_t stride, const size_t n) { return gsl_stats_median(sorted_data, stride, n); }
+
+extern double gsl_stats_wmean(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n);
+__attribute__((export_name("lind_gsl_stats_wmean")))
+double lind_gsl_stats_wmean(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n) { return gsl_stats_wmean(w, wstride, data, stride, n); }
+
+extern double gsl_stats_wvariance(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n);
+__attribute__((export_name("lind_gsl_stats_wvariance")))
+double lind_gsl_stats_wvariance(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n) { return gsl_stats_wvariance(w, wstride, data, stride, n); }
+
+extern double gsl_stats_wsd(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n);
+__attribute__((export_name("lind_gsl_stats_wsd")))
+double lind_gsl_stats_wsd(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n) { return gsl_stats_wsd(w, wstride, data, stride, n); }
+
+extern double gsl_stats_wtss(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n);
+__attribute__((export_name("lind_gsl_stats_wtss")))
+double lind_gsl_stats_wtss(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n) { return gsl_stats_wtss(w, wstride, data, stride, n); }
+
+extern double gsl_stats_wabsdev(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n);
+__attribute__((export_name("lind_gsl_stats_wabsdev")))
+double lind_gsl_stats_wabsdev(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n) { return gsl_stats_wabsdev(w, wstride, data, stride, n); }
+
+extern double gsl_stats_wskew(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n);
+__attribute__((export_name("lind_gsl_stats_wskew")))
+double lind_gsl_stats_wskew(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n) { return gsl_stats_wskew(w, wstride, data, stride, n); }
+
+extern double gsl_stats_wkurtosis(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n);
+__attribute__((export_name("lind_gsl_stats_wkurtosis")))
+double lind_gsl_stats_wkurtosis(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n) { return gsl_stats_wkurtosis(w, wstride, data, stride, n); }
+
+extern double gsl_stats_wvariance_m(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean);
+__attribute__((export_name("lind_gsl_stats_wvariance_m")))
+double lind_gsl_stats_wvariance_m(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean) { return gsl_stats_wvariance_m(w, wstride, data, stride, n, wmean); }
+
+extern double gsl_stats_wsd_m(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean);
+__attribute__((export_name("lind_gsl_stats_wsd_m")))
+double lind_gsl_stats_wsd_m(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean) { return gsl_stats_wsd_m(w, wstride, data, stride, n, wmean); }
+
+extern double gsl_stats_wabsdev_m(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean);
+__attribute__((export_name("lind_gsl_stats_wabsdev_m")))
+double lind_gsl_stats_wabsdev_m(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean) { return gsl_stats_wabsdev_m(w, wstride, data, stride, n, wmean); }
+
+extern double gsl_stats_wtss_m(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean);
+__attribute__((export_name("lind_gsl_stats_wtss_m")))
+double lind_gsl_stats_wtss_m(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean) { return gsl_stats_wtss_m(w, wstride, data, stride, n, wmean); }
+
+extern double gsl_stats_wvariance_with_fixed_mean(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double mean);
+__attribute__((export_name("lind_gsl_stats_wvariance_with_fixed_mean")))
+double lind_gsl_stats_wvariance_with_fixed_mean(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double mean) { return gsl_stats_wvariance_with_fixed_mean(w, wstride, data, stride, n, mean); }
+
+extern double gsl_stats_wsd_with_fixed_mean(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double mean);
+__attribute__((export_name("lind_gsl_stats_wsd_with_fixed_mean")))
+double lind_gsl_stats_wsd_with_fixed_mean(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double mean) { return gsl_stats_wsd_with_fixed_mean(w, wstride, data, stride, n, mean); }
+
+extern double gsl_stats_wskew_m_sd(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean, const double wsd);
+__attribute__((export_name("lind_gsl_stats_wskew_m_sd")))
+double lind_gsl_stats_wskew_m_sd(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean, const double wsd) { return gsl_stats_wskew_m_sd(w, wstride, data, stride, n, wmean, wsd); }
+
+extern double gsl_stats_wkurtosis_m_sd(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean, const double wsd);
+__attribute__((export_name("lind_gsl_stats_wkurtosis_m_sd")))
+double lind_gsl_stats_wkurtosis_m_sd(const double w[], const size_t wstride, const double data[], const size_t stride, const size_t n, const double wmean, const double wsd) { return gsl_stats_wkurtosis_m_sd(w, wstride, data, stride, n, wmean, wsd); }
+
+extern double gsl_stats_mad(const double data[], const size_t stride, const size_t n, double work[]);
+__attribute__((export_name("lind_gsl_stats_mad")))
+double lind_gsl_stats_mad(const double data[], const size_t stride, const size_t n, double work[]) { return gsl_stats_mad(data, stride, n, work); }
+
+extern double gsl_stats_mad0(const double data[], const size_t stride, const size_t n, double work[]);
+__attribute__((export_name("lind_gsl_stats_mad0")))
+double lind_gsl_stats_mad0(const double data[], const size_t stride, const size_t n, double work[]) { return gsl_stats_mad0(data, stride, n, work); }
+
+extern double gsl_stats_Sn_from_sorted_data(const double sorted_data[], const size_t stride, const size_t n, double work[]);
+__attribute__((export_name("lind_gsl_stats_Sn_from_sorted_data")))
+double lind_gsl_stats_Sn_from_sorted_data(const double sorted_data[], const size_t stride, const size_t n, double work[]) { return gsl_stats_Sn_from_sorted_data(sorted_data, stride, n, work); }
+
+extern double gsl_stats_Sn0_from_sorted_data(const double sorted_data[], const size_t stride, const size_t n, double work[]);
+__attribute__((export_name("lind_gsl_stats_Sn0_from_sorted_data")))
+double lind_gsl_stats_Sn0_from_sorted_data(const double sorted_data[], const size_t stride, const size_t n, double work[]) { return gsl_stats_Sn0_from_sorted_data(sorted_data, stride, n, work); }
+
+extern double gsl_stats_Qn_from_sorted_data(const double sorted_data[], const size_t stride, const size_t n, double work[], int work_int[]);
+__attribute__((export_name("lind_gsl_stats_Qn_from_sorted_data")))
+double lind_gsl_stats_Qn_from_sorted_data(const double sorted_data[], const size_t stride, const size_t n, double work[], int work_int[]) { return gsl_stats_Qn_from_sorted_data(sorted_data, stride, n, work, work_int); }
+
+extern double gsl_stats_Qn0_from_sorted_data(const double sorted_data[], const size_t stride, const size_t n, double work[], int work_int[]);
+__attribute__((export_name("lind_gsl_stats_Qn0_from_sorted_data")))
+double lind_gsl_stats_Qn0_from_sorted_data(const double sorted_data[], const size_t stride, const size_t n, double work[], int work_int[]) { return gsl_stats_Qn0_from_sorted_data(sorted_data, stride, n, work, work_int); }
+
+extern double gsl_stats_spearman(const double data1[], const size_t stride1, const double data2[], const size_t stride2, const size_t n, double work[]);
+__attribute__((export_name("lind_gsl_stats_spearman")))
+double lind_gsl_stats_spearman(const double data1[], const size_t stride1, const double data2[], const size_t stride2, const size_t n, double work[]) { return gsl_stats_spearman(data1, stride1, data2, stride2, n, work); }

@@ -9,7 +9,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use core::ffi::{c_int, c_void};
+use core::ffi::{c_int, c_uint, c_void};
 
 use lind_boot::{Arg, CliOptions, OutLen, SandboxedLib, init_sandboxed_lib};
 
@@ -207,8 +207,125 @@ pub extern "C" fn gsl_poly_eval_derivs(
     ) as c_int
 }
 
+// ---------------------------------------------------------------------------
+// Tier-1 tail: hand-written wrappers for the irregular flat functions the generators
+// skip — polynomial divided differences, the array-valued randist pdfs, and the
+// special-function `_e` forms with a second (sign) output. All use existing Arg kinds.
+// ---------------------------------------------------------------------------
+use core::slice::{from_raw_parts, from_raw_parts_mut};
+
+// --- polynomial divided differences (poly/dd.c) ---
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_poly_dd_init(dd: *mut f64, xa: *const f64, ya: *const f64, size: usize) -> c_int {
+    let dd_b = unsafe { from_raw_parts_mut(dd as *mut u8, size * 8) };
+    let xa_b = unsafe { from_raw_parts(xa as *const u8, size * 8) };
+    let ya_b = unsafe { from_raw_parts(ya as *const u8, size * 8) };
+    call("lind_gsl_poly_dd_init", &mut [
+        Arg::Out { dst: dd_b, len: OutLen::Cap }, Arg::Buf(xa_b), Arg::Buf(ya_b), Arg::USize(size),
+    ]) as c_int
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_poly_dd_eval(dd: *const f64, xa: *const f64, size: usize, x: f64) -> f64 {
+    let dd_b = unsafe { from_raw_parts(dd as *const u8, size * 8) };
+    let xa_b = unsafe { from_raw_parts(xa as *const u8, size * 8) };
+    call_f64("lind_gsl_poly_dd_eval", &mut [Arg::Buf(dd_b), Arg::Buf(xa_b), Arg::USize(size), Arg::F64(x)])
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_poly_dd_taylor(
+    c: *mut f64, xp: f64, dd: *const f64, xa: *const f64, size: usize, w: *mut f64,
+) -> c_int {
+    let c_b = unsafe { from_raw_parts_mut(c as *mut u8, size * 8) };
+    let dd_b = unsafe { from_raw_parts(dd as *const u8, size * 8) };
+    let xa_b = unsafe { from_raw_parts(xa as *const u8, size * 8) };
+    let w_b = unsafe { from_raw_parts_mut(w as *mut u8, size * 8) }; // scratch; copy-back harmless
+    call("lind_gsl_poly_dd_taylor", &mut [
+        Arg::Out { dst: c_b, len: OutLen::Cap }, Arg::F64(xp), Arg::Buf(dd_b), Arg::Buf(xa_b),
+        Arg::USize(size), Arg::Out { dst: w_b, len: OutLen::Cap },
+    ]) as c_int
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_poly_dd_hermite_init(
+    dd: *mut f64, z: *mut f64, xa: *const f64, ya: *const f64, dya: *const f64, size: usize,
+) -> c_int {
+    // Hermite doubles the node set: dd and z hold 2*size entries.
+    let dd_b = unsafe { from_raw_parts_mut(dd as *mut u8, 2 * size * 8) };
+    let z_b = unsafe { from_raw_parts_mut(z as *mut u8, 2 * size * 8) };
+    let xa_b = unsafe { from_raw_parts(xa as *const u8, size * 8) };
+    let ya_b = unsafe { from_raw_parts(ya as *const u8, size * 8) };
+    let dya_b = unsafe { from_raw_parts(dya as *const u8, size * 8) };
+    call("lind_gsl_poly_dd_hermite_init", &mut [
+        Arg::Out { dst: dd_b, len: OutLen::Cap }, Arg::Out { dst: z_b, len: OutLen::Cap },
+        Arg::Buf(xa_b), Arg::Buf(ya_b), Arg::Buf(dya_b), Arg::USize(size),
+    ]) as c_int
+}
+
+// --- array-valued randist pdfs: dirichlet(K doubles×2), multinomial(K doubles + K uints) ---
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_ran_dirichlet_pdf(k: usize, alpha: *const f64, theta: *const f64) -> f64 {
+    let a = unsafe { from_raw_parts(alpha as *const u8, k * 8) };
+    let t = unsafe { from_raw_parts(theta as *const u8, k * 8) };
+    call_f64("lind_gsl_ran_dirichlet_pdf", &mut [Arg::USize(k), Arg::Buf(a), Arg::Buf(t)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_ran_dirichlet_lnpdf(k: usize, alpha: *const f64, theta: *const f64) -> f64 {
+    let a = unsafe { from_raw_parts(alpha as *const u8, k * 8) };
+    let t = unsafe { from_raw_parts(theta as *const u8, k * 8) };
+    call_f64("lind_gsl_ran_dirichlet_lnpdf", &mut [Arg::USize(k), Arg::Buf(a), Arg::Buf(t)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_ran_multinomial_pdf(k: usize, p: *const f64, n: *const c_uint) -> f64 {
+    let pb = unsafe { from_raw_parts(p as *const u8, k * 8) };
+    let nb = unsafe { from_raw_parts(n as *const u8, k * 4) };
+    call_f64("lind_gsl_ran_multinomial_pdf", &mut [Arg::USize(k), Arg::Buf(pb), Arg::Buf(nb)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_ran_multinomial_lnpdf(k: usize, p: *const f64, n: *const c_uint) -> f64 {
+    let pb = unsafe { from_raw_parts(p as *const u8, k * 8) };
+    let nb = unsafe { from_raw_parts(n as *const u8, k * 4) };
+    call_f64("lind_gsl_ran_multinomial_lnpdf", &mut [Arg::USize(k), Arg::Buf(pb), Arg::Buf(nb)])
+}
+
+// --- special-function `_e` forms with a second (sign) output: result[16] + sgn[8] ---
+fn call_sgn_e(name: &str, scalars: &[f64], result: *mut c_void, sgn: *mut f64) -> c_int {
+    let mut r = [0u8; 16];
+    let mut s = [0u8; 8];
+    // Scope the args so their mutable borrows of r/s end before we read them back.
+    let st = {
+        let mut args: Vec<Arg> = scalars.iter().map(|&v| Arg::F64(v)).collect();
+        args.push(Arg::Out { dst: &mut r, len: OutLen::Cap });
+        args.push(Arg::Out { dst: &mut s, len: OutLen::Cap });
+        call(name, &mut args) as c_int
+    };
+    if !result.is_null() {
+        unsafe { core::ptr::copy_nonoverlapping(r.as_ptr(), result as *mut u8, 16) };
+    }
+    unsafe { put(sgn, s) };
+    st
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_sf_lngamma_sgn_e(x: f64, result: *mut c_void, sgn: *mut f64) -> c_int {
+    call_sgn_e("lind_gsl_sf_lngamma_sgn_e", &[x], result, sgn)
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_sf_lnpoch_sgn_e(a: f64, x: f64, result: *mut c_void, sgn: *mut f64) -> c_int {
+    call_sgn_e("lind_gsl_sf_lnpoch_sgn_e", &[a, x], result, sgn)
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_sf_lnbeta_sgn_e(x: f64, y: f64, result: *mut c_void, sgn: *mut f64) -> c_int {
+    call_sgn_e("lind_gsl_sf_lnbeta_sgn_e", &[x, y], result, sgn)
+}
+
 // GSL sort module — generated marshalling (see gen_gsl_sort.py).
 include!("sort_generated.rs");
 
 // GSL statistics module — generated marshalling (see gen_gsl_stats.py).
 include!("stats_generated.rs");
+
+// GSL scalar modules (cdf / randist pdf / sys) — generated marshalling (see gen_gsl_scalar.py).
+include!("scalar_generated.rs");
+
+// GSL special-function `_e` forms (gsl_sf_*_e, result-struct out) — see gen_gsl_sf_result.py.
+include!("sf_result_generated.rs");

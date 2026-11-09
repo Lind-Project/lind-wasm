@@ -83,7 +83,7 @@ INCLUDES=(-I"$GSL_NATIVE" -I"$GSL_SRC")
 
 MODULES=("$@")
 if [[ ${#MODULES[@]} -eq 0 ]]; then
-    MODULES=(poly blas vector matrix block sort statistics permutation sys const)
+    MODULES=(poly blas vector matrix block sort statistics permutation sys const cdf randist)
 fi
 
 run_lind() { LIND_MODULE="$LIND_MODULE" LIND_PRELOAD="$LIND_PRELOAD" \

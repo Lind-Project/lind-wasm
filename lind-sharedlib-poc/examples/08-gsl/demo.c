@@ -20,6 +20,18 @@ void    gsl_vector_set(void *v, size_t i, double x);
 double  gsl_vector_get(const void *v, size_t i);
 void    gsl_sort_vector(void *v);
 void    gsl_vector_free(void *v);
+/* scalar modules (generated): cdf / sys / specfunc — pure scalar in, scalar out */
+double gsl_cdf_ugaussian_P(double x);
+double gsl_hypot(double x, double y);
+double gsl_sf_bessel_J0(double x);
+double gsl_sf_erf(double x);
+double gsl_sf_gamma(double x);
+/* special-function `_e` form: writes {val,err} into a 16-byte result struct, returns status */
+struct demo_sf_result { double val; double err; };
+int gsl_sf_bessel_J0_e(double x, struct demo_sf_result *result);
+/* Tier-1 tail (hand-written): polynomial divided differences */
+int    gsl_poly_dd_init(double dd[], const double xa[], const double ya[], size_t size);
+double gsl_poly_dd_eval(const double dd[], const double xa[], size_t size, double x);
 
 int main(void) {
     double x0, x1, x2;
@@ -48,6 +60,21 @@ int main(void) {
     /* statistics: reduction array -> scalar */
     double s[5] = {2.0, 4.0, 4.0, 4.0, 6.0};
     printf("gsl_stats_mean -> %g   (expect 4)\n", gsl_stats_mean(s, 1, 5));
+
+    /* scalar modules (generated): cdf + sys + specfunc */
+    printf("gsl_cdf_ugaussian_P(0) -> %g   (expect 0.5)\n", gsl_cdf_ugaussian_P(0.0));
+    printf("gsl_hypot(3,4) -> %g   (expect 5)\n", gsl_hypot(3.0, 4.0));
+    printf("gsl_sf_bessel_J0(0) -> %g   (expect 1)\n", gsl_sf_bessel_J0(0.0));
+    printf("gsl_sf_erf(0) -> %g   (expect 0)\n", gsl_sf_erf(0.0));
+    printf("gsl_sf_gamma(5) -> %g   (expect 24)\n", gsl_sf_gamma(5.0));
+    struct demo_sf_result sr = {0};
+    int sr_st = gsl_sf_bessel_J0_e(0.0, &sr);
+    printf("gsl_sf_bessel_J0_e(0) -> status %d, val %g   (expect 0, 1)\n", sr_st, sr.val);
+
+    /* Tier-1 tail: Newton divided differences for y=x^2 through (0,0),(1,1),(2,4), eval @1.5 */
+    double dd_xa[3] = {0.0, 1.0, 2.0}, dd_ya[3] = {0.0, 1.0, 4.0}, dd_c[3];
+    gsl_poly_dd_init(dd_c, dd_xa, dd_ya, 3);
+    printf("gsl_poly_dd_eval @1.5 -> %g   (expect 2.25)\n", gsl_poly_dd_eval(dd_c, dd_xa, 3, 1.5));
 
     /* opaque handle: alloc -> set -> sort -> get -> free, entirely sandboxed. The vector
      * lives in guest memory; `v` is only ever an opaque token. */

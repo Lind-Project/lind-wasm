@@ -249,3 +249,182 @@ pub extern "C" fn gsl_stats_median(sorted_data: *mut c_void, stride: usize, n: u
     let _r = call_f64("lind_gsl_stats_median", &mut [Arg::InOut { dst: sorted_data_b, len: OutLen::Cap }, Arg::USize(stride), Arg::USize(n)]);
     _r
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wmean(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wmean", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wvariance(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wvariance", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wsd(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wsd", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wtss(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wtss", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wabsdev(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wabsdev", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wskew(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wskew", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wkurtosis(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wkurtosis", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wvariance_m(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize, wmean: f64) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wvariance_m", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::F64(wmean)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wsd_m(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize, wmean: f64) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wsd_m", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::F64(wmean)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wabsdev_m(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize, wmean: f64) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wabsdev_m", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::F64(wmean)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wtss_m(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize, wmean: f64) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wtss_m", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::F64(wmean)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wvariance_with_fixed_mean(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize, mean: f64) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wvariance_with_fixed_mean", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::F64(mean)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wsd_with_fixed_mean(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize, mean: f64) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wsd_with_fixed_mean", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::F64(mean)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wskew_m_sd(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize, wmean: f64, wsd: f64) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wskew_m_sd", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::F64(wmean), Arg::F64(wsd)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_wkurtosis_m_sd(w: *const c_void, wstride: usize, data: *const c_void, stride: usize, n: usize, wmean: f64, wsd: f64) -> f64 {
+    let w_b = unsafe { core::slice::from_raw_parts(w as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * wstride }) * 8) };
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let _r = call_f64("lind_gsl_stats_wkurtosis_m_sd", &mut [Arg::Buf(w_b), Arg::USize(wstride), Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::F64(wmean), Arg::F64(wsd)]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_mad(data: *const c_void, stride: usize, n: usize, work: *mut f64) -> f64 {
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let work_b = unsafe { core::slice::from_raw_parts_mut(work as *mut u8, (n) * 8) };
+    let _r = call_f64("lind_gsl_stats_mad", &mut [Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::Out { dst: work_b, len: OutLen::Cap }]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_mad0(data: *const c_void, stride: usize, n: usize, work: *mut f64) -> f64 {
+    let data_b = unsafe { core::slice::from_raw_parts(data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let work_b = unsafe { core::slice::from_raw_parts_mut(work as *mut u8, (n) * 8) };
+    let _r = call_f64("lind_gsl_stats_mad0", &mut [Arg::Buf(data_b), Arg::USize(stride), Arg::USize(n), Arg::Out { dst: work_b, len: OutLen::Cap }]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_Sn_from_sorted_data(sorted_data: *const c_void, stride: usize, n: usize, work: *mut f64) -> f64 {
+    let sorted_data_b = unsafe { core::slice::from_raw_parts(sorted_data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let work_b = unsafe { core::slice::from_raw_parts_mut(work as *mut u8, (n) * 8) };
+    let _r = call_f64("lind_gsl_stats_Sn_from_sorted_data", &mut [Arg::Buf(sorted_data_b), Arg::USize(stride), Arg::USize(n), Arg::Out { dst: work_b, len: OutLen::Cap }]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_Sn0_from_sorted_data(sorted_data: *const c_void, stride: usize, n: usize, work: *mut f64) -> f64 {
+    let sorted_data_b = unsafe { core::slice::from_raw_parts(sorted_data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let work_b = unsafe { core::slice::from_raw_parts_mut(work as *mut u8, (n) * 8) };
+    let _r = call_f64("lind_gsl_stats_Sn0_from_sorted_data", &mut [Arg::Buf(sorted_data_b), Arg::USize(stride), Arg::USize(n), Arg::Out { dst: work_b, len: OutLen::Cap }]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_Qn_from_sorted_data(sorted_data: *const c_void, stride: usize, n: usize, work: *mut f64, work_int: *mut i32) -> f64 {
+    let sorted_data_b = unsafe { core::slice::from_raw_parts(sorted_data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let work_b = unsafe { core::slice::from_raw_parts_mut(work as *mut u8, (3 * n) * 8) };
+    let work_int_b = unsafe { core::slice::from_raw_parts_mut(work_int as *mut u8, (5 * n) * 4) };
+    let _r = call_f64("lind_gsl_stats_Qn_from_sorted_data", &mut [Arg::Buf(sorted_data_b), Arg::USize(stride), Arg::USize(n), Arg::Out { dst: work_b, len: OutLen::Cap }, Arg::Out { dst: work_int_b, len: OutLen::Cap }]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_Qn0_from_sorted_data(sorted_data: *const c_void, stride: usize, n: usize, work: *mut f64, work_int: *mut i32) -> f64 {
+    let sorted_data_b = unsafe { core::slice::from_raw_parts(sorted_data as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride }) * 8) };
+    let work_b = unsafe { core::slice::from_raw_parts_mut(work as *mut u8, (3 * n) * 8) };
+    let work_int_b = unsafe { core::slice::from_raw_parts_mut(work_int as *mut u8, (5 * n) * 4) };
+    let _r = call_f64("lind_gsl_stats_Qn0_from_sorted_data", &mut [Arg::Buf(sorted_data_b), Arg::USize(stride), Arg::USize(n), Arg::Out { dst: work_b, len: OutLen::Cap }, Arg::Out { dst: work_int_b, len: OutLen::Cap }]);
+    _r
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_stats_spearman(data1: *const c_void, stride1: usize, data2: *const c_void, stride2: usize, n: usize, work: *mut f64) -> f64 {
+    let data1_b = unsafe { core::slice::from_raw_parts(data1 as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride1 }) * 8) };
+    let data2_b = unsafe { core::slice::from_raw_parts(data2 as *const u8, (if n == 0 { 0 } else { 1 + (n - 1) * stride2 }) * 8) };
+    let work_b = unsafe { core::slice::from_raw_parts_mut(work as *mut u8, (2 * n) * 8) };
+    let _r = call_f64("lind_gsl_stats_spearman", &mut [Arg::Buf(data1_b), Arg::USize(stride1), Arg::Buf(data2_b), Arg::USize(stride2), Arg::USize(n), Arg::Out { dst: work_b, len: OutLen::Cap }]);
+    _r
+}

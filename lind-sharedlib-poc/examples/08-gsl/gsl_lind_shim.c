@@ -73,3 +73,48 @@ void lind_gsl_vector_free(struct gsl_vector *v) { gsl_vector_free(v); }
 
 // GSL statistics module — generated forwarders (see gen_gsl_stats.py).
 #include "generated/stats_shim.inc.c"
+
+// GSL scalar modules (cdf / randist pdf / sys) — generated forwarders (see gen_gsl_scalar.py).
+#include "generated/scalar_shim.inc.c"
+
+// GSL special-function `_e` forms (gsl_sf_*_e) — generated forwarders (see gen_gsl_sf_result.py).
+#include "generated/sf_result_shim.inc.c"
+
+// ---------------------------------------------------------------------------
+// Tier-1 tail: hand-written forwarders for the irregular flat functions. Placed AFTER
+// sf_result_shim.inc.c so gsl_sf_result (used by the *_sgn_e forms) is already defined.
+// ---------------------------------------------------------------------------
+extern int    gsl_poly_dd_init(double dd[], const double xa[], const double ya[], size_t size);
+extern double gsl_poly_dd_eval(const double dd[], const double xa[], size_t size, double x);
+extern int    gsl_poly_dd_taylor(double c[], double xp, const double dd[], const double xa[], size_t size, double w[]);
+extern int    gsl_poly_dd_hermite_init(double dd[], double z[], const double xa[], const double ya[], const double dya[], size_t size);
+extern double gsl_ran_dirichlet_pdf(size_t K, const double alpha[], const double theta[]);
+extern double gsl_ran_dirichlet_lnpdf(size_t K, const double alpha[], const double theta[]);
+extern double gsl_ran_multinomial_pdf(size_t K, const double p[], const unsigned int n[]);
+extern double gsl_ran_multinomial_lnpdf(size_t K, const double p[], const unsigned int n[]);
+extern int    gsl_sf_lngamma_sgn_e(double x, gsl_sf_result *result, double *sgn);
+extern int    gsl_sf_lnpoch_sgn_e(double a, double x, gsl_sf_result *result, double *sgn);
+extern int    gsl_sf_lnbeta_sgn_e(double x, double y, gsl_sf_result *result, double *sgn);
+
+__attribute__((export_name("lind_gsl_poly_dd_init")))
+int lind_gsl_poly_dd_init(double dd[], const double xa[], const double ya[], size_t size) { return gsl_poly_dd_init(dd, xa, ya, size); }
+__attribute__((export_name("lind_gsl_poly_dd_eval")))
+double lind_gsl_poly_dd_eval(const double dd[], const double xa[], size_t size, double x) { return gsl_poly_dd_eval(dd, xa, size, x); }
+__attribute__((export_name("lind_gsl_poly_dd_taylor")))
+int lind_gsl_poly_dd_taylor(double c[], double xp, const double dd[], const double xa[], size_t size, double w[]) { return gsl_poly_dd_taylor(c, xp, dd, xa, size, w); }
+__attribute__((export_name("lind_gsl_poly_dd_hermite_init")))
+int lind_gsl_poly_dd_hermite_init(double dd[], double z[], const double xa[], const double ya[], const double dya[], size_t size) { return gsl_poly_dd_hermite_init(dd, z, xa, ya, dya, size); }
+__attribute__((export_name("lind_gsl_ran_dirichlet_pdf")))
+double lind_gsl_ran_dirichlet_pdf(size_t K, const double alpha[], const double theta[]) { return gsl_ran_dirichlet_pdf(K, alpha, theta); }
+__attribute__((export_name("lind_gsl_ran_dirichlet_lnpdf")))
+double lind_gsl_ran_dirichlet_lnpdf(size_t K, const double alpha[], const double theta[]) { return gsl_ran_dirichlet_lnpdf(K, alpha, theta); }
+__attribute__((export_name("lind_gsl_ran_multinomial_pdf")))
+double lind_gsl_ran_multinomial_pdf(size_t K, const double p[], const unsigned int n[]) { return gsl_ran_multinomial_pdf(K, p, n); }
+__attribute__((export_name("lind_gsl_ran_multinomial_lnpdf")))
+double lind_gsl_ran_multinomial_lnpdf(size_t K, const double p[], const unsigned int n[]) { return gsl_ran_multinomial_lnpdf(K, p, n); }
+__attribute__((export_name("lind_gsl_sf_lngamma_sgn_e")))
+int lind_gsl_sf_lngamma_sgn_e(double x, gsl_sf_result *result, double *sgn) { return gsl_sf_lngamma_sgn_e(x, result, sgn); }
+__attribute__((export_name("lind_gsl_sf_lnpoch_sgn_e")))
+int lind_gsl_sf_lnpoch_sgn_e(double a, double x, gsl_sf_result *result, double *sgn) { return gsl_sf_lnpoch_sgn_e(a, x, result, sgn); }
+__attribute__((export_name("lind_gsl_sf_lnbeta_sgn_e")))
+int lind_gsl_sf_lnbeta_sgn_e(double x, double y, gsl_sf_result *result, double *sgn) { return gsl_sf_lnbeta_sgn_e(x, y, result, sgn); }
