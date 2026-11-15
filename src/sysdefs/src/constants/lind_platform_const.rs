@@ -17,8 +17,9 @@ pub const LINDFS_ROOT: &str = "/home/lind/lind-wasm/lindfs";
 pub const FDKIND_KERNEL: u32 = 0;
 /// Maximum allowed Cage ID.  
 /// Cage IDs are never reused, so this also caps how many cages one run can
-/// create. A large build starts a cage per command, more than 2048.
-pub const MAX_CAGEID: i32 = 8192;
+/// create. A large build starts a cage per command, and a libtool build
+/// forks about 17 times per compile: gmp's 516 compiles need about 8,800.
+pub const MAX_CAGEID: i32 = 65536;
 pub const MAXFD: usize = 1024; // Maximum file descriptors per cage
 /// Maximum linear memory size for a single Wasm module in the current lind-wasm runtime.
 /// Since lind-wasm uses 32-bit memories, the linear memory address space is limited to 4 GiB.
@@ -133,7 +134,11 @@ pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 ///
 /// Because this value is global rather than per-instance, every grate-enabled
 /// instance reserves the same number of worker stack slots in linear memory.
-pub const MAX_GRATE_WORKERS: usize = 3;
+///
+/// A call that blocks in a grate holds a worker until it returns: a read on
+/// an empty pipe in the IPC grate, or a program started by exec. With 3, a
+/// shell pipeline nested in another used them all and the build hung.
+pub const MAX_GRATE_WORKERS: usize = 16;
 
 /// Size in bytes of the usable stack region assigned to one grate worker.
 ///
