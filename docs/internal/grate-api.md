@@ -58,7 +58,7 @@ without errno translation: `0` on success, or a 3i error code. The two you will 
 ## `make_threei_call`
 
 ```c
-int make_threei_call(unsigned int callnumber,
+int64_t make_threei_call(unsigned int callnumber,
     uint64_t callname,
     uint64_t self_cageid, uint64_t target_cageid,
     uint64_t arg1, uint64_t arg1cageid,
@@ -88,7 +88,7 @@ The canonical entry point for issuing a syscall through 3i. This is what a grate
 **Example** — an `open` handler that redirects the path, then forwards the call as the original cage:
 
 ```c
-int open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
+int64_t open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
                uint64_t arg2, uint64_t arg2cage, uint64_t arg3,
                uint64_t arg3cage, uint64_t arg4, uint64_t arg4cage,
                uint64_t arg5, uint64_t arg5cage, uint64_t arg6,
@@ -140,7 +140,7 @@ Installs an interposition rule: "when cage `targetcage` issues syscall `targetca
 **Handler signature.** The registered function is invoked with the originating cage's ID followed by the six (value, cageid) argument pairs:
 
 ```c
-int my_handler(uint64_t cageid,
+int64_t my_handler(uint64_t cageid,
                uint64_t arg1, uint64_t arg1cage,
                uint64_t arg2, uint64_t arg2cage,
                uint64_t arg3, uint64_t arg3cage,
@@ -154,7 +154,7 @@ Handlers that ignore the arguments (e.g. for `geteuid`) may declare only the lea
 **The dispatcher.** Every grate must define a function named `pass_fptr_to_wt` — the runtime looks up this export to re-enter the grate when a registered handler fires. It receives the raw function pointer plus the handler arguments, and its job is to cast and call:
 
 ```c
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
+int64_t pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
                     uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
                     uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
@@ -162,10 +162,10 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
     if (fn_ptr_uint == 0)
         return -1;
 
-    int (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+    int64_t (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
               uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
               uint64_t) =
-        (int (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+        (int64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                  uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                  uint64_t))(uintptr_t)fn_ptr_uint;
 
@@ -224,7 +224,7 @@ Addresses in the grate's own memory are translated automatically here — do **n
 **Example** — an `open` handler reading the caller's path string:
 
 ```c
-int open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
+int64_t open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
                uint64_t arg2, uint64_t arg2cage, ...) {
     int thiscage = getpid();
     char *pathname = malloc(256);
@@ -276,19 +276,19 @@ table, `ELINDESRCH` if either cage is exiting.
 #include <unistd.h>
 
 // 1. The dispatcher — required in every grate, always the same shape.
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
+int64_t pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
                     uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
                     uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
                     uint64_t arg6, uint64_t arg6cage) {
     if (fn_ptr_uint == 0)
         return -1;
-    int (*fn)(uint64_t) = (int (*)(uint64_t))(uintptr_t)fn_ptr_uint;
+    int64_t (*fn)(uint64_t) = (int64_t (*)(uint64_t))(uintptr_t)fn_ptr_uint;
     return fn(cageid);
 }
 
 // 2. The handler(s).
-int geteuid_grate(uint64_t cageid) {
+int64_t geteuid_grate(uint64_t cageid) {
     printf("[grate] geteuid intercepted for cage %llu\n", cageid);
     return 10;  // becomes the caller's geteuid() result
 }
@@ -329,7 +329,7 @@ Rust grates live alongside C grates in the [lind-wasm-example-grates](https://gi
 
 - **`GrateBuilder`** — handles the whole fork / register / exec / wait lifecycle. Unlike the C pattern above (where the child registers handlers on itself before `exec`), the builder registers handlers from the *parent* grate process, using a shared semaphore to hold the child back until registration is complete. Optional `preexec` and `teardown` hooks run around the cage's lifetime.
 - **`pass_fptr_to_wt`** — the required dispatcher is defined and exported by the library; you never write it.
-- **`SyscallHandler`** — the handler signature as a Rust type: an `extern "C" fn(cageid: u64, arg1: u64, arg1cage: u64, ..., arg6: u64, arg6cage: u64) -> i32`.
+- **`SyscallHandler`** — the handler signature as a Rust type: an `extern "C" fn(cageid: u64, arg1: u64, arg1cage: u64, ..., arg6: u64, arg6cage: u64) -> i64`.
 - **Safe wrappers** — `register_handler`, `copy_data_between_cages`, `copy_handler_table_to_cage` return `Result<(), GrateError>`, and `make_threei_call` returns `Result<i32, GrateError>`; `getcageid()` returns the current cage ID.
 - **Syscall number constants** — e.g. `grate_rs::constants::SYS_GETEUID`, so you don't hard-code raw numbers.
 - **fd-table support** — `GrateBuilder::enable_fd_translate_policy` / `register_default_fd_handlers_except` install default handlers for fd-related syscalls, for grates that virtualize file descriptors.
@@ -345,7 +345,7 @@ extern "C" fn my_handler(
     _arg1: u64, _arg1cage: u64, _arg2: u64, _arg2cage: u64,
     _arg3: u64, _arg3cage: u64, _arg4: u64, _arg4cage: u64,
     _arg5: u64, _arg5cage: u64, _arg6: u64, _arg6cage: u64,
-) -> i32 {
+) -> i64 {
     10  // becomes the caller's geteuid() result
 }
 

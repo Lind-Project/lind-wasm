@@ -42,7 +42,7 @@ pub type RawCallFunc = extern "C" fn(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32;
+) -> i64;
 
 /// Register all RawPOSIX syscall handlers for a given cage.
 ///

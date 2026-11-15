@@ -23,7 +23,7 @@
 
 /* ── Dispatcher ─────────────────────────────────────────────────────── */
 
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,
+long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,
                     uint64_t arg1, uint64_t arg1cage,
                     uint64_t arg2, uint64_t arg2cage,
                     uint64_t arg3, uint64_t arg3cage,
@@ -33,7 +33,7 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,
     if (fn_ptr_uint == 0)
         return -1;
 
-    typedef int (*handler_t)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+    typedef int64_t (*handler_t)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                              uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                              uint64_t, uint64_t, uint64_t);
 
@@ -46,7 +46,7 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,
 
 /* Intercept mmap — the crash site at fs_calls.rs:795.
  * Just forward it. The grate dispatch round-trip is the delay. */
-int mmap_handler(uint64_t cageid,
+int64_t mmap_handler(uint64_t cageid,
                  uint64_t arg1, uint64_t arg1cage,
                  uint64_t arg2, uint64_t arg2cage,
                  uint64_t arg3, uint64_t arg3cage,
@@ -61,7 +61,7 @@ int mmap_handler(uint64_t cageid,
 }
 
 /* Intercept futex — high-frequency during thread sync, adds more pressure. */
-int futex_handler(uint64_t cageid,
+int64_t futex_handler(uint64_t cageid,
                   uint64_t arg1, uint64_t arg1cage,
                   uint64_t arg2, uint64_t arg2cage,
                   uint64_t arg3, uint64_t arg3cage,
