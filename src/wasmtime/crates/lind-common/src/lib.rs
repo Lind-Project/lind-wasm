@@ -208,6 +208,8 @@ fn add_syscall_to_linker<
                 // Save the grate-defined return value produced by the normal clone execution. 
                 // The guest-visible parent return is produced later during Asyncify rewind 
                 // replay, so this value must be carried across that boundary.
+                // NOTE: glibc uses pid_t for the return value of clone. Thus, retval is always
+                // truncated to 32 bits. Consequently, truncating retval here has no effect.
                 wasmtime_lind_multi_process::set_pending_clone_visible_retval(&mut caller, retval as i32).unwrap_or_else(|e| {
                     panic!("{}", format!(
                         "failed to set pending_clone_visible_retval for retval={retval} with error: {e}"
