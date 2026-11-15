@@ -11,7 +11,8 @@ The header exposes the minimal set of calls a grate (or any other interposition 
 - invoke syscalls via `make_threei_call()`,
 - register or deregister syscall handlers via `register_handler()`,
 - copy data between cages/grates in a controlled way via `copy_data_between_cages()`,
-- propagate a handler table to another cage/grate via `copy_handler_table_to_cage()`.
+- propagate a handler table to another cage/grate via `copy_handler_table_to_cage()`,
+- let a cage outside its parent-child line act for a cage via `grant_cage_access()` / `revoke_cage_access()`.
 
 Grates can be written in C or in Rust. The C API below is the canonical interface; Rust grates use the [`grate-rs`](https://github.com/Lind-Project/lind-wasm-example-grates/tree/main/lib/grate-rs) library, which links against the same four sysroot symbols and wraps them in safe Rust APIs — the semantics documented here apply unchanged. See [Writing grates in Rust](#writing-grates-in-rust-grate-rs) below.
 
@@ -42,15 +43,22 @@ arg2cageid = my_cageid | GRATE_MEMORY_FLAG
 
 Pointers that came *from another cage* (e.g. the intercepted caller's buffer, received through the handler arguments) are already host-translated, so pass them through with their original cageid, **without** the flag.
 
+### Which cages a call may name
+
+A cage may only name itself, its descendants, and cages it was granted access to (with their descendants) — as the `target_cageid` of a call, as an `argNcageid`, or as any cage argument of the calls below. A grate therefore controls the cages it forks, but not the grate above it or its siblings' children unless someone who owns them calls `grant_cage_access`. A denied ordinary syscall fails with `EPERM`; a denied 3i call returns `ELINDEPERM`. See [Threei — which cages a cage may reference](3i.md#which-cages-a-cage-may-reference).
+
+The runtime ignores the `self_cageid` you pass and uses your real cage ID, so always act on another cage by naming it in `target_cageid`.
+
 ### Return values and errno
 
-The 3i-level calls on this page (`register_handler`, `copy_data_between_cages`, `copy_handler_table_to_cage`) return raw results
-without errno translation: `0` on success, or a 3i error code. The two you will encounter are:
+The 3i-level calls on this page (`register_handler`, `copy_data_between_cages`, `copy_handler_table_to_cage`, `grant_cage_access`, `revoke_cage_access`) return raw results
+without errno translation: `0` on success, or a 3i error code. `lind_syscall.h` defines them; compare with `ret == (int)ELINDEPERM`:
 
 | Constant | Value | Meaning |
 |---|---|---|
 | `ELINDAPIABORTED` | `0xE0010001` | The call was rejected (invalid arguments, missing handler table, invalid copytype, out-of-bounds address range, ...) |
 | `ELINDESRCH` | `0xE0010002` | The source or target cage is exiting and can no longer be operated on |
+| `ELINDEPERM` | `0xE0010003` | The caller may not reference a cage the call names, or may not grant or revoke the requested access |
 
 `make_threei_call` lets you choose the errno behavior explicitly via its last parameter (see below).
 
@@ -264,7 +272,34 @@ same interposition rules as an existing one — for example, to stamp a template
 | `targetcage` | The cage that receives the copy. |
 
 **Returns** `0` on success, `ELINDAPIABORTED` if `srccage` has no handler
-table, `ELINDESRCH` if either cage is exiting.
+table, `ELINDESRCH` if either cage is exiting, `ELINDEPERM` if the caller may not
+reference both cages. In particular a cage cannot copy the table of a grate above it.
+
+
+## `grant_cage_access` / `revoke_cage_access`
+
+```c
+int grant_cage_access(uint64_t subject, uint64_t grantee);
+int revoke_cage_access(uint64_t subject, uint64_t grantee);
+```
+
+`grant_cage_access` lets `grantee` reference `subject` and all of its descendants, including ones forked later: act on their behalf, pass arguments in their memory, copy their data and change their routing. Use it when cages that are not in a parent-child line need to cooperate, e.g. a grate that routes its child's calls to a sibling grate grants that sibling access to the child.
+
+The caller must *own* `subject`: be `subject` itself or one of its ancestors. Access received through a grant cannot be granted further.
+
+`revoke_cage_access` withdraws it. The grantee may always give up its own access; otherwise the caller removes the grants it made and those made by cages it owns. A grant made by a cage above the caller stays in place, and so does the access.
+
+**Returns** `0` on success; `ELINDEPERM` if the caller may not grant (or revoke) this access; `ELINDAPIABORTED` if `grantee` is not a cage or is `subject` (grant), or holds no grant on `subject` (revoke).
+
+```c
+pid_t a = fork();          /* child a */
+if (a == 0) { /* ... */ }
+pid_t b = fork();          /* child b */
+if (b == 0) { /* ... may now act for a, once the parent has granted it ... */ }
+grant_cage_access(a, b);   /* the parent owns a, so it may share it with b */
+/* ... */
+revoke_cage_access(a, b);
+```
 
 
 ## Putting it together: a minimal grate

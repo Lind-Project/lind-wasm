@@ -190,3 +190,47 @@ int copy_handler_table_to_cage(uint64_t thiscage, uint64_t targetcage)
         TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
     );
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+// 3i function call to let another cage reference a cage this cage owns
+// subject: the cage to share; must be the calling cage or one of its descendants
+// grantee: the cage that may then make calls on behalf of subject (and its
+//          descendants), pass arguments in their memory, copy their data and
+//          change their routing
+int grant_cage_access(uint64_t subject, uint64_t grantee)
+{
+    return make_threei_call(
+        GRANT_CAGE_ACCESS_SYSCALL,
+        NOTUSED, // callname is not used in the trampoline
+        __lind_cageid, // self_cageid
+        __lind_cageid, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        subject, NOTUSED,
+        grantee, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
+    );
+}
+
+// 3i function call to withdraw access given by grant_cage_access
+// subject: the cage the grant is on
+// grantee: the cage losing access; a cage may always give up its own access
+int revoke_cage_access(uint64_t subject, uint64_t grantee)
+{
+    return make_threei_call(
+        REVOKE_CAGE_ACCESS_SYSCALL,
+        NOTUSED, // callname is not used in the trampoline
+        __lind_cageid, // self_cageid
+        __lind_cageid, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        subject, NOTUSED,
+        grantee, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
+    );
+}

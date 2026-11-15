@@ -11,7 +11,7 @@ use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use sysdefs::lind_debug_panic;
 use threei::threei::{
-    copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
+    copy_data_between_cages, copy_handler_table_to_cage, make_syscall_from_cage, register_handler,
 };
 use threei::threei_const;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
@@ -97,7 +97,7 @@ fn add_syscall_to_linker<
         move |mut caller: Caller<'_, T>,
               call_number: u32,
               call_name: u64,
-              self_cageid: u64,
+              _claimed_self_cageid: u64, // the guest's claim; replaced below
               target_cageid: u64,
               arg1: u64,
               arg1cageid: u64,
@@ -165,6 +165,14 @@ fn add_syscall_to_linker<
                 return Ok(retval);
             }
 
+            // The guest passes self_cageid, but that is only a claim. 3i routes the
+            // call through self_cageid's handler table and checks which cages it
+            // may reference, so use the id of the cage that actually made the call.
+            // Legitimate callers already pass their own id (glibc passes
+            // __lind_cageid; a forwarding grate passes its own id and names the
+            // cage it acts for in target_cageid).
+            let self_cageid = caller.data_mut().get_ctx_mut().cageid as u64;
+
             // Some thread-related operations must be executed against a specific thread's
             // VMContext (e.g., pthread_create/exit). Because syscalls may be interposed/routed
             // through 3i functionality and the effective thread instance cannot be reliably derived
@@ -185,7 +193,8 @@ fn add_syscall_to_linker<
                 arg2
             };
 
-            let retval = make_syscall(
+            // Calls from cage code go through 3i's reference policy before routing.
+            let retval = make_syscall_from_cage(
                 self_cageid,
                 call_number as u64,
                 call_name,

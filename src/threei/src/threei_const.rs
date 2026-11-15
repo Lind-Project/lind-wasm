@@ -14,6 +14,9 @@ pub const ELINDAPIABORTED: u64 = 0xE001_0001;
 /// (handlefunccage) is in the EXITING state.
 /// See function-level comments for specific usage details.
 pub const ELINDESRCH: u64 = 0xE001_0002;
+/// ELINDEPERM: the calling cage may not reference a cage the call names, or
+/// may not grant or revoke the requested access. See `policy.rs`.
+pub const ELINDEPERM: u64 = 0xE001_0003;
 /// Indicates a successful Grate call.
 /// This value (0) is returned from functions that perform a Grate-side
 /// operation or callback through Wasmtime when the call completes
@@ -50,3 +53,11 @@ pub const COPY_DATA_BETWEEN_CAGES_SYSCALL: u64 = 1002;
 /// TODO: When introducing a Rust-side unified syscall number table
 /// (similar to glibc's `syscall_num` constants), move this constant there.
 pub const COPY_HANDLER_TABLE_TO_CAGE_SYSCALL: u64 = 1003;
+/// 3i-specific syscall number for `grant_cage_access`.
+///
+/// Match the definition in `glibc/lind_syscall_num.h`.
+pub const GRANT_CAGE_ACCESS_SYSCALL: u64 = 1004;
+/// 3i-specific syscall number for `revoke_cage_access`.
+///
+/// Match the definition in `glibc/lind_syscall_num.h`.
+pub const REVOKE_CAGE_ACCESS_SYSCALL: u64 = 1005;

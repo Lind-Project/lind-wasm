@@ -14,9 +14,10 @@ use sysdefs::constants::{
     STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID, VERBOSE,
 };
 use threei::{
-    copy_data_between_cages, copy_handler_table_to_cage, register_handler,
-    COPY_DATA_BETWEEN_CAGES_SYSCALL, COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, EXITING_TABLE,
-    REGISTER_HANDLER_SYSCALL, RUNTIME_TYPE_WASMTIME,
+    copy_data_between_cages, copy_handler_table_to_cage, grant_cage_access, register_handler,
+    revoke_cage_access, COPY_DATA_BETWEEN_CAGES_SYSCALL, COPY_HANDLER_TABLE_TO_CAGE_SYSCALL,
+    EXITING_TABLE, GRANT_CAGE_ACCESS_SYSCALL, REGISTER_HANDLER_SYSCALL, REVOKE_CAGE_ACCESS_SYSCALL,
+    RUNTIME_TYPE_WASMTIME,
 };
 
 /// Function signature for a RawPOSIX syscall handler.
@@ -100,6 +101,7 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
 /// - `register_handler`
 /// - `copy_data_between_cages`
 /// - `copy_handler_table_to_cage`
+/// - `grant_cage_access` / `revoke_cage_access`
 ///
 /// By registering them under `THREEI_CAGEID`, those syscalls can be
 /// interposed and routed through 3i's internal logic, allowing for
@@ -170,11 +172,52 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
         UNUSED_ID,
     );
 
+    // Register `grant_cage_access` and `revoke_cage_access` syscalls for this cage
+    let fp_grant = grant_cage_access as *const () as usize as u64;
+    let grant_ret = register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID, // target cageid for this syscall handler
+        self_cageid,   // cage to modify: current cageid
+        GRANT_CAGE_ACCESS_SYSCALL,
+        RUNTIME_TYPE_WASMTIME, // runtime id
+        THREEI_CAGEID,         // handler function is in the 3i
+        fp_grant,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+    let fp_revoke = revoke_cage_access as *const () as usize as u64;
+    let revoke_ret = register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID, // target cageid for this syscall handler
+        self_cageid,   // cage to modify: current cageid
+        REVOKE_CAGE_ACCESS_SYSCALL,
+        RUNTIME_TYPE_WASMTIME, // runtime id
+        THREEI_CAGEID,         // handler function is in the 3i
+        fp_revoke,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
     // Check registration results and panic if either fails
-    if register_ret != 0 || copy_data_ret != 0 || copy_handler_table_ret != 0 {
+    if register_ret != 0
+        || copy_data_ret != 0
+        || copy_handler_table_ret != 0
+        || grant_ret != 0
+        || revoke_ret != 0
+    {
         panic!(
-            "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_data_ret {}, copy_handler_table_ret {}",
-            register_ret, copy_data_ret, copy_handler_table_ret
+            "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_data_ret {}, copy_handler_table_ret {}, grant_ret {}, revoke_ret {}",
+            register_ret, copy_data_ret, copy_handler_table_ret, grant_ret, revoke_ret
         );
     }
     0

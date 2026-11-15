@@ -27,6 +27,22 @@
  */
 #define GRATE_MEMORY_FLAG ((uint64_t)1 << 63)
 
+/*
+ * Raw error codes returned by the 3i calls below (they do not set errno).
+ * Compare against the return value cast to int, e.g. ret == (int)ELINDEPERM.
+ *
+ *   ELINDAPIABORTED: invalid arguments or state
+ *   ELINDESRCH:      a cage the call names is exiting
+ *   ELINDEPERM:      the calling cage may not reference a cage the call names
+ *                    (only itself, its descendants and cages granted to it),
+ *                    or may not grant/revoke the requested access
+ *
+ * An ordinary syscall denied for the same reason fails with errno EPERM.
+ */
+#define ELINDAPIABORTED 0xE0010001U
+#define ELINDESRCH      0xE0010002U
+#define ELINDEPERM      0xE0010003U
+
 int make_threei_call (unsigned int callnumber, 
     uint64_t callname, 
     uint64_t self_cageid, uint64_t target_cageid,
@@ -49,4 +65,8 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage,
     uint64_t len, uint64_t copytype);
 
 int copy_handler_table_to_cage(uint64_t srccage, uint64_t targetcage);
+
+int grant_cage_access(uint64_t subject, uint64_t grantee);
+
+int revoke_cage_access(uint64_t subject, uint64_t grantee);
 #endif // _LIND_SYSCALL_H

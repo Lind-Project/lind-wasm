@@ -33,28 +33,31 @@ int main(void) {
 			assert(0);
 		}
 
+		// Cage 1 is the grate above this cage. Copying its table over
+		// our own would route around the grate, so 3i must refuse: a
+		// cage may only copy tables of itself and its descendants.
 		int ret = copy_handler_table_to_cage(1, getpid());
-		if (ret != 0) {
+		if (ret != (int)ELINDEPERM) {
 			fprintf(stderr,
-				"[Cage|copy-handler-table] FAIL: "
-				"copy_handler_table_to_cage returned %d\n",
+				"[Cage|copy-handler-table] FAIL: copying the "
+				"grate's table returned %d, expected "
+				"ELINDEPERM\n",
 				ret);
 			assert(0);
 		}
 
 		child_euid = geteuid();
-		if (child_euid == EXPECTED_EUID) {
+		if (child_euid != EXPECTED_EUID) {
 			fprintf(stderr,
-				"[Cage|copy-handler-table] FAIL: geteuid still "
-				"returned inherited handler value %d after "
-				"table overwrite\n",
-				child_euid);
+				"[Cage|copy-handler-table] FAIL: geteuid "
+				"returned %d after the refused copy, expected "
+				"the grate's %d\n",
+				child_euid, EXPECTED_EUID);
 			assert(0);
 		}
 
 		printf("[Cage|copy-handler-table] PASS: child inherited "
-		       "handler, then overwrite changed geteuid to %d\n",
-		       child_euid);
+		       "handler and could not copy the grate's table\n");
 		return 0;
 	}
 

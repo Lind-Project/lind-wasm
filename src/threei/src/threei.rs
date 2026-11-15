@@ -15,6 +15,7 @@ use crate::handler_table::{
     _get_handler, _rm_cage_from_handler, _rm_grate_from_handler, copy_handler_table_to_cage_impl,
     register_handler_impl,
 };
+use crate::policy;
 use crate::threei_const;
 
 pub use sysdefs::constants::sys_const::{EXIT_GROUP_SYSCALL, EXIT_SYSCALL};
@@ -385,6 +386,149 @@ pub fn copy_handler_table_to_cage(
 
     // Actual implementation is in handler_table module according to feature flag
     copy_handler_table_to_cage_impl(srccage, targetcage)
+}
+
+/// Lets `grantee` reference `subject` and its descendants.  Interposable
+///
+/// After this call `grantee` may do to `subject` whatever an ancestor of
+/// `subject` may: make syscalls on its behalf, pass arguments that live in its
+/// memory, copy data in and out of it, and change its routing. This is how
+/// cages that are not in a parent-child line (e.g. a grate serving a sibling's
+/// children) are allowed to cooperate. See `policy.rs` for the full rule.
+///
+/// The calling cage (`self_cageid`) must own `subject`: be `subject` itself or
+/// one of its ancestors in the fork tree. Access held through a grant cannot be
+/// granted further.
+///
+/// ## Arguments:
+/// - self_cageid: The cage making the grant.
+/// - subject: The cage being made referenceable.
+/// - grantee: The cage receiving access.
+///
+/// ## Returns:
+/// - 0 on success.
+/// - `ELINDEPERM` if the caller does not own `subject`.
+/// - `ELINDAPIABORTED` if `grantee` is not a cage or is `subject`.
+pub extern "C" fn grant_cage_access(
+    self_cageid: u64,
+    _target_cageid: u64,
+    subject: u64,
+    _subject_cageid: u64,
+    grantee: u64,
+    _grantee_cageid: u64,
+    _arg3: u64,
+    _arg3cage: u64,
+    _arg4: u64,
+    _arg4cage: u64,
+    _arg5: u64,
+    _arg5cage: u64,
+    _arg6: u64,
+    _arg6cage: u64,
+) -> i32 {
+    policy::grant(self_cageid, subject, grantee)
+}
+
+/// Withdraws grants that let `grantee` reference `subject`.  Interposable
+///
+/// The grantee may always give up its own access. Otherwise the calling cage
+/// removes the grants it made and those made by cages it owns; a grant made by
+/// a cage above the caller stays in place. See `policy.rs`.
+///
+/// ## Arguments:
+/// - self_cageid: The cage revoking the grant.
+/// - subject: The cage the grant is on.
+/// - grantee: The cage whose access is withdrawn.
+///
+/// ## Returns:
+/// - 0 if at least one grant was removed.
+/// - `ELINDEPERM` if the caller may not revoke any of the grants.
+/// - `ELINDAPIABORTED` if `grantee` holds no grant on `subject`.
+pub extern "C" fn revoke_cage_access(
+    self_cageid: u64,
+    _target_cageid: u64,
+    subject: u64,
+    _subject_cageid: u64,
+    grantee: u64,
+    _grantee_cageid: u64,
+    _arg3: u64,
+    _arg3cage: u64,
+    _arg4: u64,
+    _arg4cage: u64,
+    _arg5: u64,
+    _arg5cage: u64,
+    _arg6: u64,
+    _arg6cage: u64,
+) -> i32 {
+    policy::revoke(self_cageid, subject, grantee)
+}
+
+/// Entry point for syscalls issued by cage code.  Not interposable
+///
+/// The runtime calls this instead of `make_syscall` for every syscall that
+/// crosses from a cage into the host. `caller` must be the cage that actually
+/// issued the call, as the runtime knows it, not the `self_cageid` the cage
+/// passed: that value is only a claim. The call is routed through `caller`'s
+/// handler table, and only if `caller` may reference every cage the call names
+/// (see `policy::check_syscall`).
+///
+/// Calls 3i, RawPOSIX and the runtime make among themselves go to
+/// `make_syscall` directly and are not checked.
+///
+/// ## Returns:
+/// What `make_syscall` returns, or, if the policy denies the call, `-EPERM`
+/// (`ELINDEPERM` for 3i's own calls).
+pub fn make_syscall_from_cage(
+    caller: u64,
+    syscall_num: u64,
+    syscall_name: u64,
+    target_cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if let Err(code) = policy::check_syscall(
+        caller,
+        syscall_num,
+        target_cageid,
+        arg1,
+        arg1_cageid,
+        arg2,
+        arg2_cageid,
+        arg3_cageid,
+        arg4_cageid,
+        arg5_cageid,
+        arg6_cageid,
+    ) {
+        return code;
+    }
+
+    make_syscall(
+        caller,
+        syscall_num,
+        syscall_name,
+        target_cageid,
+        arg1,
+        arg1_cageid,
+        arg2,
+        arg2_cageid,
+        arg3,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    )
 }
 
 /// actually performs a call.  Not interposable

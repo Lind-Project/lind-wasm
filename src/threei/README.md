@@ -20,11 +20,15 @@ Note also, that 3i can be used for other inter-cage calls, like RPC.   This docu
 |           grate            |         3i       | `register_handler`            |      Yes      |Register a handler for a syscall|
 |           grate            |         3i       | `copy_handler_table_to_cage`  |      Yes      |Overwrites the entire syscall handler table of a cage|
 |           grate            |         3i       | `copy_data_between_cages`     |      Yes      |Copies memory across cages|
+|           grate            |         3i       | `grant_cage_access`           |      Yes      |Lets another cage reference a cage the caller owns|
+|           grate            |         3i       | `revoke_cage_access`          |      Yes      |Withdraws access given by `grant_cage_access`|
 |           grate            |         3i       | `make_syscall`                |      No       |Call the registered handler for a syscall|
 |   WASM / NaCl / RawPOSIX   |         3i       | `trigger_harsh_cage_exit`     |      No       |Kill a cage: See detailed explanation below|
 |         3i / grate         | grate / RawPOSIX | `harsh_cage_exit`             |      Yes      |Notify a cage was killed: See detailed explaination below|
 
 *NOTE: Interposable in the table means whether these calls are made via the system call table and thus whether or not a grate could alter their behavior*
+
+Every call a cage makes is first checked against 3i's reference policy: a cage may only name itself, its descendants, and cages granted to it. See `src/policy.rs` and the "Which cages a cage may reference" section of `docs/internal/3i.md`.
 
 #### `trigger_harsh_cage_exit` and `harsh_cage_exit`  
 

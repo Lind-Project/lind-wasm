@@ -61,6 +61,8 @@ wasm-ld \
     --export=__tls_base \
     --export-if-defined=copy_data_between_cages \
     --export-if-defined=copy_handler_table_to_cage \
+    --export-if-defined=grant_cage_access \
+    --export-if-defined=revoke_cage_access \
     --export-if-defined=make_threei_call \
     --export-if-defined=register_handler \
     $([ -z "${LIND_ASYNCIFY_SETJMP:-}" ] && printf '%s\n' \

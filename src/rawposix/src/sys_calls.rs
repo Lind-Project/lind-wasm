@@ -178,6 +178,10 @@ pub extern "C" fn fork_syscall(
             UNUSED_ARG,
             UNUSED_ID,
         );
+
+        // Record the child in 3i's fork tree, so the parent and the cages that
+        // may reference the parent may also reference the child.
+        threei::policy::on_fork(parent_cageid, child_cageid);
     }
 
     // Delegate execution back to binary runtime (currently only support Wasmtime,
@@ -277,6 +281,10 @@ pub extern "C" fn exec_syscall(
     if ret == 0 {
         // Empty fd with flag should_cloexec
         fdtables::empty_fds_for_exec(cageid);
+
+        // The cage no longer runs its parent's code, so 3i stops letting it
+        // route its own calls to its parent.
+        threei::policy::on_exec(cageid);
 
         // Copy necessary data from current cage
         let selfcage = get_cage(cageid).unwrap();
