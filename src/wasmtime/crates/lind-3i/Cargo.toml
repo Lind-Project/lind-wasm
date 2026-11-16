@@ -24,4 +24,4 @@ lind-perf = { path = "../lind-perf", optional = true }
 default = []
 debug-grate-calls = []
 # Per-layer grate-call timing; perf builds only (see src/lind-perf).
-lind_perf = ["dep:lind-perf"]
+lind_perf = ["dep:lind-perf", "threei/lind_perf"]

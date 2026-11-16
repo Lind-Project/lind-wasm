@@ -1,6 +1,13 @@
 use crate::bench::{SLOTS, current_slot, timing_active};
 use crate::timers::{read_end, read_start};
+use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+thread_local! {
+    /// Open span on this thread: (start time, slot, open?). One slot is enough because only one
+    /// counter is enabled per process.
+    static SPAN: Cell<(u64, u16, bool)> = const { Cell::new((0, 0, false)) };
+}
 
 /// What a counter's totals are measured in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -61,6 +68,40 @@ impl Counter {
         } else {
             None
         }
+    }
+
+    /// Start a span: like `timer()`, but the matching `span_end()` may be in another function
+    /// or crate, as long as it runs on the same thread (grate calls do: 3i → lind-boot → lind-3i
+    /// all run on the calling thread). No-op unless this counter is enabled and timing is on.
+    #[inline(always)]
+    pub fn span_start(&'static self) {
+        if self.enabled.load(Ordering::Relaxed) && timing_active() {
+            let slot = current_slot();
+            let start = read_start();
+            SPAN.with(|s| s.set((start, slot, true)));
+        }
+    }
+
+    /// End the span opened by `span_start()` on this thread and record it. No-op if this
+    /// counter is disabled or no span is open.
+    #[inline(always)]
+    pub fn span_end(&'static self) {
+        if self.enabled.load(Ordering::Relaxed) {
+            let end = read_end();
+            let (start, slot, open) = SPAN.with(|s| s.replace((0, 0, false)));
+            if open {
+                self.add_sample(end.saturating_sub(start), slot);
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn add_sample(&self, elapsed: u64, slot: u16) {
+        self.total.fetch_add(elapsed, Ordering::Relaxed);
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        let s = slot as usize;
+        self.slot_total[s].fetch_add(elapsed, Ordering::Relaxed);
+        self.slot_calls[s].fetch_add(1, Ordering::Relaxed);
     }
 
     /// Add an externally measured total (used for the guest's own timing).
@@ -148,11 +189,6 @@ impl Drop for Scope {
     #[inline(always)]
     fn drop(&mut self) {
         let elapsed = read_end().saturating_sub(self.start);
-        let c = self.counter;
-        c.total.fetch_add(elapsed, Ordering::Relaxed);
-        c.calls.fetch_add(1, Ordering::Relaxed);
-        let s = self.slot as usize;
-        c.slot_total[s].fetch_add(elapsed, Ordering::Relaxed);
-        c.slot_calls[s].fetch_add(1, Ordering::Relaxed);
+        self.counter.add_sample(elapsed, self.slot);
     }
 }

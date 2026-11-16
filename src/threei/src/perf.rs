@@ -11,10 +11,9 @@ pub static HANDLER_LOOKUP: Counter = Counter::new("threei::make_syscall::handler
 pub static RAWPOSIX_DISPATCH: Counter = Counter::new("threei::make_syscall::rawposix_dispatch");
 /// Grate branch: registering the call as in flight on the grate (`grate_inflight += 1`, dead check).
 pub static GRATE_INFLIGHT_ENTER: Counter =
-Counter::new("threei::make_syscall::grate_inflight_enter");
+    Counter::new("threei::make_syscall::grate_inflight_enter");
 /// Grate branch: `grate_inflight -= 1` after the grate returns.
-pub static GRATE_INFLIGHT_EXIT: Counter =
-    Counter::new("threei::make_syscall::grate_inflight_exit");
+pub static GRATE_INFLIGHT_EXIT: Counter = Counter::new("threei::make_syscall::grate_inflight_exit");
 /// 3i's own calls (register_handler, copy_data_between_cages, copy_handler_table_to_cage):
 /// call through the THREEI_CAGEID function pointer.
 pub static THREEI_DISPATCH: Counter = Counter::new("threei::make_syscall::threei_dispatch");
@@ -24,8 +23,7 @@ pub static COPY_DATA_BETWEEN_CAGES: Counter = Counter::new("threei::copy_data_be
 /// Whole `_call_grate_func`.
 pub static CALL_GRATE_FUNC: Counter = Counter::new("threei::call_grate_func");
 /// `get_cage_runtime` + `get_runtime_trampoline` inside `_call_grate_func`.
-pub static GRATE_RUNTIME_LOOKUP: Counter =
-Counter::new("threei::call_grate_func::runtime_lookup");
+pub static GRATE_RUNTIME_LOOKUP: Counter = Counter::new("threei::call_grate_func::runtime_lookup");
 
 pub static ALL_COUNTERS: &[&Counter] = &[
     &MAKE_SYSCALL,
@@ -39,3 +37,13 @@ pub static ALL_COUNTERS: &[&Counter] = &[
     &CALL_GRATE_FUNC,
     &GRATE_RUNTIME_LOOKUP,
 ];
+
+/// Span: from 3i calling the grate trampoline (`(trampoline)(…)` in `_call_grate_func`) to lind-3i
+/// about to call the grate's Wasm (`func.call(…)` in `GrateWorker::run`). The way into a grate.
+pub static SPAN_3I_TO_GRATE_WASM: Counter =
+    Counter::new("span::3i_trampoline_call_to_grate_wasm_call");
+/// Span: from the grate's Wasm call returning in lind-3i back to 3i, right after the trampoline
+/// call returns. The way back out of a grate.
+pub static SPAN_GRATE_WASM_TO_3I: Counter = Counter::new("span::grate_wasm_return_to_3i");
+
+pub static SPAN_COUNTERS: &[&Counter] = &[&SPAN_3I_TO_GRATE_WASM, &SPAN_GRATE_WASM_TO_3I];

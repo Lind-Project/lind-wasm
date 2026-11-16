@@ -39,9 +39,9 @@ fn header(title: &str) {
     let title = format!(" {} ", title);
     let pad = LINE_W.saturating_sub(title.len());
     println!(
-        "\n{}{}{}", 
-        "-".repeat(pad / 2), 
-        title, 
+        "\n{}{}{}",
+        "-".repeat(pad / 2),
+        title,
         "-".repeat(pad - pad / 2)
     );
 }
@@ -122,9 +122,9 @@ pub fn print_syscall_table(entry: &Counter, columns: &[(&str, &Counter)], top: u
     let title = " PER SYSCALL (net/call; total = time in the syscall entry) ";
     let pad = line_w.saturating_sub(title.len());
     println!(
-        "\n{}{}{}", 
-        "-".repeat(pad / 2), 
-        title, 
+        "\n{}{}{}",
+        "-".repeat(pad / 2),
+        title,
         "-".repeat(pad - pad / 2)
     );
     print!(
@@ -191,8 +191,8 @@ pub struct Derived {
 pub fn print_derived(rows: &[Derived]) {
     let mut lines = Vec::new();
     for d in rows {
-        let Some(outer) = d.outer.net_avg() else { 
-            continue 
+        let Some(outer) = d.outer.net_avg() else {
+            continue;
         };
         let unit = unit_of(d.outer);
         let mut sum = 0.0;

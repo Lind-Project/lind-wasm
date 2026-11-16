@@ -259,7 +259,8 @@ fn _call_grate_func(
     };
     perf_stop!(_t_lookup);
 
-    (trampoline)(
+    perf_span_start!(SPAN_3I_TO_GRATE_WASM);
+    let rc = (trampoline)(
         in_grate_fn_ptr_u64,
         grateid,
         arg1,
@@ -274,7 +275,9 @@ fn _call_grate_func(
         arg5_cageid,
         arg6,
         arg6_cageid,
-    )
+    );
+    perf_span_end!(SPAN_GRATE_WASM_TO_3I);
+    rc
 }
 
 /// EXITING_TABLE:

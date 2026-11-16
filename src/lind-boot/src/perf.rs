@@ -40,6 +40,7 @@ fn all_counters() -> Vec<&'static Counter> {
         rp::ALL_COUNTERS,
         LIND_BOOT_COUNTERS,
         l3i::ALL_COUNTERS,
+        ti::SPAN_COUNTERS,
     ]
     .iter()
     .flat_map(|group| group.iter().copied())
@@ -63,7 +64,11 @@ static DERIVED: &[Derived] = &[
     Derived {
         label: "3i: make_syscall own work, direct path",
         outer: &ti::MAKE_SYSCALL,
-        inner: &[&ti::DEAD_CAGE_CHECK, &ti::HANDLER_LOOKUP, &ti::RAWPOSIX_DISPATCH],
+        inner: &[
+            &ti::DEAD_CAGE_CHECK,
+            &ti::HANDLER_LOOKUP,
+            &ti::RAWPOSIX_DISPATCH,
+        ],
     },
     Derived {
         label: "3i -> RawPOSIX dispatch hop (excl. handler), libc",
@@ -107,9 +112,9 @@ static DERIVED: &[Derived] = &[
         inner: &[&l3i::WORKER_ACQUIRE, &l3i::WORKER_RUN, &l3i::WORKER_RELEASE],
     },
     Derived {
-        label: "lind-3i: worker run excl. Wasm call (stack reset etc.)",
+        label: "lind-3i: worker run excl. stack reset and Wasm call",
         outer: &l3i::WORKER_RUN,
-        inner: &[&l3i::PASS_FPTR_CALL],
+        inner: &[&l3i::WORKER_RESET_STACK, &l3i::PASS_FPTR_CALL],
     },
 ];
 
@@ -187,7 +192,10 @@ pub fn child_finish(child: Option<PerfChild>) {
             text.push_str(&format!("s {} {} {}\n", slot, total, calls));
         }
         if let Err(e) = c.out.write_all(text.as_bytes()) {
-            eprintln!("[lind-perf] failed to write result for {}: {}", c.counter.name, e);
+            eprintln!(
+                "[lind-perf] failed to write result for {}: {}",
+                c.counter.name, e
+            );
         }
     }
 }
@@ -232,7 +240,12 @@ pub fn run_parent(cli: &CliOptions, timer: PerfTimer) -> i32 {
     let filters: Vec<&str> = cli
         .perf_filter
         .as_deref()
-        .map(|f| f.split(',').map(str::trim).filter(|s| !s.is_empty()).collect())
+        .map(|f| {
+            f.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
     let selected: Vec<&'static Counter> = all_counters()
         .into_iter()
@@ -319,7 +332,11 @@ pub fn run_parent(cli: &CliOptions, timer: PerfTimer) -> i32 {
                 lo,
                 hi,
                 lo,
-                if kind == TimerKind::Rdtsc { "cycles" } else { "ns" }
+                if kind == TimerKind::Rdtsc {
+                    "cycles"
+                } else {
+                    "ns"
+                }
             );
         }
         for c in &timed {

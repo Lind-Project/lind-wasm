@@ -147,8 +147,11 @@ startup syscalls, `printf`, `exit` and so on are never counted.
 | `lind_3i::submit` | `GrateHandler::submit` | whole submit |
 | `lind_3i::worker_acquire` | `submit_serialized/parallel` | serial gate (serialized mode) + `take_worker_blocking` |
 | `lind_3i::worker_run` | `GrateWorker::run` | stack reset + Wasm call |
-| `lind_3i::worker_run::pass_fptr_to_wt_call` | `GrateWorker::run` | typed `pass_fptr_to_wt` call: enter grate Wasm, dispatch, handler, return |
+| `lind_3i::worker_run::reset_stack` | `GrateWorker::run` | `reset_worker_stack()`: the instance's stack pointer set to the top of its slot |
+| `lind_3i::worker_run::pass_fptr_to_wt_call` | `GrateWorker::run` | just `func.call(…)`, the typed `pass_fptr_to_wt` call: enter grate Wasm, dispatch, handler, return |
 | `lind_3i::worker_release` | `WorkerLease` drop | `return_worker` |
+| `span::3i_trampoline_call_to_grate_wasm_call` | span: 3i `_call_grate_func` → lind-3i `GrateWorker::run` | from 3i calling the grate trampoline (`(trampoline)(…)`) to lind-3i about to call the grate's Wasm (`func.call(…)`): the way into a grate |
+| `span::grate_wasm_return_to_3i` | span: lind-3i `GrateWorker::run` → 3i `_call_grate_func` | from the grate's Wasm call returning to 3i getting the trampoline's result: the way back out |
 
 The report skips counters with no calls (e.g. grate counters in a direct run).
 
@@ -167,6 +170,12 @@ Printed after the table when all their counters were measured, as outer avg minu
 Caveats: each counter comes from a separate run, so differences include run-to-run noise
 (small negative values mean "within noise of zero"); with `tsc`, lines mixing
 `guest::per_call` (ns) with cycle counters are skipped.
+
+**Spans** time an interval that starts in one function or crate and ends in another, on
+the same thread: `perf_span_start!(COUNTER)` at the start and `perf_span_end!(COUNTER)` at the
+end (the counter is defined once, e.g. in threei, and re-exported by the other crate's `perf`
+module). Grate calls run on the calling thread from 3i down to the grate's Wasm, so spans across
+3i, lind-boot and lind-3i are safe. One span is open per thread at a time.
 
 ## Adding a timer
 

@@ -97,6 +97,30 @@ macro_rules! perf_stop {
 macro_rules! perf_stop {
     ($guard:ident) => {};
 }
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_span_start {
+    ($counter:ident) => {
+        crate::perf::$counter.span_start();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_span_start {
+    ($counter:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {
+        crate::perf::$counter.span_end();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {};
+}
 
 #[cfg(feature = "lind_perf")]
 pub mod perf;
@@ -651,41 +675,44 @@ impl<T: 'static> GrateWorker<T> {
             );
         }
 
+        perf_timer!(_t_reset = WORKER_RESET_STACK);
         self.reset_worker_stack();
+        perf_stop!(_t_reset);
 
         let func = self.pass_fptr_func.as_ref().ok_or_else(|| {
             anyhow::anyhow!("no pass_fptr_func found in worker {}", self.worker_id)
         })?;
 
+        perf_span_end!(SPAN_3I_TO_GRATE_WASM);
         perf_timer!(_t_call = PASS_FPTR_CALL);
-        let ret = func
-            .call(
-                &mut self.store,
-                (
-                    req.handler_addr,
-                    req.cageid,
-                    req.arg1,
-                    req.arg1cageid,
-                    req.arg2,
-                    req.arg2cageid,
-                    req.arg3,
-                    req.arg3cageid,
-                    req.arg4,
-                    req.arg4cageid,
-                    req.arg5,
-                    req.arg5cageid,
-                    req.arg6,
-                    req.arg6cageid,
-                ),
-            )
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "pass_fptr_to_wt trapped in worker {}: {:#}",
-                    self.worker_id,
-                    e
-                )
-            })?;
+        let res = func.call(
+            &mut self.store,
+            (
+                req.handler_addr,
+                req.cageid,
+                req.arg1,
+                req.arg1cageid,
+                req.arg2,
+                req.arg2cageid,
+                req.arg3,
+                req.arg3cageid,
+                req.arg4,
+                req.arg4cageid,
+                req.arg5,
+                req.arg5cageid,
+                req.arg6,
+                req.arg6cageid,
+            ),
+        );
         perf_stop!(_t_call);
+        perf_span_start!(SPAN_GRATE_WASM_TO_3I);
+        let ret = res.map_err(|e| {
+            anyhow::anyhow!(
+                "pass_fptr_to_wt trapped in worker {}: {:#}",
+                self.worker_id,
+                e
+            )
+        })?;
 
         #[cfg(feature = "debug-grate-calls")]
         println!(
