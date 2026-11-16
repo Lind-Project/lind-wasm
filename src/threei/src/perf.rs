@@ -11,7 +11,7 @@ pub static HANDLER_LOOKUP: Counter = Counter::new("threei::make_syscall::handler
 pub static RAWPOSIX_DISPATCH: Counter = Counter::new("threei::make_syscall::rawposix_dispatch");
 /// Grate branch: registering the call as in flight on the grate (`grate_inflight += 1`, dead check).
 pub static GRATE_INFLIGHT_ENTER: Counter =
-    Counter::new("threei::make_syscall::grate_inflight_enter");
+Counter::new("threei::make_syscall::grate_inflight_enter");
 /// Grate branch: `grate_inflight -= 1` after the grate returns.
 pub static GRATE_INFLIGHT_EXIT: Counter =
     Counter::new("threei::make_syscall::grate_inflight_exit");
@@ -25,7 +25,7 @@ pub static COPY_DATA_BETWEEN_CAGES: Counter = Counter::new("threei::copy_data_be
 pub static CALL_GRATE_FUNC: Counter = Counter::new("threei::call_grate_func");
 /// `get_cage_runtime` + `get_runtime_trampoline` inside `_call_grate_func`.
 pub static GRATE_RUNTIME_LOOKUP: Counter =
-    Counter::new("threei::call_grate_func::runtime_lookup");
+Counter::new("threei::call_grate_func::runtime_lookup");
 
 pub static ALL_COUNTERS: &[&Counter] = &[
     &MAKE_SYSCALL,

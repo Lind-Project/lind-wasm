@@ -38,7 +38,12 @@ fn layer(name: &str) -> &str {
 fn header(title: &str) {
     let title = format!(" {} ", title);
     let pad = LINE_W.saturating_sub(title.len());
-    println!("\n{}{}{}", "-".repeat(pad / 2), title, "-".repeat(pad - pad / 2));
+    println!(
+        "\n{}{}{}", 
+        "-".repeat(pad / 2), 
+        title, 
+        "-".repeat(pad - pad / 2)
+    );
 }
 
 /// Print every counter that recorded something, grouped by layer (the name prefix before
@@ -116,7 +121,12 @@ pub fn print_syscall_table(entry: &Counter, columns: &[(&str, &Counter)], top: u
 
     let title = " PER SYSCALL (net/call; total = time in the syscall entry) ";
     let pad = line_w.saturating_sub(title.len());
-    println!("\n{}{}{}", "-".repeat(pad / 2), title, "-".repeat(pad - pad / 2));
+    println!(
+        "\n{}{}{}", 
+        "-".repeat(pad / 2), 
+        title, 
+        "-".repeat(pad - pad / 2)
+    );
     print!(
         "{:<SYS_W$} {:<ORIG_W$} {:>CALLS_W$} {:>COL_W$} {:>6} {:>COL_W$}",
         "syscall", "origin", "calls", "total", "share", "entry"
@@ -181,7 +191,9 @@ pub struct Derived {
 pub fn print_derived(rows: &[Derived]) {
     let mut lines = Vec::new();
     for d in rows {
-        let Some(outer) = d.outer.net_avg() else { continue };
+        let Some(outer) = d.outer.net_avg() else { 
+            continue 
+        };
         let unit = unit_of(d.outer);
         let mut sum = 0.0;
         let mut ok = true;
