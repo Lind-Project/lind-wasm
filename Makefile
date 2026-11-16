@@ -68,6 +68,17 @@ lind-boot: build-dir
 	    --no-default-features --features "$(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL) $(LIND_BOOT_EXTRA_FEATURES)"
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
+# lind-boot with per-layer syscall timing (`--perf`), see src/lind-perf/README.md.
+# Separate binary and target dir, so the normal build/lind-boot (which contains no perf
+# code) is never replaced and both stay cached.
+LINDBOOT_PERF_BIN ?= $(BUILD_DIR)/lind-boot-perf
+.PHONY: lind-boot-perf
+lind-boot-perf: build-dir
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
+	    --target-dir src/lind-boot/target-perf \
+	    --no-default-features --features "$(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL) $(LIND_BOOT_EXTRA_FEATURES) lind_perf"
+	cp src/lind-boot/target-perf/release/lind-boot $(LINDBOOT_PERF_BIN)
+
 .PHONY: lindfs
 lindfs:
 	@for d in $(LINDFS_DIRS); do \

@@ -1,0 +1,158 @@
+use crate::bench::{SLOTS, current_slot, timing_active};
+use crate::timers::{read_end, read_start};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+/// What a counter's totals are measured in.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Unit {
+    /// Measured by host timers: nanoseconds or cycles, depending on the selected `TimerKind`.
+    Timer,
+    /// Always nanoseconds, reported from outside (e.g. the guest's own loop timing).
+    Nanos,
+}
+
+/// One measured location. Declared as a `static` in the crate that owns the location.
+///
+/// Besides overall totals it keeps totals per *slot* (syscall number x origin, see
+/// `bench.rs`), so a report can break every location down by syscall.
+pub struct Counter {
+    /// Globally unique name, `<layer>::<what>`. The layer prefix groups the report.
+    pub name: &'static str,
+    pub unit: Unit,
+    total: AtomicU64,
+    calls: AtomicU64,
+    /// Timer overhead per measurement in the run that produced the totals (0 for `Nanos`).
+    overhead: AtomicU64,
+    /// Only one counter is enabled per process, so timers don't measure each other.
+    enabled: AtomicBool,
+    slot_total: [AtomicU64; SLOTS],
+    slot_calls: [AtomicU64; SLOTS],
+}
+
+impl Counter {
+    pub const fn new(name: &'static str) -> Self {
+        Self::with_unit(name, Unit::Timer)
+    }
+
+    pub const fn with_unit(name: &'static str, unit: Unit) -> Self {
+        Self {
+            name,
+            unit,
+            total: AtomicU64::new(0),
+            calls: AtomicU64::new(0),
+            overhead: AtomicU64::new(0),
+            enabled: AtomicBool::new(false),
+            slot_total: [const { AtomicU64::new(0) }; SLOTS],
+            slot_calls: [const { AtomicU64::new(0) }; SLOTS],
+        }
+    }
+
+    /// Start timing. Returns `None` (and reads no clock) unless this counter is the enabled
+    /// one *and* the thread is servicing a syscall that is being timed. Timing stops when the
+    /// returned guard is dropped; the time is credited to the slot current at the start.
+    #[inline(always)]
+    pub fn timer(&'static self) -> Option<Scope> {
+        if self.enabled.load(Ordering::Relaxed) && timing_active() {
+            Some(Scope {
+                counter: self,
+                slot: current_slot(),
+                start: read_start(),
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Add an externally measured total (used for the guest's own timing).
+    pub fn add(&self, total: u64, calls: u64) {
+        if self.enabled.load(Ordering::Relaxed) {
+            self.total.fetch_add(total, Ordering::Relaxed);
+            self.calls.fetch_add(calls, Ordering::Relaxed);
+        }
+    }
+
+    pub fn enable(&self) {
+        self.enabled.store(true, Ordering::Relaxed);
+    }
+
+    pub fn total(&self) -> u64 {
+        self.total.load(Ordering::Relaxed)
+    }
+
+    pub fn calls(&self) -> u64 {
+        self.calls.load(Ordering::Relaxed)
+    }
+
+    pub fn overhead(&self) -> u64 {
+        self.overhead.load(Ordering::Relaxed)
+    }
+
+    /// Overwrite the totals (used by the parent process when collecting child results).
+    pub fn set_result(&self, total: u64, calls: u64, overhead: u64) {
+        self.total.store(total, Ordering::Relaxed);
+        self.calls.store(calls, Ordering::Relaxed);
+        self.overhead.store(overhead, Ordering::Relaxed);
+    }
+
+    /// Raw average per call, or `None` if nothing was recorded.
+    pub fn avg(&self) -> Option<f64> {
+        let calls = self.calls();
+        (calls > 0).then(|| self.total() as f64 / calls as f64)
+    }
+
+    /// Average per call minus the timer's own overhead: the best estimate of the real cost.
+    pub fn net_avg(&self) -> Option<f64> {
+        self.avg().map(|a| a - self.overhead() as f64)
+    }
+
+    // ---- per-slot totals ----
+
+    pub fn slot_total(&self, slot: usize) -> u64 {
+        self.slot_total[slot].load(Ordering::Relaxed)
+    }
+
+    pub fn slot_calls(&self, slot: usize) -> u64 {
+        self.slot_calls[slot].load(Ordering::Relaxed)
+    }
+
+    /// Slots that recorded anything, as `(slot, total, calls)`.
+    pub fn nonzero_slots(&self) -> impl Iterator<Item = (usize, u64, u64)> + '_ {
+        (0..SLOTS).filter_map(move |s| {
+            let calls = self.slot_calls(s);
+            (calls > 0).then(|| (s, self.slot_total(s), calls))
+        })
+    }
+
+    pub fn set_slot(&self, slot: usize, total: u64, calls: u64) {
+        if slot < SLOTS {
+            self.slot_total[slot].store(total, Ordering::Relaxed);
+            self.slot_calls[slot].store(calls, Ordering::Relaxed);
+        }
+    }
+
+    /// Net average per call for one slot.
+    pub fn slot_net_avg(&self, slot: usize) -> Option<f64> {
+        let calls = self.slot_calls(slot);
+        (calls > 0).then(|| self.slot_total(slot) as f64 / calls as f64 - self.overhead() as f64)
+    }
+}
+
+/// Timing guard: records the elapsed time into its counter when dropped.
+pub struct Scope {
+    counter: &'static Counter,
+    slot: u16,
+    start: u64,
+}
+
+impl Drop for Scope {
+    #[inline(always)]
+    fn drop(&mut self) {
+        let elapsed = read_end().saturating_sub(self.start);
+        let c = self.counter;
+        c.total.fetch_add(elapsed, Ordering::Relaxed);
+        c.calls.fetch_add(1, Ordering::Relaxed);
+        let s = self.slot as usize;
+        c.slot_total[s].fetch_add(elapsed, Ordering::Relaxed);
+        c.slot_calls[s].fetch_add(1, Ordering::Relaxed);
+    }
+}

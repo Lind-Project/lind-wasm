@@ -218,6 +218,7 @@ pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<
     );
 
     // Look up the handler for this grate id
+    perf_timer!(_t_lookup = GRATE_HANDLER_LOOKUP);
     let handler = match get_grate_handler(grate_id) {
         Ok(handler) => {
             #[cfg(feature = "debug-grate-calls")]
@@ -228,6 +229,7 @@ pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<
             panic!("[lind-boot] get_grate_handler failed: {:?}", e);
         }
     };
+    perf_stop!(_t_lookup);
 
     // Submit the request into the handler's worker pool and return the result
     handler.submit(req)

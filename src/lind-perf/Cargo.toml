@@ -1,0 +1,8 @@
+[package]
+name = "lind-perf"
+version = "0.1.0"
+edition = "2024"
+description = "Per-layer syscall timing for lind-wasm. Only compiled into perf builds (`lind_perf` feature)."
+
+[dependencies]
+libc = "0.2"

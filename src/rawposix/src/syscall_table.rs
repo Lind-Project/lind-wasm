@@ -3,6 +3,8 @@
 //! https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
 //! https://filippo.io/linux-syscall-table/
 //! Keep these in sync with glibc's lind_syscall_num.h
+#[cfg(feature = "lind_perf")]
+use super::bench_calls;
 use super::fs_calls::{
     access_syscall, brk_syscall, chdir_syscall, chmod_syscall, chown_syscall,
     clock_gettime_syscall, close_syscall, copy_file_range_syscall, dup2_syscall, dup3_syscall,
@@ -36,6 +38,11 @@ use super::sys_calls::{
 use sysdefs::constants::syscall_const;
 
 pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
+    // Benchmark-only syscalls, present in perf builds only (see bench_calls.rs).
+    #[cfg(feature = "lind_perf")]
+    (bench_calls::LIBC_SYSCALL, bench_calls::libc_syscall),
+    #[cfg(feature = "lind_perf")]
+    (bench_calls::FDTABLES_SYSCALL, bench_calls::fdtables_syscall),
     (syscall_const::READ_SYSCALL as u64, read_syscall),
     (syscall_const::WRITE_SYSCALL as u64, write_syscall),
     (syscall_const::OPEN_SYSCALL as u64, open_syscall),

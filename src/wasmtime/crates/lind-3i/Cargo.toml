@@ -18,7 +18,10 @@ anyhow = { version = "1.0.22", default-features = false }
 threei = { path = "../threei" }
 lazy_static = "1.4"
 dashmap = { version = "6" }
+lind-perf = { path = "../lind-perf", optional = true }
 
 [features]
 default = []
 debug-grate-calls = []
+# Per-layer grate-call timing; perf builds only (see src/lind-perf).
+lind_perf = ["dep:lind-perf"]

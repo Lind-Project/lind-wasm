@@ -240,6 +240,8 @@ fn _call_grate_func(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
+    perf_timer!(_t_call = CALL_GRATE_FUNC);
+    perf_timer!(_t_lookup = GRATE_RUNTIME_LOOKUP);
     let runtimeid = match get_cage_runtime(grateid) {
         Some(r) => r,
         None => panic!(
@@ -255,6 +257,7 @@ fn _call_grate_func(
             runtimeid
         ),
     };
+    perf_stop!(_t_lookup);
 
     (trampoline)(
         in_grate_fn_ptr_u64,
@@ -455,6 +458,9 @@ pub fn make_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
+    perf_timer!(_t_make = MAKE_SYSCALL);
+
+    perf_timer!(_t_dead = DEAD_CAGE_CHECK);
     // Block cross-cage calls to a dead or removed cage (e.g. grate-forwarded
     // syscalls).  The cage's own threads are allowed to keep making
     // syscalls until the epoch kill fires — without the self != target
@@ -469,17 +475,20 @@ pub fn make_syscall(
     {
         return -(Errno::ESRCH as i64);
     }
+    perf_stop!(_t_dead);
 
     // TODO:
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
-    if let Some((grateid, in_grate_fn_ptr_u64)) =
-        _get_handler(self_cageid, syscall_num, target_cageid)
-    {
+    perf_timer!(_t_lookup = HANDLER_LOOKUP);
+    let handler = _get_handler(self_cageid, syscall_num, target_cageid);
+    perf_stop!(_t_lookup);
+    if let Some((grateid, in_grate_fn_ptr_u64)) = handler {
         // RawPOSIX special case: directly call the function pointer
         if grateid == lind_platform_const::RAWPOSIX_CAGEID
             || grateid == lind_platform_const::WASMTIME_CAGEID
         {
+            perf_timer!(_t_dispatch = RAWPOSIX_DISPATCH);
             // Second check: catch in-flight grate-forwarded calls that
             // passed the initial check before is_dead was set or the cage
             // was removed.
@@ -511,6 +520,7 @@ pub fn make_syscall(
         // Threei special case: if the call is an interposed 3i call,
         // directly call the function pointer
         if grateid == lind_platform_const::THREEI_CAGEID {
+            perf_timer!(_t_3i = THREEI_DISPATCH);
             let func: ThreeiCallFunc =
                 unsafe { std::mem::transmute::<u64, ThreeiCallFunc>(in_grate_fn_ptr_u64) };
             return func(
@@ -539,6 +549,7 @@ pub fn make_syscall(
         // for it to complete before removing the cage.
         //
         // If the cage is already dead, return early.
+        perf_timer!(_t_enter = GRATE_INFLIGHT_ENTER);
         let cage_dead = with_cage(grateid, |grate| {
             grate
                 .grate_inflight
@@ -555,6 +566,7 @@ pub fn make_syscall(
         if cage_dead != Some(0) {
             return -(Errno::ESRCH as i64);
         }
+        perf_stop!(_t_enter);
 
         let grate_result = _call_grate_func(
             grateid,
@@ -574,11 +586,13 @@ pub fn make_syscall(
         );
 
         // Decrement the in-flight counter now that the dispatch returned.
+        perf_timer!(_t_exit = GRATE_INFLIGHT_EXIT);
         with_cage(grateid, |grate| {
             grate
                 .grate_inflight
                 .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
         });
+        perf_stop!(_t_exit);
 
         return grate_result;
     }
@@ -907,6 +921,7 @@ pub fn copy_data_between_cages(
     _arg6: u64,
     _arg6cage: u64,
 ) -> u64 {
+    perf_timer!(_t = COPY_DATA_BETWEEN_CAGES);
     // Disallow same-cage copies. This API is for cross-cage transfer only.
     if srccage == destcage {
         lind_log!(
