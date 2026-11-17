@@ -93,6 +93,80 @@ void   gsl_eigen_symm_free(void *w);
 int    gsl_linalg_QR_decomp(void *A, void *tau);
 int    gsl_linalg_QR_solve(const void *QR, const void *tau, const void *b, void *x);
 
+static double dabs(double v) { return v < 0 ? -v : v; }
+
+
+/* Stage F: wavelet transforms (no callbacks). Type pointer + workspace handle + in-place array. */
+extern void *gsl_wavelet_daubechies;
+void *gsl_wavelet_alloc(void *T, size_t k);
+void  gsl_wavelet_free(void *w);
+void *gsl_wavelet_workspace_alloc(size_t n);
+void  gsl_wavelet_workspace_free(void *w);
+int gsl_wavelet_transform_forward(void *w, double *data, size_t stride, size_t n, void *work);
+int gsl_wavelet_transform_inverse(void *w, double *data, size_t stride, size_t n, void *work);
+/* Stage H: 2-D wavelet (reuses the wavelet/workspace handles + the gsl_matrix handle). */
+extern void *gsl_wavelet_haar;
+int gsl_wavelet2d_transform_forward(void *w, double *data, size_t tda, size_t size1, size_t size2, void *work);
+int gsl_wavelet2d_transform_inverse(void *w, double *data, size_t tda, size_t size1, size_t size2, void *work);
+int gsl_wavelet2d_transform_matrix_forward(void *w, void *a, void *work);
+int gsl_wavelet2d_transform_matrix_inverse(void *w, void *a, void *work);
+/* Stage I: quasi-random sequences. */
+extern void *gsl_qrng_sobol;
+void *gsl_qrng_alloc(void *T, unsigned int d);
+void  gsl_qrng_free(void *q);
+int   gsl_qrng_get(void *q, double x[]);
+/* Stage G: running statistics (single workspace handle). */
+void  *gsl_rstat_alloc(void);
+void   gsl_rstat_free(void *w);
+size_t gsl_rstat_n(void *w);
+int    gsl_rstat_add(double x, void *w);
+double gsl_rstat_mean(void *w);
+double gsl_rstat_variance(void *w);
+double gsl_rstat_sd(void *w);
+double gsl_rstat_min(void *w);
+double gsl_rstat_max(void *w);
+
+/* Stage C: FFT. Radix-2 transforms are in-place over the caller's array; mixed-radix adds a
+ * wavetable + workspace handle for arbitrary n. gsl_complex_packed_array = 2n interleaved doubles. */
+int gsl_fft_complex_radix2_forward(double *data, size_t stride, size_t n);
+int gsl_fft_complex_radix2_inverse(double *data, size_t stride, size_t n);
+int gsl_fft_real_radix2_transform(double *data, size_t stride, size_t n);
+int gsl_fft_halfcomplex_radix2_inverse(double *data, size_t stride, size_t n);
+void *gsl_fft_complex_wavetable_alloc(size_t n);
+void  gsl_fft_complex_wavetable_free(void *w);
+void *gsl_fft_complex_workspace_alloc(size_t n);
+void  gsl_fft_complex_workspace_free(void *w);
+int gsl_fft_complex_forward(double *data, size_t stride, size_t n, void *wavetable, void *work);
+int gsl_fft_complex_inverse(double *data, size_t stride, size_t n, void *wavetable, void *work);
+/* Stage C2: real/halfcomplex mixed-radix (arbitrary n) — own wavetables + shared workspace. */
+void *gsl_fft_real_wavetable_alloc(size_t n);
+void  gsl_fft_real_wavetable_free(void *w);
+void *gsl_fft_halfcomplex_wavetable_alloc(size_t n);
+void  gsl_fft_halfcomplex_wavetable_free(void *w);
+void *gsl_fft_real_workspace_alloc(size_t n);
+void  gsl_fft_real_workspace_free(void *w);
+int gsl_fft_real_transform(double *data, size_t stride, size_t n, void *wt, void *work);
+int gsl_fft_halfcomplex_inverse(double *data, size_t stride, size_t n, void *wt, void *work);
+int gsl_fft_real_unpack(const double *rc, double *cc, size_t stride, size_t n);
+
+/* Stage D: BLAS over the sandboxed gsl_vector/gsl_matrix handles. CBLAS enums are plain ints. */
+#define CblasNoTrans 111
+int    gsl_blas_ddot(void *X, void *Y, double *result);
+double gsl_blas_dnrm2(void *X);
+int    gsl_blas_dgemv(int TransA, double alpha, void *A, void *X, double beta, void *Y);
+int    gsl_blas_dgemm(int TransA, int TransB, double alpha, void *A, void *B, double beta, void *C);
+/* Stage D2: single-precision BLAS over gsl_vector_float / gsl_matrix_float handles. */
+void  *gsl_vector_float_alloc(size_t n);
+void   gsl_vector_float_set(void *v, size_t i, float x);
+float  gsl_vector_float_get(const void *v, size_t i);
+void   gsl_vector_float_free(void *v);
+void  *gsl_matrix_float_alloc(size_t n1, size_t n2);
+void   gsl_matrix_float_set(void *m, size_t i, size_t j, float x);
+void   gsl_matrix_float_free(void *m);
+int    gsl_blas_sdot(void *X, void *Y, float *result);
+float  gsl_blas_snrm2(void *X);
+int    gsl_blas_sgemv(int TransA, float alpha, void *A, void *X, float beta, void *Y);
+
 int main(void) {
     double x0, x1, x2;
 
@@ -249,6 +323,174 @@ int main(void) {
     printf("gsl_spline cspline: eval(1.5)=%g deriv=%g integ[0,4]=%g eval_e(2.5)=%g -> %s\n",
            sv, sd, si, se, ok ? "OK" : "FAIL");
     gsl_spline_free(spl); gsl_interp_accel_free(acc);
+
+    
+    
+    
+    /* Stage C FFT (a) complex radix-2, n=8: a constant signal transforms to a single DC spike
+     * (bin 0 = n, rest 0); and forward+inverse round-trips to the original (GSL inverse is
+     * normalized). The transform runs IN PLACE on the caller's array via Arg::InOut. */
+    double cd[16];
+    for (size_t k = 0; k < 8; k++) { cd[2 * k] = 1.0; cd[2 * k + 1] = 0.0; }
+    gsl_fft_complex_radix2_forward(cd, 1, 8);
+    int dcok = dabs(cd[0] - 8.0) < 1e-9 && dabs(cd[1]) < 1e-9 && dabs(cd[2]) < 1e-9 && dabs(cd[4]) < 1e-9;
+    double corig[16], crt[16];
+    for (size_t k = 0; k < 16; k++) { corig[k] = (double)((k * 7) % 13) - 6.0; crt[k] = corig[k]; }
+    gsl_fft_complex_radix2_forward(crt, 1, 8);
+    gsl_fft_complex_radix2_inverse(crt, 1, 8);
+    int crok = 1;
+    for (size_t k = 0; k < 16; k++) if (dabs(crt[k] - corig[k]) > 1e-9) crok = 0;
+    printf("gsl_fft complex radix2: DC=%g (expect 8) roundtrip=%s -> %s\n",
+           cd[0], crok ? "ok" : "fail", (dcok && crok) ? "OK" : "FAIL");
+
+    /* (b) real radix-2, n=8: forward then halfcomplex inverse round-trips to the original. */
+    double rd[8], rorig[8];
+    for (size_t k = 0; k < 8; k++) { rorig[k] = (double)((k * 3) % 5); rd[k] = rorig[k]; }
+    gsl_fft_real_radix2_transform(rd, 1, 8);
+    gsl_fft_halfcomplex_radix2_inverse(rd, 1, 8);
+    int reok = 1;
+    for (size_t k = 0; k < 8; k++) if (dabs(rd[k] - rorig[k]) > 1e-9) reok = 0;
+    printf("gsl_fft real radix2 roundtrip (n=8) -> %s\n", reok ? "OK" : "FAIL");
+
+    /* (c) mixed-radix complex, n=6 (not a power of two): needs a wavetable + workspace handle.
+     * forward then inverse round-trips to the original. */
+    void *wt = gsl_fft_complex_wavetable_alloc(6);
+    void *ws = gsl_fft_complex_workspace_alloc(6);
+    double md[12], morig[12];
+    for (size_t k = 0; k < 12; k++) { morig[k] = (double)((k * 5) % 7) - 3.0; md[k] = morig[k]; }
+    gsl_fft_complex_forward(md, 1, 6, wt, ws);
+    gsl_fft_complex_inverse(md, 1, 6, wt, ws);
+    int mrok = 1;
+    for (size_t k = 0; k < 12; k++) if (dabs(md[k] - morig[k]) > 1e-9) mrok = 0;
+    gsl_fft_complex_workspace_free(ws);
+    gsl_fft_complex_wavetable_free(wt);
+    printf("gsl_fft complex mixed-radix (n=6) roundtrip -> %s\n", mrok ? "OK" : "FAIL");
+
+    /* Stage C2 real mixed-radix, n=6 (not a power of two): own wavetables + a shared real
+     * workspace. (a) all-ones -> DC coefficient = n; (b) unpack the packed coefficients to a full
+     * complex array -> complex DC = n, imag 0; (c) forward (real) + inverse (halfcomplex)
+     * round-trips to the original. */
+    void *rwt = gsl_fft_real_wavetable_alloc(6);
+    void *hcwt = gsl_fft_halfcomplex_wavetable_alloc(6);
+    void *rws = gsl_fft_real_workspace_alloc(6);
+    double ad[6];
+    for (size_t k = 0; k < 6; k++) ad[k] = 1.0;
+    gsl_fft_real_transform(ad, 1, 6, rwt, rws);          /* DC (ad[0]) = 6 */
+    double cc[12];
+    gsl_fft_real_unpack(ad, cc, 1, 6);                   /* complex DC: cc[0]=6, cc[1]=0 */
+    double rsig[6], rsig0[6];
+    for (size_t k = 0; k < 6; k++) { rsig0[k] = (double)((k * 5) % 7) - 3.0; rsig[k] = rsig0[k]; }
+    gsl_fft_real_transform(rsig, 1, 6, rwt, rws);
+    gsl_fft_halfcomplex_inverse(rsig, 1, 6, hcwt, rws);
+    int rmr = 1;
+    for (size_t k = 0; k < 6; k++) if (dabs(rsig[k] - rsig0[k]) > 1e-9) rmr = 0;
+    gsl_fft_real_workspace_free(rws); gsl_fft_halfcomplex_wavetable_free(hcwt); gsl_fft_real_wavetable_free(rwt);
+    printf("gsl_fft real mixed-radix (n=6): DC=%g (6) unpack_DC=%g (6) roundtrip=%s -> %s\n",
+           ad[0], cc[0],
+           rmr ? "ok" : "fail",
+           (dabs(ad[0] - 6.0) < 1e-9 && dabs(cc[0] - 6.0) < 1e-9 && dabs(cc[1]) < 1e-9 && rmr) ? "OK" : "FAIL");
+
+    /* Stage D BLAS: dense linear algebra over the SAME sandboxed vector/matrix handles. ddot,
+     * dnrm2 (level 1), dgemv (level 2), dgemm (level 3) — each self-checked against a hand value. */
+    void *bx = gsl_vector_alloc(3); gsl_vector_set(bx, 0, 1); gsl_vector_set(bx, 1, 2); gsl_vector_set(bx, 2, 3);
+    void *by = gsl_vector_alloc(3); gsl_vector_set(by, 0, 4); gsl_vector_set(by, 1, 5); gsl_vector_set(by, 2, 6);
+    double dot = 0; gsl_blas_ddot(bx, by, &dot);          /* 1*4+2*5+3*6 = 32 */
+    double nrm = gsl_blas_dnrm2(bx);                      /* sqrt(14) = 3.7416574 */
+    void *bA = gsl_matrix_alloc(2, 2);
+    gsl_matrix_set(bA, 0, 0, 1); gsl_matrix_set(bA, 0, 1, 2); gsl_matrix_set(bA, 1, 0, 3); gsl_matrix_set(bA, 1, 1, 4);
+    void *vx = gsl_vector_alloc(2); gsl_vector_set(vx, 0, 1); gsl_vector_set(vx, 1, 1);
+    void *vy = gsl_vector_alloc(2);
+    gsl_blas_dgemv(CblasNoTrans, 1.0, bA, vx, 0.0, vy);   /* A*[1,1] = [3,7] */
+    void *bB = gsl_matrix_alloc(2, 2);
+    gsl_matrix_set(bB, 0, 0, 1); gsl_matrix_set(bB, 0, 1, 0); gsl_matrix_set(bB, 1, 0, 0); gsl_matrix_set(bB, 1, 1, 1);
+    void *bC = gsl_matrix_alloc(2, 2);
+    gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, bA, bB, 0.0, bC);  /* A*I = A */
+    int blok = dabs(dot - 32.0) < 1e-9 && dabs(nrm - 3.7416573867739413) < 1e-6 &&
+               dabs(gsl_vector_get(vy, 0) - 3.0) < 1e-9 && dabs(gsl_vector_get(vy, 1) - 7.0) < 1e-9 &&
+               dabs(gsl_matrix_get(bC, 0, 0) - 1.0) < 1e-9 && dabs(gsl_matrix_get(bC, 1, 1) - 4.0) < 1e-9;
+    printf("gsl_blas: ddot=%g (32) dnrm2=%g (3.7417) dgemv=[%g,%g] ([3,7]) dgemm C[1,1]=%g (4) -> %s\n",
+           dot, nrm, gsl_vector_get(vy, 0), gsl_vector_get(vy, 1), gsl_matrix_get(bC, 1, 1), blok ? "OK" : "FAIL");
+    gsl_vector_free(bx); gsl_vector_free(by); gsl_vector_free(vx); gsl_vector_free(vy);
+    gsl_matrix_free(bA); gsl_matrix_free(bB); gsl_matrix_free(bC);
+
+    /* Stage D2 single-precision BLAS: the same operations over float handles (classes 8/5). */
+    void *fx = gsl_vector_float_alloc(3); gsl_vector_float_set(fx, 0, 1); gsl_vector_float_set(fx, 1, 2); gsl_vector_float_set(fx, 2, 3);
+    void *fy = gsl_vector_float_alloc(3); gsl_vector_float_set(fy, 0, 4); gsl_vector_float_set(fy, 1, 5); gsl_vector_float_set(fy, 2, 6);
+    float fdot = 0; gsl_blas_sdot(fx, fy, &fdot);     /* 32 */
+    float fnrm = gsl_blas_snrm2(fx);                  /* sqrt(14) = 3.74166 */
+    void *fA = gsl_matrix_float_alloc(2, 2);
+    gsl_matrix_float_set(fA, 0, 0, 1); gsl_matrix_float_set(fA, 0, 1, 2); gsl_matrix_float_set(fA, 1, 0, 3); gsl_matrix_float_set(fA, 1, 1, 4);
+    void *fvx = gsl_vector_float_alloc(2); gsl_vector_float_set(fvx, 0, 1); gsl_vector_float_set(fvx, 1, 1);
+    void *fvy = gsl_vector_float_alloc(2);
+    gsl_blas_sgemv(CblasNoTrans, 1.0f, fA, fvx, 0.0f, fvy);   /* A*[1,1] = [3,7] */
+    int sok = dabs((double)fdot - 32.0) < 1e-3 && dabs((double)fnrm - 3.7416574) < 1e-3 &&
+              dabs((double)gsl_vector_float_get(fvy, 0) - 3.0) < 1e-3 &&
+              dabs((double)gsl_vector_float_get(fvy, 1) - 7.0) < 1e-3;
+    printf("gsl_blas (single): sdot=%g (32) snrm2=%g (3.7417) sgemv=[%g,%g] ([3,7]) -> %s\n",
+           (double)fdot, (double)fnrm, (double)gsl_vector_float_get(fvy, 0), (double)gsl_vector_float_get(fvy, 1), sok ? "OK" : "FAIL");
+    gsl_vector_float_free(fx); gsl_vector_float_free(fy); gsl_vector_float_free(fvx); gsl_vector_float_free(fvy);
+    gsl_matrix_float_free(fA);
+
+    
+    /* Stage F wavelet: a Daubechies-4 forward then inverse transform round-trips to the original
+     * (n=8, a power of two). Type descriptor is opaque; the wavelet and workspace are handles;
+     * the transform runs in place via Arg::InOut. */
+    void *wav = gsl_wavelet_alloc(gsl_wavelet_daubechies, 4);
+    void *wws = gsl_wavelet_workspace_alloc(8);
+    double wd[8], wo2[8];
+    for (size_t k = 0; k < 8; k++) { wo2[k] = (double)((k * 3) % 5) + 1.0; wd[k] = wo2[k]; }
+    gsl_wavelet_transform_forward(wav, wd, 1, 8, wws);
+    gsl_wavelet_transform_inverse(wav, wd, 1, 8, wws);
+    int wok = 1;
+    for (size_t k = 0; k < 8; k++) if (dabs(wd[k] - wo2[k]) > 1e-9) wok = 0;
+    gsl_wavelet_workspace_free(wws); gsl_wavelet_free(wav);
+    printf("gsl_wavelet daubechies-4 (n=8) forward+inverse roundtrip -> %s\n", wok ? "OK" : "FAIL");
+
+    /* Stage H 2-D wavelet: a 4x4 Haar transform, both forms. (a) flat array (in place via
+     * InOut); (b) over a gsl_matrix handle (all handles). Forward+inverse round-trips. */
+    void *w2 = gsl_wavelet_alloc(gsl_wavelet_haar, 2);
+    void *ws2 = gsl_wavelet_workspace_alloc(4);
+    double m2d[16], m2o[16];
+    for (size_t k = 0; k < 16; k++) { m2o[k] = (double)((k * 2) % 7) + 1.0; m2d[k] = m2o[k]; }
+    gsl_wavelet2d_transform_forward(w2, m2d, 4, 4, 4, ws2);
+    gsl_wavelet2d_transform_inverse(w2, m2d, 4, 4, 4, ws2);
+    int w2a = 1;
+    for (size_t k = 0; k < 16; k++) if (dabs(m2d[k] - m2o[k]) > 1e-9) w2a = 0;
+    void *wm = gsl_matrix_alloc(4, 4);
+    for (size_t i = 0; i < 4; i++) for (size_t j = 0; j < 4; j++) gsl_matrix_set(wm, i, j, (double)(i * 4 + j) + 1.0);
+    gsl_wavelet2d_transform_matrix_forward(w2, wm, ws2);
+    gsl_wavelet2d_transform_matrix_inverse(w2, wm, ws2);
+    int w2b = 1;
+    for (size_t i = 0; i < 4; i++) for (size_t j = 0; j < 4; j++)
+        if (dabs(gsl_matrix_get(wm, i, j) - ((double)(i * 4 + j) + 1.0)) > 1e-9) w2b = 0;
+    gsl_matrix_free(wm); gsl_wavelet_workspace_free(ws2); gsl_wavelet_free(w2);
+    printf("gsl_wavelet2d haar 4x4: flat roundtrip=%s matrix roundtrip=%s -> %s\n",
+           w2a ? "ok" : "fail", w2b ? "ok" : "fail", (w2a && w2b) ? "OK" : "FAIL");
+
+    /* Stage G running statistics: stream {1,2,3,4,5} into the workspace and read the running
+     * moments. mean=3, sample variance=2.5, n=5, min=1, max=5 (known values, no GSL internals). */
+    void *rstw = gsl_rstat_alloc();
+    double rdata[5] = {1.0, 2.0, 3.0, 4.0, 5.0};
+    for (size_t k = 0; k < 5; k++) gsl_rstat_add(rdata[k], rstw);
+    double rmean = gsl_rstat_mean(rstw), rvar = gsl_rstat_variance(rstw), rsd = gsl_rstat_sd(rstw);
+    size_t rn = gsl_rstat_n(rstw);
+    int rok = rn == 5 && dabs(rmean - 3.0) < 1e-12 && dabs(rvar - 2.5) < 1e-12 &&
+              dabs(gsl_rstat_min(rstw) - 1.0) < 1e-12 && dabs(gsl_rstat_max(rstw) - 5.0) < 1e-12;
+    gsl_rstat_free(rstw);
+    printf("gsl_rstat: n=%zu mean=%g (3) var=%g (2.5) sd=%g -> %s\n", rn, rmean, rvar, rsd, rok ? "OK" : "FAIL");
+
+    /* Stage I quasi-random: two Sobol generators (d=2) must produce identical sequences; points
+     * land in [0,1); and successive points differ. Checks the sequence, not hardcoded values. */
+    void *q1 = gsl_qrng_alloc(gsl_qrng_sobol, 2);
+    void *q2 = gsl_qrng_alloc(gsl_qrng_sobol, 2);
+    double p1[2], p2[2], p1b[2];
+    gsl_qrng_get(q1, p1); gsl_qrng_get(q2, p2); gsl_qrng_get(q1, p1b);
+    int qok = p1[0] == p2[0] && p1[1] == p2[1] &&
+              p1[0] >= 0.0 && p1[0] < 1.0 && p1[1] >= 0.0 && p1[1] < 1.0 &&
+              (p1b[0] != p1[0] || p1b[1] != p1[1]);
+    gsl_qrng_free(q1); gsl_qrng_free(q2);
+    printf("gsl_qrng sobol d=2: first=(%g,%g) second=(%g,%g) -> %s\n",
+           p1[0], p1[1], p1b[0], p1b[1], qok ? "OK" : "FAIL");
 
     /* opaque handle: alloc -> set -> sort -> get -> free, entirely sandboxed. The vector
      * lives in guest memory; `v` is only ever an opaque token. */

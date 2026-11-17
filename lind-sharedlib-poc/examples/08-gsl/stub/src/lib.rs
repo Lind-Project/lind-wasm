@@ -7,6 +7,7 @@
 // int return. (gsl_poly_eval is INLINE in GSL's headers, so it compiles into the caller and
 // can't be sandboxed — nothing to forward.)
 
+use std::collections::HashMap; // used by the include!-d qrng.rs (per-handle dimension map)
 use std::sync::{Mutex, OnceLock};
 
 use core::ffi::{c_int, c_uint, c_ulong, c_void};
@@ -320,3 +321,11 @@ include!("rng_generated.rs");             // random-number generators (opaque ha
 include!("ran_generated.rs");             // distribution samplers over a rng handle
 include!("interp_accel_generated.rs");    // interpolation accelerator (defines CLASS_INTERP_ACCEL)
 include!("spline_generated.rs");          // cubic/akima/... splines (TYPE pointer + handle + accel)
+include!("fft.rs");                         // Stage C: FFT (in-place InOut transforms + mixed-radix handles)
+include!("fft_real.rs");                    // Stage C2: real/halfcomplex mixed-radix FFT (uses span_doubles from fft.rs)
+include!("blas_generated.rs");             // Stage D: BLAS over the Tier-2 vector/matrix handles
+include!("blas_float_generated.rs");       // Stage D2: single-precision BLAS over the float handles
+include!("wavelet.rs");                     // Stage F: wavelet transforms (type ptr + workspace + InOut)
+include!("rstat.rs");                       // Stage G: running statistics (single workspace handle)
+include!("wavelet2d.rs");                   // Stage H: 2-D wavelet (reuses wavelet + matrix handles)
+include!("qrng.rs");                        // Stage I: quasi-random sequences (type ptr + handle)
