@@ -53,6 +53,19 @@ void   gsl_matrix_int_free(void *m);
  * (gsl_vector_alloc/set/get/free already declared above with the committed handle slice.) */
 int    gsl_linalg_LU_decomp(void *A, void *p, int *signum);
 int    gsl_linalg_LU_solve(const void *LU, const void *p, const void *b, void *x);
+/* Tier-2b rng: the generator is an opaque handle; gsl_rng_mt19937 is a library-owned TYPE
+ * descriptor the app passes opaquely (never dereferenced) — declared void* so no GSL header
+ * is pulled in. gsl_rng returns `unsigned long` (32-bit in the guest, masked on the host). */
+extern void   *gsl_rng_mt19937;
+void          *gsl_rng_alloc(void *T);
+void           gsl_rng_set(void *r, unsigned long seed);
+void           gsl_rng_free(void *r);
+unsigned long  gsl_rng_get(void *r);
+double         gsl_rng_uniform(void *r);
+unsigned long  gsl_rng_uniform_int(void *r, unsigned long n);
+unsigned long  gsl_rng_max(void *r);
+unsigned long  gsl_rng_min(void *r);
+double         gsl_ran_gaussian(void *r, double sigma);
 /* Tier-2 handle (generated): gsl_histogram — single class, arrays + double outputs */
 void  *gsl_histogram_alloc(size_t n);
 int    gsl_histogram_set_ranges_uniform(void *h, double xmin, double xmax);
@@ -181,6 +194,28 @@ int main(void) {
     printf("gsl_linalg_QR_solve -> x0=%g x1=%g   (expect 0.8, 1.4)\n",
            gsl_vector_get(xq, 0), gsl_vector_get(xq, 1));
     gsl_matrix_free(Aq); gsl_vector_free(tau); gsl_vector_free(bq); gsl_vector_free(xq);
+
+    /* Tier-2b rng: the TYPE pointer (gsl_rng_mt19937) is a library-owned descriptor passed
+     * as an opaque index; the generator object itself is an opaque handle living in the guest.
+     * Validate by determinism: two mt19937 seeded alike must produce identical streams, and
+     * gsl_rng_uniform must land in [0,1). No GSL internals are hardcoded. */
+    void *r1 = gsl_rng_alloc(gsl_rng_mt19937);
+    void *r2 = gsl_rng_alloc(gsl_rng_mt19937);
+    gsl_rng_set(r1, 42);
+    gsl_rng_set(r2, 42);
+    unsigned long g1 = gsl_rng_get(r1), g2 = gsl_rng_get(r2);
+    double u1 = gsl_rng_uniform(r1), u2 = gsl_rng_uniform(r2);
+    unsigned long i1 = gsl_rng_uniform_int(r1, 100), i2 = gsl_rng_uniform_int(r2, 100);
+    printf("gsl_rng mt19937: get=%lu uniform=%.6f int[0,100)=%lu   (expect both streams equal, uniform in [0,1))\n",
+           g1, u1, i1);
+    printf("gsl_rng determinism: %s   uniform range: %s\n",
+           (g1 == g2 && u1 == u2 && i1 == i2) ? "OK (identical)" : "FAIL (diverged)",
+           (u1 >= 0.0 && u1 < 1.0) ? "OK" : "FAIL");
+    printf("gsl_rng max=%lu min=%lu\n", gsl_rng_max(r1), gsl_rng_min(r1));
+    /* sampler over the rng handle: a Gaussian draw (just prove it runs & is finite). */
+    double gz = gsl_ran_gaussian(r1, 2.0);
+    printf("gsl_ran_gaussian(sigma=2) -> %g   (finite draw)\n", gz);
+    gsl_rng_free(r1); gsl_rng_free(r2);
 
     /* opaque handle: alloc -> set -> sort -> get -> free, entirely sandboxed. The vector
      * lives in guest memory; `v` is only ever an opaque token. */

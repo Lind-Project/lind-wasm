@@ -9,7 +9,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use core::ffi::{c_int, c_uint, c_void};
+use core::ffi::{c_int, c_uint, c_ulong, c_void};
 
 use lind_boot::{Arg, CliOptions, OutLen, SandboxedLib, init_sandboxed_lib};
 
@@ -316,3 +316,5 @@ include!("eigen_symmv_ws_generated.rs");
 include!("eigen_generated.rs");           // free-function solvers (matrix+vector+workspace)
 include!("multifit_linear_ws_generated.rs");
 include!("multifit_generated.rs");        // linear least-squares (workspace + matrix/vector)
+include!("rng_generated.rs");             // random-number generators (opaque handle + TYPE pointer)
+include!("ran_generated.rs");             // distribution samplers over a rng handle

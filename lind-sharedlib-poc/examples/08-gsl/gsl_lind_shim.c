@@ -81,6 +81,8 @@ void lind_gsl_sort_vector(struct gsl_vector *v) { gsl_sort_vector(v); }
 #include "generated/eigen_shim.inc.c"
 #include "generated/multifit_linear_ws_shim.inc.c"
 #include "generated/multifit_shim.inc.c"
+#include "generated/rng_shim.inc.c"
+#include "generated/ran_shim.inc.c"
 
 // ---------------------------------------------------------------------------
 // Tier-1 tail: hand-written forwarders for the irregular flat functions. Placed AFTER
