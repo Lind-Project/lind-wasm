@@ -318,3 +318,5 @@ include!("multifit_linear_ws_generated.rs");
 include!("multifit_generated.rs");        // linear least-squares (workspace + matrix/vector)
 include!("rng_generated.rs");             // random-number generators (opaque handle + TYPE pointer)
 include!("ran_generated.rs");             // distribution samplers over a rng handle
+include!("interp_accel_generated.rs");    // interpolation accelerator (defines CLASS_INTERP_ACCEL)
+include!("spline_generated.rs");          // cubic/akima/... splines (TYPE pointer + handle + accel)

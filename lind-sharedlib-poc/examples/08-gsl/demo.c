@@ -66,6 +66,19 @@ unsigned long  gsl_rng_uniform_int(void *r, unsigned long n);
 unsigned long  gsl_rng_max(void *r);
 unsigned long  gsl_rng_min(void *r);
 double         gsl_ran_gaussian(void *r, double sigma);
+/* Stage A: interpolation/spline. gsl_interp_cspline is a library-owned TYPE descriptor passed
+ * opaquely (same trick as rng); the spline + accelerator are opaque handles. The accelerator
+ * may be NULL (passes through as a guest NULL). */
+extern void *gsl_interp_cspline;
+void   *gsl_interp_accel_alloc(void);
+void    gsl_interp_accel_free(void *a);
+void   *gsl_spline_alloc(void *T, size_t n);
+int     gsl_spline_init(void *spline, const double xa[], const double ya[], size_t n);
+double  gsl_spline_eval(void *spline, double x, void *acc);
+int     gsl_spline_eval_e(void *spline, double x, void *acc, double *y);
+double  gsl_spline_eval_deriv(void *spline, double x, void *acc);
+double  gsl_spline_eval_integ(void *spline, double a, double b, void *acc);
+void    gsl_spline_free(void *spline);
 /* Tier-2 handle (generated): gsl_histogram — single class, arrays + double outputs */
 void  *gsl_histogram_alloc(size_t n);
 int    gsl_histogram_set_ranges_uniform(void *h, double xmin, double xmax);
@@ -216,6 +229,26 @@ int main(void) {
     double gz = gsl_ran_gaussian(r1, 2.0);
     printf("gsl_ran_gaussian(sigma=2) -> %g   (finite draw)\n", gz);
     gsl_rng_free(r1); gsl_rng_free(r2);
+
+    /* Stage A spline: a natural cubic spline through COLLINEAR data (y = 3x + 2) reproduces the
+     * straight line exactly, so eval/deriv/integ have known analytic values — a self-check that
+     * does not depend on GSL internals. Data lives in the guest's spline object after init. */
+    double sx[5] = {0.0, 1.0, 2.0, 3.0, 4.0};
+    double sy[5] = {2.0, 5.0, 8.0, 11.0, 14.0};   /* 3x + 2 */
+    void *acc = gsl_interp_accel_alloc();
+    void *spl = gsl_spline_alloc(gsl_interp_cspline, 5);
+    gsl_spline_init(spl, sx, sy, 5);
+    double sv = gsl_spline_eval(spl, 1.5, acc);           /* expect 3*1.5+2 = 6.5   */
+    double sd = gsl_spline_eval_deriv(spl, 1.5, acc);     /* expect 3              */
+    double si = gsl_spline_eval_integ(spl, 0.0, 4.0, acc);/* expect 1.5*16 + 2*4 = 32 */
+    double se; int sst = gsl_spline_eval_e(spl, 2.5, NULL, &se);  /* NULL accel; expect 9.5 */
+    int ok = (sv > 6.5 - 1e-6 && sv < 6.5 + 1e-6) &&
+             (sd > 3.0 - 1e-6 && sd < 3.0 + 1e-6) &&
+             (si > 32.0 - 1e-6 && si < 32.0 + 1e-6) &&
+             sst == 0 && (se > 9.5 - 1e-6 && se < 9.5 + 1e-6);
+    printf("gsl_spline cspline: eval(1.5)=%g deriv=%g integ[0,4]=%g eval_e(2.5)=%g -> %s\n",
+           sv, sd, si, se, ok ? "OK" : "FAIL");
+    gsl_spline_free(spl); gsl_interp_accel_free(acc);
 
     /* opaque handle: alloc -> set -> sort -> get -> free, entirely sandboxed. The vector
      * lives in guest memory; `v` is only ever an opaque token. */
