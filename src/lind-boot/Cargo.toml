@@ -21,6 +21,7 @@ fdtables-muthashmax = ["rawposix/fdtables-muthashmax"]
 fdtables-vanilla = ["rawposix/fdtables-vanilla"]
 
 [dependencies]
+lind-runtimes = { path = "../wasmtime/crates/lind-runtimes" }
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
 wasmtime-lind-dylink = { path = "../wasmtime/crates/lind-dylink" }
 wasmtime-lind-multi-process = { path = "../wasmtime/crates/lind-multi-process" }

@@ -6,16 +6,28 @@ At a high level, lind-boot sits at the boundary between the command-line interfa
 
 ## Directory Layout
 
-```csharp
+```text
 src/
 ├── main.rs
 ├── cli.rs
-└── lind-wasmtime/
+├── clone.rs
+├── exec.rs
+├── exit.rs
+├── shims.rs
+├── lind_mpk/
+└── lind_wasmtime/
     ├── mod.rs
     ├── execute.rs
     ├── host.rs
     └── trampoline.rs
 ```
+
+`shims.rs` remains the active clone, exec, and exit dispatch. The new
+`clone.rs`, `exec.rs`, and `exit.rs` modules are reserved for its eventual
+replacement. The draft interface lives in
+[`typemap::lind_if`](../../typemap/src/lind_if.rs); the Wasm and MPK
+implementations are scaffolded in [`lind-runtimes`](../../lind-runtimes).
+They are not connected to the active runtimes and currently return `ENOSYS`.
 
 ## How To Use
 

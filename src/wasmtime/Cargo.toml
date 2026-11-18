@@ -203,6 +203,7 @@ members = [
   "crates/sysdefs",
   "crates/typemap",
   "crates/cage",
+  "crates/lind-runtimes",
   "crates/lind-3i",
 ]
 exclude = [
@@ -315,6 +316,7 @@ wasmtime-lind-multi-process = { path = "crates/lind-multi-process" }
 wasmtime-lind-common = { path = "crates/lind-common" }
 wasmtime-lind-dylink = { path = "crates/lind-dylink" }
 wasmtime-lind-utils = { path = "crates/lind-utils" }
+lind-runtimes = { path = "crates/lind-runtimes" }
 threei = { path = "crates/threei" }
 rawposix = { path = "crates/rawposix" }
 typemap = { path = "crates/typemap", default-features = false }

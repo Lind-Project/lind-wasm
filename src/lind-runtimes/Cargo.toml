@@ -1,0 +1,7 @@
+[package]
+name = "lind-runtimes"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+typemap = { path = "../typemap" }

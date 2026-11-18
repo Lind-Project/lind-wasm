@@ -1,4 +1,7 @@
 mod cli;
+mod clone;
+mod exec;
+mod exit;
 mod lind_mpk;
 mod lind_wasmtime;
 mod shims;
