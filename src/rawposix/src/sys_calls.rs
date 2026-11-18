@@ -1331,7 +1331,7 @@ pub extern "C" fn sigprocmask_syscall(
                     .iter()
                     .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0)
                 {
-                    cage::signal_epoch_trigger(cage.cageid);
+                    cage::lind_notify_signal(cage.cageid);
                 }
                 0
             }
@@ -1349,7 +1349,7 @@ pub extern "C" fn sigprocmask_syscall(
                     .iter()
                     .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
                 {
-                    cage::signal_epoch_trigger(cage.cageid);
+                    cage::lind_notify_signal(cage.cageid);
                 }
                 // Set sigset to set
                 cage.sigset.store(*some_set, Relaxed);
@@ -1577,7 +1577,7 @@ pub extern "C" fn sigsuspend_syscall(
                 .iter()
                 .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
             {
-                cage::signal_epoch_trigger(cage.cageid);
+                cage::lind_notify_signal(cage.cageid);
             }
         }
         cage.sigset.store(*some_set, Relaxed);

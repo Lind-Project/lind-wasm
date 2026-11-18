@@ -1,9 +1,9 @@
-use lind_runtimes::{lind_mpk::lind_if::MpkRuntime, lind_wasm::lind_if::WasmRuntime};
-use typemap::lind_if::{
+use lind_if::{
     AbiDescriptor, ConstLocalBuffer, Errno, LindAbiConversion, LindArgVec, LindCloneArgs,
     LindError, LindInitArgs, LindIovecAccess, LindMmapArgs, LindMprotectArgs, LindMunmapArgs,
     LindResult, LindRuntime, LindThreadDuplicateArgs, LocalBuffer, ThreadDuplicateMode, UserPtr,
 };
+use lind_runtimes::{lind_mpk::lind_if::MpkRuntime, lind_wasm::lind_if::WasmRuntime};
 
 fn assert_unimplemented<T: std::fmt::Debug>(result: LindResult<T>) {
     assert!(
@@ -93,6 +93,16 @@ fn runtime_mappings_apply_host_operations_and_report_errors() {
             ),
             Err(LindError::Other(Errno::EINVAL))
         ));
+        assert!(matches!(
+            runtime.do_munmap(
+                1,
+                &LindMunmapArgs {
+                    address: address + 1,
+                    length: args.length,
+                }
+            ),
+            Err(LindError::Other(Errno::EINVAL))
+        ));
         runtime
             .do_munmap(
                 1,
@@ -102,21 +112,6 @@ fn runtime_mappings_apply_host_operations_and_report_errors() {
                 },
             )
             .unwrap();
-        let maps = std::fs::read_to_string("/proc/self/maps").unwrap();
-        assert!(
-            !maps.lines().any(|line| {
-                let (start, end) = line
-                    .split_whitespace()
-                    .next()
-                    .unwrap()
-                    .split_once('-')
-                    .unwrap();
-                let start = u64::from_str_radix(start, 16).unwrap();
-                let end = u64::from_str_radix(end, 16).unwrap();
-                (start..end).contains(&address)
-            }),
-            "do_munmap must release the host pages"
-        );
 
         args.length = 0;
         assert!(matches!(

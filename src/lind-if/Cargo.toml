@@ -1,0 +1,7 @@
+[package]
+name = "lind-if"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sysdefs = { path = "../sysdefs" }

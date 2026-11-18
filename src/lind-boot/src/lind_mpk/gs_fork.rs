@@ -52,10 +52,7 @@ use crate::lind_mpk::RuntimeInfo::{
 
 const PAGE_SIZE: usize = 1 << PAGESHIFT;
 
-/// Arena reserved directly after each cage's memory for forked children's stacks.
-pub(super) const GS_FORK_ARENA_SIZE: usize = 1 << 30;
-/// Virtual address range reserved per cage: cage memory plus the arena.
-pub(super) const CAGE_RESERVATION_SIZE: usize = MPK_MEMORY_SIZE + GS_FORK_ARENA_SIZE;
+pub(super) use lind_runtimes::lind_mpk::{CAGE_RESERVATION_SIZE, GS_FORK_ARENA_SIZE};
 /// One arena slot holds a stack of at most `CAGE_STACK_SIZE` bytes below a
 /// `PROT_NONE` guard of `CAGE_STACK_GUARD` bytes.
 const STACK_SLOT_SIZE: usize = CAGE_STACK_SIZE + CAGE_STACK_GUARD;

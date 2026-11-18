@@ -2,12 +2,13 @@
 //!
 //! Lifecycle operations have not yet been migrated to this interface.
 
-use crate::{memory, unsupported};
-use typemap::lind_if::{
+use super::pkeys;
+use crate::{memory, signal, unsupported};
+use lind_if::{
     AbiDescriptor, CageId, ConstLocalBuffer, GuestAddress, HandlerReturn, HostAddress,
     LindAbiConversion, LindCloneArgs, LindHandlerCall, LindInitArgs, LindIovecAccess, LindMmapArgs,
-    LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime, LindSigInfo,
-    LindThreadDuplicateArgs, LocalBuffer, ThreadId,
+    LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime, LindThreadDuplicateArgs,
+    LocalBuffer, ThreadId,
 };
 
 #[derive(Debug, Default)]
@@ -84,13 +85,8 @@ impl LindRuntime for MpkRuntime {
         unsupported()
     }
 
-    fn send_signal(
-        &self,
-        _cage_id: CageId,
-        _thread_id: ThreadId,
-        _info: &LindSigInfo,
-    ) -> LindResult<()> {
-        unsupported()
+    fn notify_signal(&self, cage_id: CageId, thread_id: ThreadId) -> LindResult<()> {
+        signal::notify_epoch_thread(cage_id, thread_id)
     }
 
     fn run_handler(&self, _cage_id: CageId, _call: &LindHandlerCall) -> LindResult<HandlerReturn> {
@@ -106,10 +102,8 @@ impl LindRuntime for MpkRuntime {
         if is_reservation {
             return unsupported();
         }
-        // The existing MPK hook tags temporary mappings before publishing them
-        // into a reservation, avoiding a window with supervisor key 0.
         memory::mmap_result(unsafe {
-            cage::mmap_cage(
+            pkeys::cage_mmap_hook(
                 cage_id,
                 args.address as usize,
                 args.length as usize,
@@ -117,7 +111,17 @@ impl LindRuntime for MpkRuntime {
                 args.flags,
                 args.fd,
                 args.offset,
-            ) as *mut libc::c_void
+            )
+            .unwrap_or_else(|| {
+                libc::mmap(
+                    args.address as *mut libc::c_void,
+                    args.length as usize,
+                    args.prot,
+                    args.flags,
+                    args.fd,
+                    args.offset,
+                ) as usize
+            }) as *mut libc::c_void
         })
     }
 

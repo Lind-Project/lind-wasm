@@ -1,4 +1,5 @@
 use crate::cage::get_cage;
+use crate::runtime::registered_runtime;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use sysdefs::constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL};
 #[cfg(feature = "lind_debug")]
@@ -11,6 +12,20 @@ const EPOCH_KILLED: u64 = 0xdead;
 // switch the epoch of the main thread of the cage to "signal" state
 // thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn signal_epoch_trigger(cageid: u64) {
+    let main_threadid = match get_cage(cageid) {
+        Some(cage) => *cage.main_threadid.read(),
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!("signal_epoch_trigger: cage {} not found", cageid));
+
+            return;
+        }
+    };
+    signal_epoch_trigger_thread(cageid, main_threadid as u64);
+}
+
+// switch the epoch of the given thread of the cage to "signal" state
+pub fn signal_epoch_trigger_thread(cageid: u64, thread_id: u64) {
     #[cfg(feature = "disable_signals")]
     return;
 
@@ -20,21 +35,19 @@ pub fn signal_epoch_trigger(cageid: u64) {
             Some(c) => c,
             None => {
                 #[cfg(feature = "lind_debug")]
-                lind_debug_panic(&format!("signal_epoch_trigger: cage {} not found", cageid));
+                lind_debug_panic(&format!("signal_epoch_trigger_thread: cage {} not found", cageid));
 
                 return;
             }
         };
 
-        let threadid_guard = cage.main_threadid.read();
-        let main_threadid = *threadid_guard;
-        let epoch_handler = match cage.epoch_handler.get(&main_threadid) {
+        let epoch_handler = match cage.epoch_handler.get(&(thread_id as i32)) {
             Some(h) => h,
             None => {
                 #[cfg(feature = "lind_debug")]
                 lind_debug_panic(&format!(
-                    "signal_epoch_trigger: epoch_handler for thread {} not found",
-                    main_threadid
+                    "signal_epoch_trigger_thread: epoch_handler for thread {} not found",
+                    thread_id
                 ));
 
                 return;
@@ -45,8 +58,8 @@ pub fn signal_epoch_trigger(cageid: u64) {
         if epoch.is_null() {
             #[cfg(feature = "lind_debug")]
             lind_debug_panic(&format!(
-                "signal_epoch_trigger: epoch pointer for thread {} is null",
-                main_threadid
+                "signal_epoch_trigger_thread: epoch pointer for thread {} is null",
+                thread_id
             ));
 
             return;
@@ -419,6 +432,60 @@ pub fn signal_get_handler(cageid: u64, signo: i32) -> u64 {
     handler
 }
 
+// Notify the runtime executing the cage that its pending-signal queue changed:
+// a signal was queued, or a queued signal may have become deliverable because
+// it was unblocked. Core owns the queue and picks the thread that should
+// observe it (currently the main thread). The runtime obtains and delivers
+// signals itself through lind_get_first_signal; this call only informs it.
+// thread safety: this function could possibly be invoked by multiple threads of the same cage
+pub fn lind_notify_signal(cageid: u64) {
+    let (runtime_type, main_threadid) = match get_cage(cageid) {
+        Some(cage) => (
+            cage.runtime_type.load(Ordering::Acquire),
+            *cage.main_threadid.read(),
+        ),
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!("lind_notify_signal: cage {} not found", cageid));
+
+            return;
+        }
+    };
+
+    let Some(runtime) = registered_runtime(runtime_type) else {
+        #[cfg(feature = "lind_debug")]
+        lind_debug_panic(&format!(
+            "lind_notify_signal: no runtime registered for runtime type {}",
+            runtime_type
+        ));
+
+        return;
+    };
+
+    if let Err(_err) = runtime.notify_signal(cageid, main_threadid as u32) {
+        #[cfg(feature = "lind_debug")]
+        lind_debug_panic(&format!(
+            "lind_notify_signal: runtime failed to notify cage {}: {:?}",
+            cageid, _err
+        ));
+    }
+}
+
+// Interrupt the given thread of the cage with SIGUSR2. If the thread is
+// blocked in a host syscall (read, write, futex, etc.), this makes the
+// syscall return EINTR so the thread can observe its pending signals.
+pub fn signal_interrupt_thread(cageid: u64, thread_id: u64) {
+    let Some(cage) = get_cage(cageid) else {
+        return;
+    };
+    let os_tid = cage.os_tid_map.get(&(thread_id as i32)).map(|entry| *entry);
+    if let Some(os_tid) = os_tid {
+        unsafe {
+            libc::syscall(libc::SYS_tkill, os_tid as i32, libc::SIGUSR2);
+        }
+    }
+}
+
 // send specified signal to the cage, return value indicates whether the cage exists
 // thread safety: this function could possibly be invoked by multiple threads of the same cage
 // NOTE: signo MUST be checked to make sure it's valid before passing to this function,
@@ -453,26 +520,10 @@ pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
                 pending_signals.push(signo);
             }
 
-            // we only trigger epoch if the signal is not blocked
-            if !signal_check_block(cageid, signo) {
-                signal_epoch_trigger(cageid);
-
-                // If the target thread is blocked in a host syscall (read, write,
-                // futex, etc.), the epoch check will never run because wasm isn't
-                // executing. Send SIGUSR2 to the main thread's OS tid to interrupt
-                // the blocking syscall with EINTR, allowing the thread to return
-                // to wasm and see the epoch change.
-                let main_tid = {
-                    let guard = cage.main_threadid.read();
-                    *guard
-                };
-                let os_tid = cage.os_tid_map.get(&main_tid).map(|entry| *entry);
-                if let Some(os_tid) = os_tid {
-                    unsafe {
-                        libc::syscall(libc::SYS_tkill, os_tid as i32, libc::SIGUSR2);
-                    }
-                }
-            }
+            // Every queued signal is notified. The runtime decides from the
+            // bookkeeping whether it is deliverable yet; blocked signals are
+            // notified again when they get unblocked.
+            lind_notify_signal(cageid);
         }
 
         true
@@ -702,6 +753,6 @@ pub fn signal_may_trigger(cageid: u64) {
     };
     let pending_signals = cage.pending_signals.read();
     if !pending_signals.is_empty() {
-        signal_epoch_trigger(cageid);
+        lind_notify_signal(cageid);
     }
 }

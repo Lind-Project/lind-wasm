@@ -14,8 +14,7 @@
 //!
 //! lind-mpk requires PKU: `init` fails if the kernel hands out no keys.
 
-use crate::lind_mpk::gs_fork::CAGE_RESERVATION_SIZE;
-use crate::lind_mpk::execute::MPK_MEMORY_SIZE;
+use super::{CAGE_RESERVATION_SIZE, MPK_MEMORY_SIZE};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
@@ -130,7 +129,10 @@ pub fn pkru_for_keys(keys: &[u32]) -> u32 {
     pkru
 }
 
-/// Writes PKRU. Requires PKU support.
+/// Writes PKRU.
+///
+/// # Safety
+/// Requires PKU support. Revoking access to memory the caller still uses faults.
 #[inline]
 pub unsafe fn wrpkru(pkru: u32) {
     unsafe {
@@ -144,7 +146,10 @@ pub unsafe fn wrpkru(pkru: u32) {
     }
 }
 
-/// Reads PKRU. Requires PKU support.
+/// Reads PKRU.
+///
+/// # Safety
+/// Requires PKU support.
 #[inline]
 pub unsafe fn rdpkru() -> u32 {
     let pkru: u32;
@@ -194,13 +199,20 @@ pub fn assign_reservation(base: usize) -> std::io::Result<u32> {
                 "lind-mpk requires Intel MPK, but protection keys are unavailable",
             ));
         }
-        let key = state.allocator.alloc().ok_or_else(|| {
-            std::io::Error::other("no free protection key for a new cage")
-        })?;
+        let key = state
+            .allocator
+            .alloc()
+            .ok_or_else(|| std::io::Error::other("no free protection key for a new cage"))?;
         state.reservations.insert(base, key);
         key
     };
-    let result = tag(base, MPK_MEMORY_SIZE, libc::PROT_READ | libc::PROT_WRITE, key).and_then(|_| {
+    let result = tag(
+        base,
+        MPK_MEMORY_SIZE,
+        libc::PROT_READ | libc::PROT_WRITE,
+        key,
+    )
+    .and_then(|_| {
         tag(
             base + MPK_MEMORY_SIZE,
             CAGE_RESERVATION_SIZE - MPK_MEMORY_SIZE,
@@ -241,7 +253,10 @@ pub fn key_for_addr(addr: usize) -> Option<u32> {
 /// Creates and tags a temporary mapping before atomically moving it into
 /// place. Mapping directly at the destination would expose key 0 to other
 /// running guest threads until `pkey_mprotect` completes.
-pub(super) unsafe fn mmap_fixed_with_key(
+///
+/// # Safety
+/// The caller must ensure that replacing the requested address range is safe.
+pub unsafe fn mmap_fixed_with_key(
     addr: usize,
     len: usize,
     prot: i32,
@@ -313,20 +328,22 @@ pub unsafe fn cage_mmap_hook(
         return None;
     }
     let key = key_for_addr(addr)?;
-    Some(match unsafe { mmap_fixed_with_key(addr, len, prot, flags, fd, offset, key) } {
-        Ok(mapped) => mapped,
-        Err(error) => {
-            let errno = match error.raw_os_error() {
-                Some(errno) => errno,
-                None => {
-                    eprintln!("[lind-mpk] fixed mapping at {addr:#x} failed: {error}");
-                    libc::EIO
-                }
-            };
-            unsafe { *libc::__errno_location() = errno };
-            libc::MAP_FAILED as usize
-        }
-    })
+    Some(
+        match unsafe { mmap_fixed_with_key(addr, len, prot, flags, fd, offset, key) } {
+            Ok(mapped) => mapped,
+            Err(error) => {
+                let errno = match error.raw_os_error() {
+                    Some(errno) => errno,
+                    None => {
+                        eprintln!("[lind-mpk] fixed mapping at {addr:#x} failed: {error}");
+                        libc::EIO
+                    }
+                };
+                unsafe { *libc::__errno_location() = errno };
+                libc::MAP_FAILED as usize
+            }
+        },
+    )
 }
 
 /// Re-applies the key of the containing reservation to `[addr, addr + len)`,
@@ -373,7 +390,10 @@ mod tests {
 
     impl Drop for TestMapping {
         fn drop(&mut self) {
-            assert_eq!(unsafe { libc::munmap(self.0 as *mut libc::c_void, PAGE) }, 0);
+            assert_eq!(
+                unsafe { libc::munmap(self.0 as *mut libc::c_void, PAGE) },
+                0
+            );
         }
     }
 
@@ -389,7 +409,11 @@ mod tests {
         let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap();
         let mut found = false;
         for line in smaps.lines() {
-            if let Some((start, end)) = line.split_whitespace().next().and_then(|s| s.split_once('-')) {
+            if let Some((start, end)) = line
+                .split_whitespace()
+                .next()
+                .and_then(|s| s.split_once('-'))
+            {
                 if let (Ok(start), Ok(end)) = (
                     usize::from_str_radix(start, 16),
                     usize::from_str_radix(end, 16),
@@ -449,7 +473,10 @@ mod tests {
         let key = unsafe { libc::syscall(libc::SYS_pkey_alloc, 0, 0) };
         if key < 0 {
             let error = std::io::Error::last_os_error();
-            if matches!(error.raw_os_error(), Some(libc::ENOSYS | libc::EINVAL | libc::EOPNOTSUPP)) {
+            if matches!(
+                error.raw_os_error(),
+                Some(libc::ENOSYS | libc::EINVAL | libc::EOPNOTSUPP)
+            ) {
                 eprintln!("skipping protection-key mapping test: {error}");
                 return;
             }
@@ -460,13 +487,23 @@ mod tests {
         let fd = unsafe { libc::memfd_create(c"lind-pkey-test".as_ptr(), libc::MFD_CLOEXEC) };
         assert!(fd >= 0);
         let fd = unsafe { OwnedFd::from_raw_fd(fd) };
-        assert_eq!(unsafe { libc::ftruncate(fd.as_raw_fd(), (2 * PAGE) as i64) }, 0);
+        assert_eq!(
+            unsafe { libc::ftruncate(fd.as_raw_fd(), (2 * PAGE) as i64) },
+            0
+        );
         let prot = libc::PROT_READ | libc::PROT_WRITE;
 
         for sharing in [libc::MAP_SHARED, libc::MAP_PRIVATE] {
             let original = 0x42u8;
             assert_eq!(
-                unsafe { libc::pwrite(fd.as_raw_fd(), (&original as *const u8).cast(), 1, PAGE as i64) },
+                unsafe {
+                    libc::pwrite(
+                        fd.as_raw_fd(),
+                        (&original as *const u8).cast(),
+                        1,
+                        PAGE as i64,
+                    )
+                },
                 1
             );
             let result = unsafe {
@@ -488,10 +525,24 @@ mod tests {
             }
             let mut stored = 0u8;
             assert_eq!(
-                unsafe { libc::pread(fd.as_raw_fd(), (&mut stored as *mut u8).cast(), 1, PAGE as i64) },
+                unsafe {
+                    libc::pread(
+                        fd.as_raw_fd(),
+                        (&mut stored as *mut u8).cast(),
+                        1,
+                        PAGE as i64,
+                    )
+                },
                 1
             );
-            assert_eq!(stored, if sharing == libc::MAP_SHARED { 0x7a } else { original });
+            assert_eq!(
+                stored,
+                if sharing == libc::MAP_SHARED {
+                    0x7a
+                } else {
+                    original
+                }
+            );
         }
     }
 
@@ -499,10 +550,7 @@ mod tests {
     fn failed_fixed_mapping_keeps_previous_mapping() {
         let mapping = TestMapping::new();
         unsafe { *(mapping.0 as *mut u8) = 0xa5 };
-        for (addr, key) in [
-            (mapping.0 + 1, SUPERVISOR_PKEY),
-            (mapping.0, NUM_PKEYS),
-        ] {
+        for (addr, key) in [(mapping.0 + 1, SUPERVISOR_PKEY), (mapping.0, NUM_PKEYS)] {
             let error = unsafe {
                 mmap_fixed_with_key(
                     addr,

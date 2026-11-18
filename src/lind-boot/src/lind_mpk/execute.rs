@@ -68,7 +68,7 @@ const RTLD_DI_LINKMAP: c_int = 2;
 
 // 4 GB virtual address space reserved for each cage with MAP_NORESERVE
 // (no swap space is committed until pages are actually touched).
-pub(super) const MPK_MEMORY_SIZE: usize = 4 * 1024 * 1024 * 1024;
+pub(super) use lind_runtimes::lind_mpk::MPK_MEMORY_SIZE;
 const MPK_HEAP_START_OFFSET: usize = 3 * 1024 * 1024 * 1024;
 const MPK_MEMORY_ALIGNMENT: usize = 1024 * 1024 * 1024;
 

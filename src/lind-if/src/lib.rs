@@ -1,7 +1,9 @@
 //! Rust representation of the draft Lind-IF.
 //!
 //! The signatures and several argument types are provisional, not a stable ABI.
-//! See `Lind-IF.md` for the lifecycle, memory, and error-handling contracts.
+//! See `Lind-IF.md` for the lifecycle, memory, signal, and error-handling
+//! contracts. This crate depends only on `sysdefs`, so Core (`cage`) can hold
+//! registered runtimes without depending on their implementations.
 
 pub use sysdefs::constants::Errno;
 
@@ -107,7 +109,7 @@ pub enum LindArgVec {
     Guest(UserPtr),
 }
 
-/// Provisional initial-image arguments; 
+/// Provisional initial-image arguments;
 ///NOTE: This definition is supposed to beextended with explicit fields during the implementation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LindInitArgs {
@@ -139,20 +141,6 @@ pub struct LindThreadDuplicateArgs {
     pub set_parent_tid: Option<GuestAddress>,
     /// CLONE_CHILD_SETTID address in the destination cage.
     pub set_child_tid: Option<GuestAddress>,
-}
-
-/// Provisional signal information; guest pointers carry their owner.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LindSigInfo {
-    pub signo: i32,
-    pub errno: i32,
-    pub code: i32,
-    pub sender_cage_id: Option<CageId>,
-    pub sender_thread_id: Option<ThreadId>,
-    /// Guest pointer payload, including pointer-valued signal data.
-    pub address: Option<UserPtr>,
-    /// Non-pointer signal data.
-    pub value: u64,
 }
 
 /// The existing 3i argument convention pairs each value with an owner cage ID.
@@ -259,13 +247,15 @@ pub trait LindRuntime: Send + Sync {
 
     fn terminate_thread(&self, cage_id: CageId, thread_id: ThreadId) -> LindResult<()>;
 
-    /// Cage-directed SIGSTOP must synchronously halt guest execution.
-    fn send_signal(
-        &self,
-        cage_id: CageId,
-        thread_id: ThreadId,
-        info: &LindSigInfo,
-    ) -> LindResult<()>;
+    /// Core queued a signal for `cage_id`, or a queued signal may have become
+    /// deliverable after an unblock, and selected `thread_id` to observe it.
+    /// Core notifies on every queue insertion, including blocked signals. The
+    /// runtime must consult Core's bookkeeping, and once a signal is
+    /// deliverable arrange for that thread to obtain it from Core (e.g.
+    /// `lind_get_first_signal`) and deliver it. Blocked signals must not be
+    /// delivered. This only notifies; it must not dequeue or deliver
+    /// synchronously.
+    fn notify_signal(&self, cage_id: CageId, thread_id: ThreadId) -> LindResult<()>;
 
     /// Invoke a grate handler synchronously in the specified cage.
     fn run_handler(&self, cage_id: CageId, call: &LindHandlerCall) -> LindResult<HandlerReturn>;
@@ -284,4 +274,3 @@ pub trait LindRuntime: Send + Sync {
     /// the range with `PROT_NONE` through `do_mmap` instead.
     fn do_munmap(&self, cage_id: CageId, args: &LindMunmapArgs) -> LindResult<()>;
 }
-

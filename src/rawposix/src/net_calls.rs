@@ -319,7 +319,7 @@ pub extern "C" fn ppoll_syscall(
                 .iter()
                 .any(|signo| (newly_unblocked & cage::convert_signal_mask(*signo)) != 0)
             {
-                cage::signal_epoch_trigger(cageid);
+                cage::lind_notify_signal(cageid);
             }
         }
     }

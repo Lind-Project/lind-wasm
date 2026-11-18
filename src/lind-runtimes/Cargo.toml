@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-cage = { path = "../cage" }
 libc = "0.2"
-typemap = { path = "../typemap" }
+cage = { path = "../cage" }
+lind-if = { path = "../lind-if" }

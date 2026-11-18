@@ -25,7 +25,7 @@ src/
 `shims.rs` remains the active clone, exec, and exit dispatch. The new
 `clone.rs`, `exec.rs`, and `exit.rs` modules are reserved for its eventual
 replacement. The draft interface lives in
-[`typemap::lind_if`](../../typemap/src/lind_if.rs); the Wasm and MPK
+the [`lind-if`](../../lind-if) crate; the Wasm and MPK
 implementations are scaffolded in [`lind-runtimes`](../../lind-runtimes).
 Memory operations now follow
 `RawPOSIX -> 3i -> shims.rs -> LindRuntime::do_mmap/do_mprotect/do_munmap`.
@@ -36,7 +36,19 @@ from the guest-facing RawPOSIX handlers. Results retain full-width addresses or
 negative errnos. Runtime `do_munmap` is a plain host unmap. Guest `munmap` and
 `brk` shrinking keep the runtime reservation because RawPOSIX itself requests a
 fixed anonymous `PROT_NONE` `do_mmap` over the released range instead of
-calling `do_munmap`. MPK mapping still uses its existing protection-key hook.
+calling `do_munmap`. MPK protection-key management (`pkeys`) lives in
+`lind-runtimes::lind_mpk`; MPK `do_mmap` uses it directly so fixed mappings
+inside a reservation keep the cage's key. `lind_mpk::pkeys` here re-exports it,
+and boot still installs its hooks into `cage` for legacy mapping paths.
+Signals follow `Lind-Core -> LindRuntime::notify_signal`: `register_syscall_entries`
+registers both runtimes with `cage` by runtime type (`cage::register_runtime`),
+and `cage` depends only on `lind-if`, not on the implementations. Core queues
+the signal and calls `lind_notify_signal` for every queued signal and again
+when signals are unblocked. If Core's bookkeeping holds a deliverable signal,
+the runtime marks the selected thread's epoch and interrupts it with `SIGUSR2`,
+and the thread then dequeues the signal itself via `lind_get_first_signal`.
+Notifications for still-blocked signals leave the thread undisturbed, so
+blocking calls do not fail with `EINTR`.
 Reservation bootstrap (`is_reservation = true`) and the other draft operations
 remain unimplemented and return `ENOSYS`.
 

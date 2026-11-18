@@ -2,12 +2,12 @@
 //!
 //! Lifecycle operations have not yet been migrated to this interface.
 
-use crate::{memory, unsupported};
-use typemap::lind_if::{
+use crate::{memory, signal, unsupported};
+use lind_if::{
     AbiDescriptor, CageId, ConstLocalBuffer, GuestAddress, HandlerReturn, HostAddress,
     LindAbiConversion, LindCloneArgs, LindHandlerCall, LindInitArgs, LindIovecAccess, LindMmapArgs,
-    LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime, LindSigInfo,
-    LindThreadDuplicateArgs, LocalBuffer, ThreadId,
+    LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime, LindThreadDuplicateArgs,
+    LocalBuffer, ThreadId,
 };
 
 #[derive(Debug, Default)]
@@ -84,13 +84,8 @@ impl LindRuntime for WasmRuntime {
         unsupported()
     }
 
-    fn send_signal(
-        &self,
-        _cage_id: CageId,
-        _thread_id: ThreadId,
-        _info: &LindSigInfo,
-    ) -> LindResult<()> {
-        unsupported()
+    fn notify_signal(&self, cage_id: CageId, thread_id: ThreadId) -> LindResult<()> {
+        signal::notify_epoch_thread(cage_id, thread_id)
     }
 
     fn run_handler(&self, _cage_id: CageId, _call: &LindHandlerCall) -> LindResult<HandlerReturn> {

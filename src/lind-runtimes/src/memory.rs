@@ -1,6 +1,4 @@
-use typemap::lind_if::{
-    Errno, HostAddress, LindError, LindMprotectArgs, LindMunmapArgs, LindResult,
-};
+use lind_if::{Errno, HostAddress, LindError, LindMprotectArgs, LindMunmapArgs, LindResult};
 
 pub(crate) fn last_error() -> LindError {
     let errno = std::io::Error::last_os_error()

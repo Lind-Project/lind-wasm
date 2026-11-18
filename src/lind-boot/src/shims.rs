@@ -42,7 +42,7 @@ use sysdefs::constants::syscall_const::{
     CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, MMAP_SYSCALL, MPROTECT_SYSCALL, MUNMAP_SYSCALL,
 };
 use threei::threei_const;
-use typemap::lind_if::{
+use lind_if::{
     LindError, LindMmapArgs, LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime,
 };
 
@@ -353,26 +353,45 @@ fn register_memory_entries() {
 mod memory_dispatch_tests {
     use super::*;
     use cage::{VmmapBitWidth, VmmapOps};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use crate::lind_mpk::pkeys;
+    use lind_runtimes::lind_mpk::CAGE_RESERVATION_SIZE;
+    use std::sync::atomic::Ordering;
+    use std::sync::Mutex;
     use sysdefs::constants::lind_platform_const::INIT_CAGEID;
 
-    static MPK_MAP_CALLS: AtomicUsize = AtomicUsize::new(0);
+    // RawPOSIX global state (INIT_CAGEID, fd tables) can only be initialized
+    // once per process, so the tests share it and run serially.
+    static CAGE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-    unsafe fn mpk_mapping_hook(
-        cage_id: u64,
-        address: usize,
-        length: usize,
-        prot: i32,
-        flags: i32,
-        fd: i32,
-        offset: i64,
-    ) -> Option<usize> {
-        MPK_MAP_CALLS.fetch_add(1, Ordering::Relaxed);
-        unsafe {
-            crate::lind_mpk::pkeys::cage_mmap_hook(
-                cage_id, address, length, prot, flags, fd, offset,
-            )
+    fn start_rawposix() -> std::sync::MutexGuard<'static, ()> {
+        static START: std::sync::Once = std::sync::Once::new();
+        let guard = CAGE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        START.call_once(|| {
+            // Also installs the no-op SIGUSR2 handler used to interrupt threads.
+            rawposix::init::rawposix_start(0);
+            register_syscall_entries();
+        });
+        guard
+    }
+
+    fn mapping_key(addr: u64) -> u32 {
+        let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap();
+        let mut found = false;
+        for line in smaps.lines() {
+            if let Some((start, end)) = line.split_whitespace().next().and_then(|s| s.split_once('-')) {
+                if let (Ok(start), Ok(end)) =
+                    (u64::from_str_radix(start, 16), u64::from_str_radix(end, 16))
+                {
+                    found = (start..end).contains(&addr);
+                }
+            }
+            if found {
+                if let Some(key) = line.strip_prefix("ProtectionKey:") {
+                    return key.trim().parse().unwrap();
+                }
+            }
         }
+        panic!("no protection key found for mapping {addr:#x}");
     }
 
     fn rawposix_call(handler: threei::RawCallFunc, args: [u64; 6]) -> i64 {
@@ -395,9 +414,11 @@ mod memory_dispatch_tests {
 
     #[test]
     fn rawposix_dispatches_memory_operations_to_both_runtimes() {
-        rawposix::init::rawposix_start(0);
-        register_syscall_entries();
-        cage::set_cage_mmap_hook(mpk_mapping_hook);
+        let _guard = start_rawposix();
+        let mpk_available = pkeys::init().is_ok();
+        if !mpk_available {
+            eprintln!("skipping protection-key checks: MPK unavailable");
+        }
         let cage = cage::get_cage(INIT_CAGEID).unwrap();
         let page = 4096usize;
         let prot = libc::PROT_READ | libc::PROT_WRITE;
@@ -411,9 +432,9 @@ mod memory_dispatch_tests {
             let reservation = unsafe {
                 libc::mmap(
                     std::ptr::null_mut(),
-                    3 * page,
+                    CAGE_RESERVATION_SIZE,
                     libc::PROT_NONE,
-                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
                     -1,
                     0,
                 )
@@ -435,7 +456,9 @@ mod memory_dispatch_tests {
                     VmmapBitWidth::Vmmap64Bit
                 };
             }
-            let before = MPK_MAP_CALLS.load(Ordering::Relaxed);
+            // A key mismatch means MPK dispatch bypassed the pkey-preserving mapping.
+            let key = (mpk_available && runtime == threei_const::RUNTIME_TYPE_MPK)
+                .then(|| pkeys::assign_reservation(reservation as usize).unwrap());
             assert_eq!(
                 rawposix_call(
                     rawposix::fs_calls::mmap_syscall,
@@ -450,6 +473,9 @@ mod memory_dispatch_tests {
                 ),
                 guest as i64
             );
+            if let Some(key) = key {
+                assert_eq!(mapping_key(host), key);
+            }
             unsafe { *(host as *mut u8) = 0xa5 };
             assert_eq!(
                 rawposix_call(
@@ -484,15 +510,9 @@ mod memory_dispatch_tests {
                 let page = vmmap.sys_to_page_num(host as usize);
                 assert!(vmmap.find_page(page).is_none());
             }
-            let after = MPK_MAP_CALLS.load(Ordering::Relaxed);
-            assert_eq!(
-                after - before,
-                if runtime == threei_const::RUNTIME_TYPE_MPK {
-                    2
-                } else {
-                    0
-                }
-            );
+            if let Some(key) = key {
+                assert_eq!(mapping_key(host), key);
+            }
 
             // mmap_inner errors must survive 3i, independent of host TLS errno.
             unsafe { *libc::__errno_location() = libc::EIO };
@@ -512,16 +532,79 @@ mod memory_dispatch_tests {
                 0
             );
             assert_eq!(unsafe { *(host as *const u8) }, 0);
-            assert_eq!(unsafe { libc::munmap(reservation, 3 * page) }, 0);
+            assert_eq!(unsafe { libc::munmap(reservation, CAGE_RESERVATION_SIZE) }, 0);
+            if key.is_some() {
+                pkeys::release_reservation(reservation as usize);
+            }
             threei::remove_cage_runtime(INIT_CAGEID);
         }
-        cage::remove_cage(INIT_CAGEID);
+    }
+
+    #[test]
+    fn core_queues_signals_and_notifies_the_cage_runtime() {
+        let _guard = start_rawposix();
+        let cage = cage::get_cage(INIT_CAGEID).unwrap();
+        let epoch = Box::leak(Box::new(0u64)) as *mut u64;
+        cage::lind_signal_init(INIT_CAGEID, epoch, 1, true);
+        let read_epoch = || unsafe { std::ptr::read_volatile(epoch) };
+
+        for runtime in [
+            threei_const::RUNTIME_TYPE_WASMTIME,
+            threei_const::RUNTIME_TYPE_MPK,
+        ] {
+            unsafe { std::ptr::write_volatile(epoch, 0) };
+            cage.runtime_type.store(runtime, Ordering::Release);
+            assert!(cage::lind_send_signal(INIT_CAGEID, libc::SIGUSR1));
+            assert_eq!(read_epoch(), 0xc0ffee, "runtime {runtime} was not notified");
+            let (signo, _, _) = cage::lind_get_first_signal(INIT_CAGEID).unwrap();
+            assert_eq!(signo, libc::SIGUSR1);
+
+            // A blocked signal is queued and notified, but the runtime must
+            // leave the thread alone (a raised epoch would make blocking
+            // calls fail with EINTR) until it is unblocked.
+            unsafe { std::ptr::write_volatile(epoch, 0) };
+            let mask = cage::convert_signal_mask(libc::SIGUSR1);
+            cage.sigset.store(mask, Ordering::Relaxed);
+            assert!(cage::lind_send_signal(INIT_CAGEID, libc::SIGUSR1));
+            assert_eq!(read_epoch(), 0, "runtime {runtime} woke for a blocked signal");
+            assert!(cage::lind_get_first_signal(INIT_CAGEID).is_none());
+            assert!(!cage.pending_signals.read().is_empty());
+
+            cage.sigset.store(0, Ordering::Relaxed);
+            cage::lind_notify_signal(INIT_CAGEID);
+            assert_eq!(read_epoch(), 0xc0ffee, "runtime {runtime} missed the unblock");
+            let (signo, _, _) = cage::lind_get_first_signal(INIT_CAGEID).unwrap();
+            assert_eq!(signo, libc::SIGUSR1);
+            assert!(cage.pending_signals.read().is_empty());
+        }
+
+        // Without a registered runtime the signal is still queued by Core.
+        unsafe { std::ptr::write_volatile(epoch, 0) };
+        cage.runtime_type.store(u64::MAX, Ordering::Release);
+        assert!(cage::lind_send_signal(INIT_CAGEID, libc::SIGUSR1));
+        assert_eq!(read_epoch(), 0);
+        let (signo, _, _) = cage::lind_get_first_signal(INIT_CAGEID).unwrap();
+        assert_eq!(signo, libc::SIGUSR1);
     }
 }
 
-/// Register lifecycle and memory shims after RawPOSIX initialization and
-/// before any guest cage is created.
+/// Register the Lind-IF runtimes with Core so it can notify them, e.g. of
+/// pending signals.
+fn register_lind_runtimes() {
+    cage::register_runtime(
+        threei_const::RUNTIME_TYPE_WASMTIME,
+        &lind_runtimes::lind_wasm::lind_if::WasmRuntime,
+    );
+    cage::register_runtime(
+        threei_const::RUNTIME_TYPE_MPK,
+        &lind_runtimes::lind_mpk::lind_if::MpkRuntime,
+    );
+}
+
+/// Register the Lind-IF runtimes with Core and the lifecycle and memory shims
+/// with 3i, after RawPOSIX initialization and before any guest cage is created.
 pub fn register_syscall_entries() {
+    register_lind_runtimes();
     register_memory_entries();
     let clone_ret = threei::register_handler(
         UNUSED_ID,
