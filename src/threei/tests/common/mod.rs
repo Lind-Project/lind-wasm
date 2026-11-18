@@ -3,6 +3,7 @@ use threei::handler_table::HANDLERTABLE;
 use threei::{copy_handler_table_to_cage, register_handler, EXITING_TABLE};
 /// Clear global tables so each test starts from a clean state.
 pub fn clear_globals() {
+    threei::access_table::ACCESS_TABLE.write().unwrap().clear();
     #[cfg(feature = "hashmap")]
     {
         HANDLERTABLE.lock().unwrap().clear();

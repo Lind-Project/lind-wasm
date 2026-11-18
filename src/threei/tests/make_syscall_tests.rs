@@ -3,7 +3,7 @@
 // `serial_test` lets us mark those tests #[serial] so they run one at a time.
 use serial_test::serial;
 use sysdefs::constants::lind_platform_const::RAWPOSIX_CAGEID;
-use threei::{make_syscall, threei_const};
+use threei::make_syscall;
 mod common;
 use common::*;
 /// Helper: pick IDs that won't collide with other tests.
@@ -73,32 +73,42 @@ fn rawposix_syscall_preserves_64_bit_return_value() {
 
 #[test]
 #[serial]
-#[should_panic(expected = "handler table for self_cageid")]
 fn non_exit_syscall_falls_through_to_rawposix_path_when_not_interposed() {
     clear_globals();
 
     let unknown_syscall = 0xFFFF_FFFFu64;
 
-    let rc = make_syscall(
-        CAGE_A,
-        unknown_syscall,
-        0,
-        CAGE_A,
-        0,
-        CAGE_A,
-        0,
-        CAGE_A,
-        0,
-        CAGE_A,
-        0,
-        CAGE_A,
-        0,
-        CAGE_A,
-        0,
-        CAGE_A,
-    );
+    let result = std::panic::catch_unwind(|| {
+        make_syscall(
+            CAGE_A,
+            unknown_syscall,
+            0,
+            CAGE_A,
+            0,
+            CAGE_A,
+            0,
+            CAGE_A,
+            0,
+            CAGE_A,
+            0,
+            CAGE_A,
+            0,
+            CAGE_A,
+            0,
+            CAGE_A,
+        )
+    });
 
-    assert_eq!(rc, threei_const::ELINDAPIABORTED as i64);
+    // The hashmap lookup panics while holding its mutex.
+    #[cfg(feature = "hashmap")]
+    threei::handler_table::HANDLERTABLE.clear_poison();
+    let panic = result.expect_err("missing handler must panic");
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .expect("panic must contain a diagnostic");
+    assert!(message.contains("handler table for self_cageid"));
 }
 
 /// If there is an interposition entry for (self_cageid, syscall_num),

@@ -42,6 +42,7 @@ extern "C" fn noop_trampoline(
 }
 
 fn clear_globals() {
+    threei::access_table::ACCESS_TABLE.write().unwrap().clear();
     #[cfg(feature = "hashmap")]
     {
         HANDLERTABLE.lock().unwrap().clear();

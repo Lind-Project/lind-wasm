@@ -13,6 +13,33 @@ Note also, that 3i can be used for other inter-cage calls, like RPC.   This docu
 
 3i converts file system calls and RPC system calls into userspace function calls, thereby reducing additional overhead and security risks associated with frequent kernel interactions.
 
+### Cross-cage syscall authority
+
+`make_syscall` returns `-EPERM` before dispatch if the calling cage is not
+authorized to act on behalf of the target cage or access an argument's owning
+cage. A cage always has access to itself. Registering a handler owned by A in
+B's syscall table grants A access to B, regardless of which syscall is
+interposed. Authority is directional and transitive: if B also handles calls
+for C, A can act on behalf of C. Cycles do not grant access outside the cycle.
+
+The access table tracks current registrations in both handler-table backends.
+Replacing or deregistering the last handler connecting two cages revokes that
+edge, including permissions that depended on it transitively. Copying a handler
+table grants its handlers access to the destination cage and replaces its old
+permissions. Cage/grate cleanup removes the corresponding edges. Runtime
+dispatch IDs (`RAWPOSIX_CAGEID`, `WASMTIME_CAGEID`, `THREEI_CAGEID`) do not grant
+cage authority. The internal RawPOSIX-to-Wasmtime runtime route remains allowed
+for clone, exec and exit; its argument slots carry runtime metadata, not owner
+IDs. This exception does not authorize ordinary cages to call runtime endpoints.
+
+All six argument owner IDs are checked, even for self-targeted calls and zero
+argument values. The glibc `NOTUSED` and Rust `UNUSED_ID` sentinels (including
+their MSB-cleared forms) do not identify owners and are skipped, as is cage ID
+`0` (valid cage IDs start at 1; `harsh_cage_exit` uses `0` as filler). `register_handler` and
+`copy_handler_table_to_cage` use these slots for metadata rather than memory
+owners, so those slots are excluded; their syscall target is still checked.
+`copy_data_between_cages` uses real owner IDs and is checked normally.
+
 ### 3i Function Calls 
 
 |           Caller           |       Callee     |           Function            |  Interposable | Remarks |

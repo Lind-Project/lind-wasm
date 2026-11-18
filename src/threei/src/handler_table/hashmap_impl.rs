@@ -1,3 +1,4 @@
+use crate::access_table::ACCESS_TABLE;
 use crate::threei_const;
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Mutex;
@@ -113,12 +114,14 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
 ///
 /// todo: a more efficient way to do clean up
 pub fn _rm_grate_from_handler(grateid: u64) {
+    let mut access = ACCESS_TABLE.write().unwrap();
     let mut table = HANDLERTABLE.lock().unwrap();
     for (_, callmap) in table.iter_mut() {
         for (_, target_map) in callmap.iter_mut() {
             target_map.retain(|dest_grateid, _| *dest_grateid != grateid);
         }
     }
+    access.remove_handler(grateid);
 }
 
 /// Removes **all** handler mappings registered under a given cage.
@@ -133,9 +136,11 @@ pub fn _rm_grate_from_handler(grateid: u64) {
 /// ## Returns:
 /// None.
 pub fn _rm_cage_from_handler(cageid: u64) {
+    let mut access = ACCESS_TABLE.write().unwrap();
     // Remove cage's own handler table if it exists
     let mut handler_table = HANDLERTABLE.lock().unwrap();
     handler_table.remove(&cageid);
+    access.remove_target(cageid);
 }
 
 /// Actual implementation of register_handler.
@@ -196,6 +201,7 @@ pub fn register_handler_impl(
     handlefunccage: u64,
     in_grate_fn_ptr_u64: u64,
 ) -> i32 {
+    let mut access = ACCESS_TABLE.write().unwrap();
     let mut table = HANDLERTABLE.lock().expect("HANDLERTABLE mutex poisoned");
 
     // Case 1: Remove syscall mapping for a given (targetcage, targetcallnum)
@@ -209,6 +215,7 @@ pub fn register_handler_impl(
                 table.remove(&targetcage);
             }
         }
+        access.register(targetcage, targetcallnum, handlefunccage);
         return 0;
     }
 
@@ -221,6 +228,7 @@ pub fn register_handler_impl(
     target_map.clear();
 
     target_map.insert(handlefunccage, in_grate_fn_ptr_u64);
+    access.register(targetcage, targetcallnum, handlefunccage);
 
     0
 }
@@ -228,6 +236,7 @@ pub fn register_handler_impl(
 /// Actual implementation of copy_handler_table_to_cage.
 /// See comments in threei.rs for details.
 pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
+    let mut access = ACCESS_TABLE.write().unwrap();
     let mut handler_table = HANDLERTABLE.lock().unwrap();
 
     // If srccage has a handler table, clones its contents into targetcage.
@@ -244,6 +253,7 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
                     .or_insert(in_grate_addr);
             }
         }
+        access.copy(srccage, targetcage);
         0
     } else {
         lind_log!(

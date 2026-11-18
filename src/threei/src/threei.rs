@@ -11,6 +11,7 @@ use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::lind_log;
 
+use crate::access_table::ACCESS_TABLE;
 use crate::handler_table::{
     _get_handler, _rm_cage_from_handler, _rm_grate_from_handler, copy_handler_table_to_cage_impl,
     register_handler_impl,
@@ -305,6 +306,8 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// handler is already registered for the pair, it is replaced (see
 /// `register_handler_impl` for the rationale). Passing `THREEI_DEREGISTER` as
 /// `handlefunccage` removes the entry instead.
+/// A registered handler grants its owning cage transitive syscall authority
+/// over `targetcage` until the corresponding handler edges are removed.
 ///
 /// ## Arguments:
 /// - in_grate_fn_ptr_u64: Pointer to the function inside the grate that will handle this syscall.
@@ -435,6 +438,9 @@ pub fn copy_handler_table_to_cage(
 /// - Returns `-ESRCH` if the target cage is dead or in `EXITING_TABLE` (unless the syscall
 /// is an exit variant or the caller is the target itself), or if the destination grate is
 /// already dead.
+/// - Returns `-EPERM` if the caller lacks handler-derived authority over the
+/// target or any argument's owning cage. Unused argument sentinels and metadata
+/// slots in registration / handler-table-copy calls are not memory owners.
 /// - Panics if no handler is registered for (self_cageid, syscall_num).
 pub fn make_syscall(
     self_cageid: u64, // is required to get the cage instance
@@ -467,6 +473,57 @@ pub fn make_syscall(
         && self_cageid != target_cageid
     {
         return -(Errno::ESRCH as i64);
+    }
+
+    let argument_cages = [
+        arg1_cageid,
+        arg2_cageid,
+        arg3_cageid,
+        arg4_cageid,
+        arg5_cageid,
+        arg6_cageid,
+    ];
+    // These two APIs pack metadata, not memory owners, into their cage-ID slots.
+    let runtime_dispatch = self_cageid == lind_platform_const::RAWPOSIX_CAGEID
+        && target_cageid == lind_platform_const::WASMTIME_CAGEID;
+    let owners: &[u64] = if runtime_dispatch {
+        // The internal runtime ABI also packs metadata (e.g. a TID) into these slots.
+        &[]
+    } else {
+        match syscall_num {
+            threei_const::REGISTER_HANDLER_SYSCALL
+            | threei_const::COPY_HANDLER_TABLE_TO_CAGE_SYSCALL => &[],
+            _ => &argument_cages,
+        }
+    };
+    // glibc's TRANSLATE_ARG_TO_HOST clears the MSB of its NOTUSED sentinel.
+    // Cage IDs start at INIT_CAGEID (1), so 0 is a filler (e.g. harsh_cage_exit).
+    let is_unused = |id: u64| {
+        let mask = !(1_u64 << 63);
+        let id = id & mask;
+        id == 0
+            || id == (lind_platform_const::UNUSED_ARG & mask)
+            || id == (lind_platform_const::UNUSED_ID & mask)
+    };
+    if self_cageid != target_cageid
+        || owners
+            .iter()
+            .any(|&id| id != self_cageid && !is_unused(id))
+    {
+        let access = ACCESS_TABLE.read().unwrap();
+        let denied = std::iter::once(target_cageid)
+            .chain(owners.iter().copied().filter(|&id| !is_unused(id)))
+            .find(|&id| !access.allows(self_cageid, id));
+        if let Some(_denied_cageid) = denied {
+            lind_log!(
+                THREEI,
+                "[3i|make_syscall] cage {} denied access to cage {} (syscall_num={})",
+                self_cageid,
+                _denied_cageid,
+                syscall_num
+            );
+            return -(Errno::EPERM as i64);
+        }
     }
 
     // TODO:
