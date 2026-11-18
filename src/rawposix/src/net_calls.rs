@@ -314,11 +314,12 @@ pub extern "C" fn ppoll_syscall(
         // unblocked after restoring the original mask
         let newly_unblocked = ppoll_mask & !old_mask;
         if newly_unblocked != 0 {
-            let pending_signals = cage.pending_signals.read();
-            if pending_signals
+            let has_unblocked_pending = cage
+                .pending_signals
+                .read()
                 .iter()
-                .any(|signo| (newly_unblocked & cage::convert_signal_mask(*signo)) != 0)
-            {
+                .any(|signo| (newly_unblocked & cage::convert_signal_mask(*signo)) != 0);
+            if has_unblocked_pending {
                 cage::lind_notify_signal(cageid);
             }
         }

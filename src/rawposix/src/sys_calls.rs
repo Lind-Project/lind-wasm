@@ -1324,35 +1324,36 @@ pub extern "C" fn sigprocmask_syscall(
                 // Unblock signals in set
                 let newset = curr_sigset & !*some_set;
                 cage.sigset.store(newset, Relaxed);
-                // check if any of the unblocked signals are in the pending signal list
-                // and trigger the epoch if it has
-                let pending_signals = cage.pending_signals.read();
-                if pending_signals
+                // notify the runtime if any of the unblocked signals is pending;
+                // the read lock is released first because the runtime re-reads the queue
+                let has_unblocked_pending = cage
+                    .pending_signals
+                    .read()
                     .iter()
-                    .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0)
-                {
+                    .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0);
+                if has_unblocked_pending {
                     cage::lind_notify_signal(cage.cageid);
                 }
                 0
             }
             SIG_SETMASK => {
-                let pending_signals = cage.pending_signals.read();
                 // find all signals switched from blocking to nonblocking
                 // 1. perform a xor operation to find signals that switched state
                 // all the signal masks changed from 0 to 1, or 1 to 0 are filtered in this step
                 // 2. perform an and operation to the old sigset, this further filtered masks and only
                 // left masks changed from 1 to 0
                 let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
-                // check if any of the unblocked signals are in the pending signal list
-                // and trigger the epoch if it has
-                if pending_signals
+                let has_unblocked_pending = cage
+                    .pending_signals
+                    .read()
                     .iter()
-                    .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
-                {
+                    .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0);
+                // Set sigset to set before notifying: the runtime checks
+                // deliverability against the current mask
+                cage.sigset.store(*some_set, Relaxed);
+                if has_unblocked_pending {
                     cage::lind_notify_signal(cage.cageid);
                 }
-                // Set sigset to set
-                cage.sigset.store(*some_set, Relaxed);
                 0
             }
             _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
@@ -1571,16 +1572,17 @@ pub extern "C" fn sigsuspend_syscall(
     if let Some(some_set) = set {
         // Signals that transition from blocked to unblocked
         let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
-        {
-            let pending_signals = cage.pending_signals.read();
-            if pending_signals
-                .iter()
-                .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
-            {
-                cage::lind_notify_signal(cage.cageid);
-            }
-        }
+        let has_unblocked_pending = cage
+            .pending_signals
+            .read()
+            .iter()
+            .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0);
+        // Store the mask before notifying: the runtime checks deliverability
+        // against the current mask
         cage.sigset.store(*some_set, Relaxed);
+        if has_unblocked_pending {
+            cage::lind_notify_signal(cage.cageid);
+        }
     }
 
     loop {
