@@ -22,17 +22,18 @@ UNITS = {"us": "us", "MBps": "MB/s", "wall": "ms"}
 MODES = ["native", "lind", "grate"]
 
 
-GRATE_TRAILER = re.compile(r"^\[testing-grate\]", re.M)
+# testing-grate prints its result when each cage exits, e.g. "[testing-grate] result: Ok(\n    0,\n)".
+# With several processes (lat_pipe, lat_proc) this can appear before the workload's own output,
+# so remove these blocks wherever they are: the "[testing-grate]" line plus the indented or
+# closing-bracket lines that continue it.
+GRATE_TRAILER = re.compile(r"^\[testing-grate\][^\n]*(?:\n(?:[ \t]+[^\n]*|[)}\]],?))*\n?", re.M)
 
 
 def value_of(metric, wall_ns, text):
     if metric == "wall":
         return wall_ns / 1e6
-    # testing-grate prints its own result (e.g. "[testing-grate] result: Ok(\n    0,\n)") when
-    # the cage exits; it's not the workload's output.
-    m = GRATE_TRAILER.search(text)
-    if m:
-        text = text[: m.start()]
+    # Drop testing-grate's own result lines: they are not the workload's output.
+    text = GRATE_TRAILER.sub("", text)
     pattern = US if metric == "us" else MBPS
     found = pattern.findall(text)
     if found:
