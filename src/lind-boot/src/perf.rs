@@ -123,7 +123,8 @@ const ENV_TIMER: &str = "LIND_PERF_TIMER";
 const ENV_RESULT: &str = "LIND_PERF_RESULT";
 const ENV_SCOPE: &str = "LIND_PERF_SCOPE";
 
-/// Columns of the per-syscall table (`--perf-scope=all`), after the syscall-entry column.
+/// Columns of the per-syscall table (`--perf-scope=all`, or a benchmark with a forwarding
+/// grate), after the syscall-entry column.
 static SYSCALL_COLUMNS: &[(&str, &Counter)] = &[
     ("3i", &ti::MAKE_SYSCALL),
     ("3i lookup", &ti::HANDLER_LOOKUP),
@@ -343,14 +344,22 @@ pub fn run_parent(cli: &CliOptions, timer: PerfTimer) -> i32 {
             c.set_result(c.total(), c.calls(), lo);
         }
     }
+    // A benchmark run sees more than one (syscall, origin) slot when a grate forwards the call:
+    // the cage's call and the grate's forwarded call are then both timed.
+    let multi_slot = lc::SYSCALL_ENTRY.nonzero_slots().nth(1).is_some();
     if scope_all {
         println!(
             "\nscope: all syscalls. Per-layer totals below mix all syscalls and origins; \
              see the PER SYSCALL table for the breakdown."
         );
+    } else if multi_slot {
+        println!(
+            "\nforwarded calls seen: per-layer totals below mix the cage's calls and the \
+             grate's forwarded (fwd) calls; see the PER SYSCALL table for the breakdown."
+        );
     }
     lind_perf::print_report(&selected);
-    if scope_all {
+    if scope_all || multi_slot {
         if lc::SYSCALL_ENTRY.calls() > 0 {
             lind_perf::print_syscall_table(&lc::SYSCALL_ENTRY, SYSCALL_COLUMNS, cli.perf_top);
         } else {
@@ -359,7 +368,8 @@ pub fn run_parent(cli: &CliOptions, timer: PerfTimer) -> i32 {
             );
         }
     } else {
-        // Derived costs assume one benchmark syscall path, so only for the benchmark scope.
+        // Derived costs assume one benchmark syscall path, so only for the benchmark scope
+        // without forwarded calls.
         lind_perf::print_derived(DERIVED);
     }
 

@@ -123,6 +123,16 @@ startup syscalls, `printf`, `exit` and so on are never counted.
 
 2001/2002 can be interposed by a grate; 2003/2004 never reach 3i.
 
+Two benchmark grates in `tests/benchmarks/lind-perf/` interpose on 2001/2002:
+
+| Grate | Handler | Path measured | Compare with |
+|---|---|---|---|
+| `grate_syscall.c` | returns 0 | cage -> grate -> back (RawPOSIX and the kernel never run) | the cost of reaching a handler in a grate |
+| `grate_forward.c` | forwards the call to RawPOSIX with `make_threei_call`, as a real grate does | cage -> grate -> RawPOSIX -> kernel/fdtables | the plain 2001/2002 runs: the difference in `guest::per_call` is the cost of having a grate in the path |
+
+With `grate_forward.c` both the cage's call and the grate's forwarded call are timed, so the
+report adds the per-syscall table (origin `cage` vs `fwd`) and skips the derived lines.
+
 ## What is timed
 
 | Counter | Where | Covers |

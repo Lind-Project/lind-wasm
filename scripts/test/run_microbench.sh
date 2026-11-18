@@ -13,6 +13,8 @@
 #   fdtables   2002, RawPOSIX handler resolved in fdtables
 #   null       2003, returns at the host syscall entry: Wasm<->host round trip
 #   grate+libc / grate+fdtables: the same calls interposed by a no-op grate
+#   forwarding grate+libc / +fdtables: interposed by a grate that forwards them to RawPOSIX,
+#     like a real grate does; compare with libc / fdtables for the cost of a grate in the path
 
 set -euo pipefail
 
@@ -42,7 +44,9 @@ for prog in libc_syscall fdtables_syscall null_syscall; do
 done
 # Grates must be static: lind-boot only creates a grate worker pool for statically linked
 # modules that export pass_fptr_to_wt (same flags as the grate test harness).
-"${COMPILE}" -s --output-dir "${OUT_DIR}" --compile-grate "${BENCH_DIR}/grate_syscall.c" >/dev/null
+for grate in grate_syscall grate_forward; do
+  "${COMPILE}" -s --output-dir "${OUT_DIR}" --compile-grate "${BENCH_DIR}/${grate}.c" >/dev/null
+done
 
 run() {
   local title="$1"; shift
@@ -61,3 +65,7 @@ run "fdtables_syscall (2002): fdtables, no kernel" "${OUT_DIR}/fdtables_syscall.
 run "null_syscall (2003): Wasm<->host round trip" "${OUT_DIR}/null_syscall.cwasm"
 run "grate + libc_syscall"     "${OUT_DIR}/grate_syscall.cwasm" "${OUT_DIR}/libc_syscall.cwasm"
 run "grate + fdtables_syscall" "${OUT_DIR}/grate_syscall.cwasm" "${OUT_DIR}/fdtables_syscall.cwasm"
+run "forwarding grate + libc_syscall: cage -> grate -> RawPOSIX -> kernel" \
+  "${OUT_DIR}/grate_forward.cwasm" "${OUT_DIR}/libc_syscall.cwasm"
+run "forwarding grate + fdtables_syscall: cage -> grate -> RawPOSIX -> fdtables" \
+  "${OUT_DIR}/grate_forward.cwasm" "${OUT_DIR}/fdtables_syscall.cwasm"
