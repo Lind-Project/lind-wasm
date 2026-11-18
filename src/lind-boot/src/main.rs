@@ -2,16 +2,14 @@ mod cli;
 mod clone;
 mod exec;
 mod exit;
-mod lind_mpk;
 mod lind_wasmtime;
 mod shims;
 
 use crate::{
     cli::CliOptions,
-    lind_mpk::execute_mpk,
-    lind_mpk::init_mpk,
     lind_wasmtime::{exec_wasm, init_wasmtime, precompile_module},
 };
+use lind_runtimes::lind_mpk::{MpkLaunch, execute_mpk, init_mpk};
 use typemap::{BinaryFileType, detect_binary_type};
 
 use clap::Parser;
@@ -108,7 +106,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cage_id = CAGE_START_ID as u64;
     let result = match file_type {
-        BinaryFileType::ElfSo => execute_mpk(lindboot_cli, cage_id),
+        BinaryFileType::ElfSo => execute_mpk(
+            MpkLaunch {
+                args: lindboot_cli.args,
+                vars: lindboot_cli.vars,
+                no_interpose: lindboot_cli.no_interpose,
+            },
+            cage_id,
+        ),
         BinaryFileType::Wasm | BinaryFileType::CWasm | BinaryFileType::Unknown => {
             exec_wasm(lindboot_cli, lind_manager, cage_id)
         },

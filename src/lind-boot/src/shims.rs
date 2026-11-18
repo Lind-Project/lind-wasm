@@ -2,8 +2,8 @@
 //!
 //! A single 3i handler is registered per syscall.  Each shim resolves the
 //! runtime type of the cage that originally issued the syscall, then
-//! delegates to the appropriate runtime implementation via `SyscallRuntime`
-//! (lifecycle) or `LindRuntime` (memory).
+//! delegates to the appropriate `lind-runtimes` implementation via
+//! `SyscallRuntime` (lifecycle) or `LindRuntime` (memory).
 //!
 //! Memory requests originate in RawPOSIX after validation and translation.
 //! `arg1_cageid` selects the affected cage; arguments contain host addresses
@@ -46,60 +46,24 @@ use lind_if::{
     LindError, LindMmapArgs, LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime,
 };
 
-use crate::lind_mpk::execute::MpkRuntime;
-use crate::lind_wasmtime::execute::WasmtimeRuntime;
+use lind_runtimes::lifecycle::SyscallRuntime;
+use lind_runtimes::lind_mpk::lind_if::MpkRuntime;
+use lind_runtimes::lind_wasm::lifecycle::WasmLifecycle;
+use lind_runtimes::lind_wasm::lind_if::WasmRuntime;
 
-// ── Runtime trait ────────────────────────────────────────────────────────────
-
-/// Trait for runtime-specific syscall handlers.
-///
-/// Each runtime (Wasmtime, MPK) implements this trait to provide its own
-/// handling logic for clone, exec, and exit syscalls. The trait uses the
-/// standard 3i calling convention: one cageid + six (arg, arg_cageid) pairs.
-pub trait SyscallRuntime {
-    /// Handle clone/fork syscall.
-    fn handle_clone(
-        &self,
-        cageid: u64,
-        arg1: u64, arg1_cageid: u64,
-        arg2: u64, arg2_cageid: u64,
-        arg3: u64, arg3_cageid: u64,
-        arg4: u64, arg4_cageid: u64,
-        arg5: u64, arg5_cageid: u64,
-        arg6: u64, arg6_cageid: u64,
-    ) -> i32;
-
-    /// Handle exec syscall.
-    fn handle_exec(
-        &self,
-        cageid: u64,
-        arg1: u64, arg1_cageid: u64,
-        arg2: u64, arg2_cageid: u64,
-        arg3: u64, arg3_cageid: u64,
-        arg4: u64, arg4_cageid: u64,
-        arg5: u64, arg5_cageid: u64,
-        arg6: u64, arg6_cageid: u64,
-    ) -> i32;
-
-    /// Handle exit syscall.
-    fn handle_exit(
-        &self,
-        cageid: u64,
-        arg1: u64, arg1_cageid: u64,
-        arg2: u64, arg2_cageid: u64,
-        arg3: u64, arg3_cageid: u64,
-        arg4: u64, arg4_cageid: u64,
-        arg5: u64, arg5_cageid: u64,
-        arg6: u64, arg6_cageid: u64,
-    ) -> i32;
-}
+use crate::cli::CliOptions;
+use crate::lind_wasmtime::host::HostCtx;
 
 // ── Runtime dispatch ─────────────────────────────────────────────────────────
+
+/// The Wasm runtime's lifecycle handlers, instantiated with lind-boot's
+/// Wasmtime host state and launch options.
+static WASM_LIFECYCLE: WasmLifecycle<HostCtx, CliOptions> = WasmLifecycle::new();
 
 /// Resolve a runtime type constant to its corresponding trait implementation.
 fn get_runtime_handler(runtime_type: u64) -> &'static dyn SyscallRuntime {
     match runtime_type {
-        threei_const::RUNTIME_TYPE_WASMTIME => &WasmtimeRuntime,
+        threei_const::RUNTIME_TYPE_WASMTIME => &WASM_LIFECYCLE,
         threei_const::RUNTIME_TYPE_MPK => &MpkRuntime,
         _ => panic!("get_runtime_handler: unknown runtime_type={}", runtime_type),
     }
@@ -132,6 +96,21 @@ extern "C" fn shim_clone_handler(
         });
 
     let runtime = get_runtime_handler(runtime_type);
+    // Lind-IF: this call is to be replaced by Core-driven lifecycle calls on
+    // `runtime` (a `LindRuntime`):
+    // - Fork (CLONE_VM clear; RawPOSIX allocated `child_cageid = arg3 != 0`
+    //   and created the child cage record, fd table, and handler table):
+    //     runtime.duplicate_cage(parent_cageid, child_cageid)
+    //     runtime.duplicate_thread(parent_cageid, parent_tid = arg2_cageid,
+    //         child_cageid, child main thread, LindThreadDuplicateArgs {
+    //             mode: SyscallFork, clone_args: (arg1, arg1_cageid),
+    //             set_parent_tid, set_child_tid })
+    //   If either fails, Core rolls back the child cage (terminate_cage if
+    //   duplicate_cage had succeeded) and returns the errno to the parent.
+    // - Thread clone (CLONE_VM set; `child_cageid == 0`): no duplicate_cage;
+    //     runtime.duplicate_thread(parent_cageid, parent_tid, parent_cageid,
+    //         new thread ID allocated by Core, { mode: PthreadClone, .. })
+    // Both continuations stay held until this handler unwinds through 3i.
     runtime.handle_clone(
         cageid,
         arg1, arg1_cageid,
@@ -168,6 +147,19 @@ extern "C" fn shim_exec_handler(
         });
 
     let runtime = get_runtime_handler(runtime_type);
+    // Lind-IF: this call is to be replaced by Core's exec transaction, which
+    // may switch runtimes:
+    //     target = registered runtime whose belongs_to_runtime(path) is true
+    //     staging = staging cage ID allocated by Core
+    //     target.init_cage(staging, path, LindInitArgs { argv, envp }, true)
+    //     target.create_thread(staging, main thread, LindCloneArgs { .. })
+    //     target.apply_staging_cage(staging, execing_cageid)
+    // A failure before apply_staging_cage's point of no return discards the
+    // staging cage (target.terminate_cage(staging)) and returns the errno to
+    // the old image. Afterwards the old image is released by the source
+    // runtime (`runtime` here), e.g. runtime.terminate_cage(execing_cageid)
+    // restricted to its own metadata (open in Lind-IF), and a later failure
+    // terminates the cage instead of returning.
     runtime.handle_exec(
         cageid,
         arg1, arg1_cageid,
@@ -204,6 +196,15 @@ extern "C" fn shim_exit_handler(
         });
 
     let runtime = get_runtime_handler(runtime_type);
+    // Lind-IF: this call is to be replaced by:
+    //     runtime.terminate_thread(exiting_cageid, tid = arg2)
+    //     if cage::signal::lind_thread_exit(exiting_cageid, tid) reports the
+    //     last thread: runtime.terminate_cage(exiting_cageid), then Core
+    //     finalizes the cage (cage_finalize: zombie, SIGCHLD).
+    // terminate_thread on the calling thread must hand off to a different
+    // stack or worker rather than tear down the stack it is running on; both
+    // runtimes currently defer this into their own exit paths (Wasmtime's
+    // OnCalledAction, MPK's exit stack).
     runtime.handle_exit(
         cageid,
         arg1, arg1_cageid,
@@ -219,10 +220,8 @@ extern "C" fn shim_exit_handler(
 
 fn memory_runtime(cage_id: u64) -> &'static dyn LindRuntime {
     match threei::get_cage_runtime(cage_id) {
-        Some(threei_const::RUNTIME_TYPE_WASMTIME) => {
-            &lind_runtimes::lind_wasm::lind_if::WasmRuntime
-        }
-        Some(threei_const::RUNTIME_TYPE_MPK) => &lind_runtimes::lind_mpk::lind_if::MpkRuntime,
+        Some(threei_const::RUNTIME_TYPE_WASMTIME) => &WasmRuntime,
+        Some(threei_const::RUNTIME_TYPE_MPK) => &MpkRuntime,
         runtime => panic!("memory operation: invalid runtime {runtime:?} for cage {cage_id}"),
     }
 }
@@ -353,7 +352,7 @@ fn register_memory_entries() {
 mod memory_dispatch_tests {
     use super::*;
     use cage::{VmmapBitWidth, VmmapOps};
-    use crate::lind_mpk::pkeys;
+    use lind_runtimes::lind_mpk::pkeys;
     use lind_runtimes::lind_mpk::CAGE_RESERVATION_SIZE;
     use std::sync::atomic::Ordering;
     use std::sync::Mutex;
@@ -591,14 +590,8 @@ mod memory_dispatch_tests {
 /// Register the Lind-IF runtimes with Core so it can notify them, e.g. of
 /// pending signals.
 fn register_lind_runtimes() {
-    cage::register_runtime(
-        threei_const::RUNTIME_TYPE_WASMTIME,
-        &lind_runtimes::lind_wasm::lind_if::WasmRuntime,
-    );
-    cage::register_runtime(
-        threei_const::RUNTIME_TYPE_MPK,
-        &lind_runtimes::lind_mpk::lind_if::MpkRuntime,
-    );
+    cage::register_runtime(threei_const::RUNTIME_TYPE_WASMTIME, &WasmRuntime);
+    cage::register_runtime(threei_const::RUNTIME_TYPE_MPK, &MpkRuntime);
 }
 
 /// Register the Lind-IF runtimes with Core and the lifecycle and memory shims

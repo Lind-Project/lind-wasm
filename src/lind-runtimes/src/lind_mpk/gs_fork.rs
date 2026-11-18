@@ -52,7 +52,7 @@ use crate::lind_mpk::RuntimeInfo::{
 
 const PAGE_SIZE: usize = 1 << PAGESHIFT;
 
-pub(super) use lind_runtimes::lind_mpk::{CAGE_RESERVATION_SIZE, GS_FORK_ARENA_SIZE};
+pub(super) use super::{CAGE_RESERVATION_SIZE, GS_FORK_ARENA_SIZE};
 /// One arena slot holds a stack of at most `CAGE_STACK_SIZE` bytes below a
 /// `PROT_NONE` guard of `CAGE_STACK_GUARD` bytes.
 const STACK_SLOT_SIZE: usize = CAGE_STACK_SIZE + CAGE_STACK_GUARD;

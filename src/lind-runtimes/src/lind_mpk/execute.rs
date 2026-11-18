@@ -3,7 +3,6 @@
 
 
 
-use crate::cli::CliOptions;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 use crate::lind_mpk::loader::{
     auxv,
@@ -13,7 +12,7 @@ use crate::lind_mpk::loader::{
 };
 use crate::lind_mpk::syscalls::{
     LIND_MANAGER, NO_INTERPOSE,
-    mpk_clone_syscall_entry, mpk_exit_syscall_entry, mpk_make_threei_call_wrapper,
+    mpk_make_threei_call_wrapper,
     register_arch_prctl_syscall_handler, register_mmap_syscall_handler,
     register_set_tid_address_syscall_handler,
 };
@@ -27,7 +26,6 @@ use crate::lind_mpk::RuntimeInfo::{
 use crate::lind_mpk::gs_fork::{
     record_guest_stack, release_cage_memory, set_gs_base, CAGE_RESERVATION_SIZE, GS_FORK_ARENA_SIZE,
 };
-use crate::shims::SyscallRuntime;
 use typemap::datatype_conversion::sc_convert_ptr_to_host;
 use anyhow::{Context, bail};
 use cage::{VmmapBitWidth, get_cage, lind_signal_init};
@@ -68,7 +66,7 @@ const RTLD_DI_LINKMAP: c_int = 2;
 
 // 4 GB virtual address space reserved for each cage with MAP_NORESERVE
 // (no swap space is committed until pages are actually touched).
-pub(super) use lind_runtimes::lind_mpk::MPK_MEMORY_SIZE;
+pub(super) use super::MPK_MEMORY_SIZE;
 const MPK_HEAP_START_OFFSET: usize = 3 * 1024 * 1024 * 1024;
 const MPK_MEMORY_ALIGNMENT: usize = 1024 * 1024 * 1024;
 
@@ -645,94 +643,6 @@ unsafe fn jump_to_entrypoint(new_rsp: usize, entrypoint: usize) -> ! {
     }
 }
 
-// ── MPK SyscallRuntime implementation ────────────────────────────────────────
-
-/// MPK runtime implementation.
-pub struct MpkRuntime;
-
-impl SyscallRuntime for MpkRuntime {
-    fn handle_clone(
-        &self,
-        cageid: u64,
-        arg1: u64, arg1_cageid: u64,
-        arg2: u64, arg2_cageid: u64,
-        arg3: u64, arg3_cageid: u64,
-        arg4: u64, arg4_cageid: u64,
-        arg5: u64, arg5_cageid: u64,
-        arg6: u64, arg6_cageid: u64,
-    ) -> i32 {
-        mpk_clone_syscall_entry(
-            cageid,
-            arg1, arg1_cageid,
-            arg2, arg2_cageid,
-            arg3, arg3_cageid,
-            arg4, arg4_cageid,
-            arg5, arg5_cageid,
-            arg6, arg6_cageid,
-        )
-    }
-
-    fn handle_exec(
-        &self,
-        cageid: u64,
-        arg1: u64, arg1_cageid: u64,
-        arg2: u64, arg2_cageid: u64,
-        arg3: u64, arg3_cageid: u64,
-        arg4: u64, arg4_cageid: u64,
-        arg5: u64, arg5_cageid: u64,
-        arg6: u64, arg6_cageid: u64,
-    ) -> i32 {
-        // arg1 = path, arg1_cageid = execing_cageid
-        // arg2 = argv, arg2_cageid = envp (based on 3i convention)
-
-        let _ = (cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
-        
-        // The pointers (and the string pointers in argv/envp) are guest
-        // addresses of the cage that owns them; in a gs-forked cage they are
-        // shifted by the cage's logical offset.
-        let path_ptr = sc_convert_ptr_to_host(arg1, arg1_cageid) as *const c_char;
-        let argv = GuestPtrArray {
-            ptr: sc_convert_ptr_to_host(arg2, arg2_cageid) as *const u64,
-            cageid: arg2_cageid,
-        };
-        let envp = GuestPtrArray {
-            ptr: sc_convert_ptr_to_host(arg3, arg3_cageid) as *const u64,
-            cageid: arg3_cageid,
-        };
-
-        //TODO: handle argument gathering from different cages
-        //cageid is the rawposix cageid
-        match exec_mpk_internal(arg1_cageid, path_ptr, argv, envp) {
-            Ok(code) => code,
-            Err(e) => {
-                eprintln!("[lind-mpk] exec failed: {}", e);
-                -1
-            }
-        }
-    }
-
-    fn handle_exit(
-        &self,
-        cageid: u64,
-        arg1: u64, arg1_cageid: u64,
-        arg2: u64, arg2_cageid: u64,
-        arg3: u64, arg3_cageid: u64,
-        arg4: u64, arg4_cageid: u64,
-        arg5: u64, arg5_cageid: u64,
-        arg6: u64, arg6_cageid: u64,
-    ) -> i32 {
-        mpk_exit_syscall_entry(
-            cageid,
-            arg1, arg1_cageid,
-            arg2, arg2_cageid,
-            arg3, arg3_cageid,
-            arg4, arg4_cageid,
-            arg5, arg5_cageid,
-            arg6, arg6_cageid,
-        )
-    }
-}
-
 // ── MPK syscall interposition and execution ──────────────────────────────────
 
 /// Syscall interposition handler: forwards every native syscall issued inside
@@ -843,7 +753,7 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
 
 /// Internal helper for MPK exec: tears down the old namespace and loads a new program.
 ///
-/// This is called by MpkRuntime::handle_exec when the guest issues an exec syscall.
+/// This is called by `MpkRuntime::handle_exec` when the guest issues an exec syscall.
 /// It performs the following steps:
 /// 1. Retrieves and tears down the existing MPKRuntimeInfo (closes dlmopen handles)
 /// 2. Parses the path, argv, and envp from the native pointers
@@ -851,9 +761,9 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
 /// A NULL-terminated array of guest string pointers (argv/envp). `ptr` is
 /// already converted to a host address; its entries are guest addresses of
 /// cage `cageid`.
-struct GuestPtrArray {
-    ptr: *const u64,
-    cageid: u64,
+pub(crate) struct GuestPtrArray {
+    pub(crate) ptr: *const u64,
+    pub(crate) cageid: u64,
 }
 
 impl GuestPtrArray {
@@ -863,7 +773,7 @@ impl GuestPtrArray {
     }
 }
 
-fn exec_mpk_internal(
+pub(crate) fn exec_mpk_internal(
     cage_id: u64,
     path_ptr: *const c_char,
     argv: GuestPtrArray,
@@ -1163,12 +1073,23 @@ fn exec_mpk_internal(
     unreachable!("jmp_into_cage_prepared_gs_naked returned unexpectedly");
 }
 
-pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32> {
-    let so_path = lindboot_cli.wasm_file();
+/// Launch parameters for the initial MPK cage, taken from the lind-boot
+/// command line.
+pub struct MpkLaunch {
+    /// Program path (argv[0]) followed by its arguments.
+    pub args: Vec<String>,
+    /// `--env` variables; `None` inherits the host value.
+    pub vars: Vec<(String, Option<String>)>,
+    /// Disable syscall interposition (`--no-interpose`).
+    pub no_interpose: bool,
+}
+
+pub fn execute_mpk(launch: MpkLaunch, cage_id: u64) -> anyhow::Result<i32> {
+    let so_path = launch.args[0].as_str();
 
     // Propagate the --no-interpose flag globally before any interpose call.
-    NO_INTERPOSE.store(lindboot_cli.no_interpose, Ordering::Release);
-    if lindboot_cli.no_interpose {
+    NO_INTERPOSE.store(launch.no_interpose, Ordering::Release);
+    if launch.no_interpose {
         mpk_debug("--no-interpose: syscall interposition disabled");
         // Context stacks are created with null handlers, so the guest
         // trampolines issue raw syscalls.
@@ -1284,14 +1205,14 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     // write argc/argv/envp entry layout.
     let (_, cage_stack_top) = allocate_stack_in_vmmap(cage_id, CAGE_STACK_GUARD, CAGE_STACK_SIZE)?;
     record_guest_stack(tid, cage_stack_top - CAGE_STACK_SIZE, CAGE_STACK_SIZE);
-    let mut launch_vars = lindboot_cli.vars.clone();
+    let mut launch_vars = launch.vars.clone();
     merge_host_ld_env_vars(&mut launch_vars);
     ensure_ld_library_path_contains_lib_elf(&mut launch_vars);
 
     let entry_rsp = unsafe {
         write_process_entry_stack(
             cage_stack_top,
-            &lindboot_cli.args,
+            &launch.args,
             &launch_vars,
             &so_path,
             &process_auxv,

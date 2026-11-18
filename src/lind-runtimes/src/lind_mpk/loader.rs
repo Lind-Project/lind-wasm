@@ -514,14 +514,22 @@ mod tests {
 		flags
 	}
 
+	fn lindfs_root() -> PathBuf {
+		// The crate is built through the wasmtime/crates symlink; resolve it
+		// to src/lind-runtimes before walking up to the repository root.
+		Path::new(env!("CARGO_MANIFEST_DIR"))
+			.canonicalize()
+			.expect("failed to resolve CARGO_MANIFEST_DIR")
+			.join("..")
+			.join("..")
+			.join("lindfs")
+	}
+
 	fn real_ldso_path() -> PathBuf {
 		let path = std::env::var_os("LIND_TEST_LDSO")
 			.map(PathBuf::from)
 			.unwrap_or_else(|| {
-				Path::new(env!("CARGO_MANIFEST_DIR"))
-					.join("..")
-					.join("..")
-					.join("lindfs")
+				lindfs_root()
 					.join("lib")
 					.join("ld.so")
 			});
@@ -533,10 +541,7 @@ mod tests {
 		let path = std::env::var_os("LIND_TEST_LIBC")
 			.map(PathBuf::from)
 			.unwrap_or_else(|| {
-				Path::new(env!("CARGO_MANIFEST_DIR"))
-					.join("..")
-					.join("..")
-					.join("lindfs")
+				lindfs_root()
 					.join("lib")
 					.join("elf")
 					.join("libc.so")

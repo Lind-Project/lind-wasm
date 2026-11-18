@@ -1,9 +1,19 @@
 [package]
 name = "lind-runtimes"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
+# Built from the wasmtime workspace (crates/lind-runtimes), where the
+# wasmtime-lind-* path dependencies below resolve.
 [dependencies]
-libc = "0.2"
+anyhow = "1.0"
 cage = { path = "../cage" }
+goblin = "0.10"
+libc = "0.2"
 lind-if = { path = "../lind-if" }
+rawposix = { path = "../rawposix" }
+sysdefs = { path = "../sysdefs" }
+threei = { path = "../threei" }
+typemap = { path = "../typemap" }
+wasmtime-lind-multi-process = { path = "../lind-multi-process" }
+wasmtime-lind-utils = { path = "../lind-utils" }
