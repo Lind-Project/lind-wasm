@@ -196,8 +196,8 @@ pub struct LindMunmapArgs {
     pub length: u64,
 }
 
-/// The Lind-to-runtime boundary. Runtime implementations are not yet wired to
-/// the active backends.
+/// The Lind-to-runtime boundary. Memory operations are wired through the
+/// temporary 3i shims; the remaining operations are still provisional.
 pub trait LindRuntime: Send + Sync {
     fn belongs_to_runtime(&self, exe_path: &str) -> LindResult<bool>;
 
@@ -280,6 +280,8 @@ pub trait LindRuntime: Send + Sync {
 
     fn do_mprotect(&self, cage_id: CageId, args: &LindMprotectArgs) -> LindResult<()>;
 
+    /// Release host pages. Callers that must retain a cage reservation remap
+    /// the range with `PROT_NONE` through `do_mmap` instead.
     fn do_munmap(&self, cage_id: CageId, args: &LindMunmapArgs) -> LindResult<()>;
 }
 

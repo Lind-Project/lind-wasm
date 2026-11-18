@@ -1,8 +1,14 @@
-//! Unified syscall dispatch shims for clone, exec, and exit.
+//! Unified syscall dispatch shims for lifecycle and memory operations.
 //!
 //! A single 3i handler is registered per syscall.  Each shim resolves the
 //! runtime type of the cage that originally issued the syscall, then
-//! delegates to the appropriate runtime implementation via the `SyscallRuntime` trait.
+//! delegates to the appropriate runtime implementation via `SyscallRuntime`
+//! (lifecycle) or `LindRuntime` (memory).
+//!
+//! Memory requests originate in RawPOSIX after validation and translation.
+//! `arg1_cageid` selects the affected cage; arguments contain host addresses
+//! and host fds, not guest pointers or virtual fds. Results are i64 addresses
+//! or negative errnos.
 //!
 //! Argument layout when a shim is invoked (matches `threei::RawCallFunc`):
 //!
@@ -29,9 +35,16 @@
 //!     arg2            = tid
 //!     …
 
-use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID};
-use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
+use sysdefs::constants::lind_platform_const::{
+    RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
+};
+use sysdefs::constants::syscall_const::{
+    CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, MMAP_SYSCALL, MPROTECT_SYSCALL, MUNMAP_SYSCALL,
+};
 use threei::threei_const;
+use typemap::lind_if::{
+    LindError, LindMmapArgs, LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime,
+};
 
 use crate::lind_mpk::execute::MpkRuntime;
 use crate::lind_wasmtime::execute::WasmtimeRuntime;
@@ -202,15 +215,314 @@ extern "C" fn shim_exit_handler(
     )
 }
 
-// ── registration ─────────────────────────────────────────────────────────────
+// ── Memory dispatch ──────────────────────────────────────────────────────────
 
-/// Register the three unified syscall shims with the 3i handler table.
-///
-/// Must be called once at boot time, after `rawposix_start()` and before any
-/// cage is created.  Replaces the separate `register_wasmtime_syscall_entry()`
-/// and `register_mpk_syscall_entry()` calls that previously lived in each
-/// backend's `execute.rs`.
+fn memory_runtime(cage_id: u64) -> &'static dyn LindRuntime {
+    match threei::get_cage_runtime(cage_id) {
+        Some(threei_const::RUNTIME_TYPE_WASMTIME) => {
+            &lind_runtimes::lind_wasm::lind_if::WasmRuntime
+        }
+        Some(threei_const::RUNTIME_TYPE_MPK) => &lind_runtimes::lind_mpk::lind_if::MpkRuntime,
+        runtime => panic!("memory operation: invalid runtime {runtime:?} for cage {cage_id}"),
+    }
+}
+
+fn memory_result(result: LindResult<u64>) -> i64 {
+    match result {
+        Ok(value) => value as i64,
+        Err(LindError::Other(errno)) => -(errno as i64),
+        Err(LindError::MemoryFault(fault)) => {
+            panic!("host mapping operation unexpectedly accessed guest memory: {fault:?}")
+        }
+    }
+}
+
+extern "C" fn shim_mmap_handler(
+    _cageid: u64,
+    address: u64,
+    cage_id: u64,
+    length: u64,
+    _length_cageid: u64,
+    prot: u64,
+    _prot_cageid: u64,
+    flags: u64,
+    _flags_cageid: u64,
+    fd: u64,
+    _fd_cageid: u64,
+    offset: u64,
+    _offset_cageid: u64,
+) -> i64 {
+    memory_result(memory_runtime(cage_id).do_mmap(
+        cage_id,
+        &LindMmapArgs {
+            address,
+            length,
+            prot: prot as i32,
+            flags: flags as i32,
+            fd: fd as i32,
+            offset: offset as i64,
+        },
+        false,
+    ))
+}
+
+extern "C" fn shim_mprotect_handler(
+    _cageid: u64,
+    address: u64,
+    cage_id: u64,
+    length: u64,
+    _length_cageid: u64,
+    prot: u64,
+    _prot_cageid: u64,
+    _arg4: u64,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i64 {
+    memory_result(
+        memory_runtime(cage_id)
+            .do_mprotect(
+                cage_id,
+                &LindMprotectArgs {
+                    address,
+                    length,
+                    prot: prot as i32,
+                },
+            )
+            .map(|()| 0),
+    )
+}
+
+extern "C" fn shim_munmap_handler(
+    _cageid: u64,
+    address: u64,
+    cage_id: u64,
+    length: u64,
+    _length_cageid: u64,
+    _arg3: u64,
+    _arg3_cageid: u64,
+    _arg4: u64,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i64 {
+    memory_result(
+        memory_runtime(cage_id)
+            .do_munmap(cage_id, &LindMunmapArgs { address, length })
+            .map(|()| 0),
+    )
+}
+
+fn register_memory_entries() {
+    for (syscall, handler) in [
+        (MMAP_SYSCALL, shim_mmap_handler as threei::RawCallFunc),
+        (
+            MPROTECT_SYSCALL,
+            shim_mprotect_handler as threei::RawCallFunc,
+        ),
+        (MUNMAP_SYSCALL, shim_munmap_handler as threei::RawCallFunc),
+    ] {
+        let result = threei::register_handler(
+            UNUSED_ID,
+            WASMTIME_CAGEID,
+            RAWPOSIX_CAGEID,
+            syscall as u64,
+            threei_const::RUNTIME_TYPE_WASMTIME,
+            WASMTIME_CAGEID,
+            handler as *const () as u64,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+        );
+        assert_eq!(
+            result, 0,
+            "registering runtime memory syscall {syscall} failed"
+        );
+    }
+}
+
+#[cfg(test)]
+mod memory_dispatch_tests {
+    use super::*;
+    use cage::{VmmapBitWidth, VmmapOps};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use sysdefs::constants::lind_platform_const::INIT_CAGEID;
+
+    static MPK_MAP_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    unsafe fn mpk_mapping_hook(
+        cage_id: u64,
+        address: usize,
+        length: usize,
+        prot: i32,
+        flags: i32,
+        fd: i32,
+        offset: i64,
+    ) -> Option<usize> {
+        MPK_MAP_CALLS.fetch_add(1, Ordering::Relaxed);
+        unsafe {
+            crate::lind_mpk::pkeys::cage_mmap_hook(
+                cage_id, address, length, prot, flags, fd, offset,
+            )
+        }
+    }
+
+    fn rawposix_call(handler: threei::RawCallFunc, args: [u64; 6]) -> i64 {
+        handler(
+            INIT_CAGEID,
+            args[0],
+            INIT_CAGEID,
+            args[1],
+            INIT_CAGEID,
+            args[2],
+            INIT_CAGEID,
+            args[3],
+            INIT_CAGEID,
+            args[4],
+            INIT_CAGEID,
+            args[5],
+            INIT_CAGEID,
+        )
+    }
+
+    #[test]
+    fn rawposix_dispatches_memory_operations_to_both_runtimes() {
+        rawposix::init::rawposix_start(0);
+        register_syscall_entries();
+        cage::set_cage_mmap_hook(mpk_mapping_hook);
+        let cage = cage::get_cage(INIT_CAGEID).unwrap();
+        let page = 4096usize;
+        let prot = libc::PROT_READ | libc::PROT_WRITE;
+
+        for runtime in [
+            threei_const::RUNTIME_TYPE_WASMTIME,
+            threei_const::RUNTIME_TYPE_MPK,
+        ] {
+            threei::set_cage_runtime(INIT_CAGEID, runtime);
+            cage.runtime_type.store(runtime, Ordering::Release);
+            let reservation = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    3 * page,
+                    libc::PROT_NONE,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    -1,
+                    0,
+                )
+            };
+            assert_ne!(reservation, libc::MAP_FAILED);
+            let host = reservation as u64 + page as u64;
+            let guest = if runtime == threei_const::RUNTIME_TYPE_WASMTIME {
+                page as u64
+            } else {
+                host
+            };
+            {
+                let mut vmmap = cage.vmmap.write();
+                vmmap.clear();
+                vmmap.set_base_address(reservation as usize);
+                vmmap.user_addr_bit_width = if runtime == threei_const::RUNTIME_TYPE_WASMTIME {
+                    VmmapBitWidth::Vmmap32Bit
+                } else {
+                    VmmapBitWidth::Vmmap64Bit
+                };
+            }
+            let before = MPK_MAP_CALLS.load(Ordering::Relaxed);
+            assert_eq!(
+                rawposix_call(
+                    rawposix::fs_calls::mmap_syscall,
+                    [
+                        guest,
+                        page as u64,
+                        prot as u64,
+                        (libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_FIXED) as u64,
+                        u64::MAX,
+                        0,
+                    ]
+                ),
+                guest as i64
+            );
+            unsafe { *(host as *mut u8) = 0xa5 };
+            assert_eq!(
+                rawposix_call(
+                    rawposix::fs_calls::mprotect_syscall,
+                    [host, page as u64, libc::PROT_READ as u64, 0, 0, 0,]
+                ),
+                0
+            );
+            {
+                let vmmap = cage.vmmap.read();
+                let page = vmmap.sys_to_page_num(host as usize);
+                assert_eq!(vmmap.find_page(page).unwrap().prot, libc::PROT_READ);
+            }
+            assert_eq!(unsafe { *(host as *const u8) }, 0xa5);
+
+            assert_eq!(
+                rawposix_call(
+                    rawposix::fs_calls::mprotect_syscall,
+                    [host + 1, page as u64, libc::PROT_READ as u64, 0, 0, 0,]
+                ),
+                -(libc::EINVAL as i64)
+            );
+            assert_eq!(
+                rawposix_call(
+                    rawposix::fs_calls::munmap_syscall,
+                    [host, page as u64, 0, 0, 0, 0,]
+                ),
+                0
+            );
+            {
+                let vmmap = cage.vmmap.read();
+                let page = vmmap.sys_to_page_num(host as usize);
+                assert!(vmmap.find_page(page).is_none());
+            }
+            let after = MPK_MAP_CALLS.load(Ordering::Relaxed);
+            assert_eq!(
+                after - before,
+                if runtime == threei_const::RUNTIME_TYPE_MPK {
+                    2
+                } else {
+                    0
+                }
+            );
+
+            // mmap_inner errors must survive 3i, independent of host TLS errno.
+            unsafe { *libc::__errno_location() = libc::EIO };
+            let result = rawposix::fs_calls::mmap_inner(
+                INIT_CAGEID,
+                std::ptr::null_mut(),
+                0,
+                prot,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                -1,
+                0,
+            );
+            assert_eq!(result as i64, -(libc::EINVAL as i64));
+
+            assert_eq!(
+                unsafe { libc::mprotect(host as *mut libc::c_void, page, prot) },
+                0
+            );
+            assert_eq!(unsafe { *(host as *const u8) }, 0);
+            assert_eq!(unsafe { libc::munmap(reservation, 3 * page) }, 0);
+            threei::remove_cage_runtime(INIT_CAGEID);
+        }
+        cage::remove_cage(INIT_CAGEID);
+    }
+}
+
+/// Register lifecycle and memory shims after RawPOSIX initialization and
+/// before any guest cage is created.
 pub fn register_syscall_entries() {
+    register_memory_entries();
     let clone_ret = threei::register_handler(
         UNUSED_ID,
         WASMTIME_CAGEID,

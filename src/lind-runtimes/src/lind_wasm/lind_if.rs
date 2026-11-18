@@ -1,8 +1,8 @@
 //! Wasm implementation of the draft Lind-IF.
 //!
-//! The existing Wasmtime backend has not yet been migrated to this interface.
+//! Lifecycle operations have not yet been migrated to this interface.
 
-use crate::unsupported;
+use crate::{memory, unsupported};
 use typemap::lind_if::{
     AbiDescriptor, CageId, ConstLocalBuffer, GuestAddress, HandlerReturn, HostAddress,
     LindAbiConversion, LindCloneArgs, LindHandlerCall, LindInitArgs, LindIovecAccess, LindMmapArgs,
@@ -100,18 +100,30 @@ impl LindRuntime for WasmRuntime {
     fn do_mmap(
         &self,
         _cage_id: CageId,
-        _args: &LindMmapArgs,
-        _is_reservation: bool,
+        args: &LindMmapArgs,
+        is_reservation: bool,
     ) -> LindResult<HostAddress> {
-        unsupported()
+        if is_reservation {
+            return unsupported();
+        }
+        memory::mmap_result(unsafe {
+            libc::mmap(
+                args.address as *mut libc::c_void,
+                args.length as usize,
+                args.prot,
+                args.flags,
+                args.fd,
+                args.offset,
+            )
+        })
     }
 
-    fn do_mprotect(&self, _cage_id: CageId, _args: &LindMprotectArgs) -> LindResult<()> {
-        unsupported()
+    fn do_mprotect(&self, _cage_id: CageId, args: &LindMprotectArgs) -> LindResult<()> {
+        memory::mprotect(args)
     }
 
-    fn do_munmap(&self, _cage_id: CageId, _args: &LindMunmapArgs) -> LindResult<()> {
-        unsupported()
+    fn do_munmap(&self, _cage_id: CageId, args: &LindMunmapArgs) -> LindResult<()> {
+        memory::munmap(args)
     }
 }
 

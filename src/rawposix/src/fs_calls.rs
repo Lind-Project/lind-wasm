@@ -1,5 +1,5 @@
 use cage::{
-    get_cage, get_shm_length, is_mmap_error, mmap_cage, new_shm_segment, round_up_page, shmat_helper,
+    get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
     shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
     SHM_METADATA,
 };
@@ -15,7 +15,10 @@ use sysdefs::constants::fs_const::{
     STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
 
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::lind_platform_const::{
+    FDKIND_KERNEL, MAXFD, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
+};
+use sysdefs::constants::syscall_const::{MMAP_SYSCALL, MPROTECT_SYSCALL};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
 use sysdefs::logging::lind_debug_panic;
 use typemap::cage_helpers::*;
@@ -949,8 +952,7 @@ pub extern "C" fn mmap_syscall(
 
         // Check for error BEFORE sys_to_user conversion
         if is_mmap_error(result) {
-            let errno = get_errno();
-            return (handle_errno(errno, "mmap")) as i64;
+            return result as i64;
         }
 
         let result = vmmap.sys_to_user(result);
@@ -1009,15 +1011,13 @@ pub extern "C" fn mmap_syscall(
     useraddr as i64
 }
 
-/// Helper function for `mmap` / `munmap`
+/// Runtime mapping helper for `mmap` and `brk`.
 ///
-/// This function calls underlying libc::mmap and serves as helper functions for memory related (vmmap related)
-/// syscalls. This function provides fd translation between virtual to kernel.
+/// Translate the virtual fd and request the runtime's host mapping through 3i.
 ///
 /// Returns:
 /// - On success: valid page-aligned memory address
-/// - On failure: -1 cast to usize (non-page-aligned, caller should check alignment, get_errno and handle_errno)
-/// - On fd translation error: negative errno value cast to usize (non-page-aligned)
+/// - On failure: negative errno value cast to usize (non-page-aligned).
 pub extern "C" fn mmap_inner(
     cageid: u64,
     addr: *mut u8,
@@ -1027,36 +1027,73 @@ pub extern "C" fn mmap_inner(
     vfd_arg: i32,
     off: i64,
 ) -> usize {
-    if vfd_arg != -1 {
+    let fd = if vfd_arg != -1 {
         match fdtables::translate_virtual_fd(cageid, vfd_arg as u64) {
-            Ok(kernel_fd) => {
-                let ret = unsafe {
-                    mmap_cage(
-                        cageid,
-                        addr as usize,
-                        len,
-                        prot,
-                        flags,
-                        kernel_fd.underfd as i32,
-                        off,
-                    ) as i64
-                };
-
-                // Return raw result (including -1 on error)
-                // Caller will check page alignment to detect errors
-                ret as usize
-            }
+            Ok(kernel_fd) => kernel_fd.underfd as i32,
             Err(_e) => {
                 return syscall_error(Errno::EBADF, "mmap", "Bad File Descriptor") as usize;
             }
         }
     } else {
-        // Handle mmap with fd = -1 (anonymous memory mapping or special case)
-        let ret = unsafe { mmap_cage(cageid, addr as usize, len, prot, flags, -1, off) as i64 };
-        // Return raw result (including -1 on error)
-        // Caller will check page alignment to detect errors
-        ret as usize
+        -1
+    };
+    runtime_memory_call(
+        cageid,
+        MMAP_SYSCALL,
+        [
+            addr as u64,
+            len as u64,
+            prot as u64,
+            flags as u64,
+            fd as u64,
+            off as u64,
+        ],
+    ) as usize
+}
+
+/// Supervisor-side memory requests carry host addresses and host fds.
+/// The first argument's owner identifies the cage whose runtime must act.
+fn runtime_memory_call(cageid: u64, syscall: i32, args: [u64; 6]) -> i64 {
+    threei::make_syscall(
+        RAWPOSIX_CAGEID,
+        syscall as u64,
+        UNUSED_NAME,
+        WASMTIME_CAGEID,
+        args[0],
+        cageid,
+        args[1],
+        UNUSED_ID,
+        args[2],
+        UNUSED_ID,
+        args[3],
+        UNUSED_ID,
+        args[4],
+        UNUSED_ID,
+        args[5],
+        UNUSED_ID,
+    )
+}
+
+/// Guest unmaps must not release host address space inside the cage's
+/// reservation, so the pages are replaced with fresh `PROT_NONE` anonymous
+/// memory through the runtime's mmap rather than calling its munmap.
+///
+/// Returns 0 on success or a negative errno.
+fn release_mapping(cageid: u64, addr: *mut u8, len: usize) -> i64 {
+    let ret = mmap_inner(
+        cageid,
+        addr,
+        len,
+        PROT_NONE,
+        (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+        -1,
+        0,
+    );
+    if is_mmap_error(ret) {
+        return ret as i64;
     }
+    assert_eq!(ret, addr as usize, "fixed PROT_NONE mapping moved");
+    0
 }
 
 /// Handler of the `munmap_syscall`, interacting with the `vmmap` structure.
@@ -1073,7 +1110,7 @@ pub extern "C" fn mmap_inner(
 ///
 /// ## Returns:
 ///     - 0 on success.
-///     - -1 on error, with errno set to indicate the error.
+///     - Negative errno on error.
 pub extern "C" fn munmap_syscall(
     cageid: u64,
     addr_arg: u64,
@@ -1127,26 +1164,9 @@ pub extern "C" fn munmap_syscall(
     for (act_start, act_end) in overlaps {
         let act_start_addr = vmmap.page_num_to_sys(act_start);
         let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
-        let result = unsafe {
-            mmap_cage(
-                cageid,
-                act_start_addr,
-                act_len,
-                PROT_NONE,
-                (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
-                -1,
-                0,
-            ) as usize
-        };
-        if result as isize == -1 {
-            let errno = get_errno();
-            return (handle_errno(errno, "munmap")) as i64;
-        }
-        if result != act_start_addr {
-            lind_debug_panic(&format!(
-                "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-                result as *const c_void, act_start_addr as *const c_void
-            ));
+        let result = release_mapping(cageid, act_start_addr as *mut u8, act_len);
+        if result < 0 {
+            return result;
         }
     }
 
@@ -1288,28 +1308,21 @@ pub extern "C" fn brk_syscall(
 
         // Check for error using page alignment
         if is_mmap_error(ret) {
-            let errno = get_errno();
-            return (handle_errno(errno, "brk")) as i64;
+            return ret as i64;
         }
     }
     // if we are shrinking the brk
     // we need to do something similar to munmap
     // to unmap the extra memory
     else if brk_page < old_brk_page {
-        let ret = mmap_inner(
+        let ret = release_mapping(
             cageid,
             new_heap_end_sys,
-            ((old_brk_page - brk_page) * PAGESIZE as usize),
-            PROT_NONE,
-            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
-            -1,
-            0,
+            (old_brk_page - brk_page) * PAGESIZE as usize,
         );
 
-        // Check for error using page alignment
-        if is_mmap_error(ret) {
-            let errno = get_errno();
-            return (handle_errno(errno, "brk")) as i64;
+        if ret < 0 {
+            return ret;
         }
     }
 
@@ -4463,11 +4476,13 @@ pub extern "C" fn mprotect_syscall(
     // Round length up to page boundary (mprotect operates on whole pages)
     let rounded_length = round_up_page(len as usize) as usize;
 
-    // Call the kernel mprotect
-    let ret = unsafe { libc::mprotect(addr as *mut c_void, rounded_length, prot) };
+    let ret = runtime_memory_call(
+        cageid,
+        MPROTECT_SYSCALL,
+        [addr as u64, rounded_length as u64, prot as u64, 0, 0, 0],
+    );
     if ret < 0 {
-        let errno = get_errno();
-        return (handle_errno(errno, "mprotect")) as i64;
+        return ret;
     }
 
     // Update vmmap to reflect the new protection flags

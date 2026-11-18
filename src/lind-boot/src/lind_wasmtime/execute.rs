@@ -240,6 +240,9 @@ pub fn execute_with_lind(
     module: Module,
     cageid: u64,
 ) -> Result<Vec<Val>> {
+    // Instantiation and reactor initialization may issue memory syscalls.
+    threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
+
     // -- Initialize the Wasmtime execution environment --
     let args = lind_boot.args.clone();
     let host = HostCtx::default();
@@ -712,9 +715,6 @@ fn load_main_module(
         register_grate_handler_for_cage(&grate_template, host, cageid)
             .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
     }
-
-    // 5) Notify threei of the cage runtime type
-    threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
     let mut linker = linker_guard.clone();
     linker.define_weak_imports_as_traps(&module);

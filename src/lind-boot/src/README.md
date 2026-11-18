@@ -27,7 +27,18 @@ src/
 replacement. The draft interface lives in
 [`typemap::lind_if`](../../typemap/src/lind_if.rs); the Wasm and MPK
 implementations are scaffolded in [`lind-runtimes`](../../lind-runtimes).
-They are not connected to the active runtimes and currently return `ENOSYS`.
+Memory operations now follow
+`RawPOSIX -> 3i -> shims.rs -> LindRuntime::do_mmap/do_mprotect/do_munmap`.
+RawPOSIX keeps argument validation, fd/address translation, and Vmmap updates;
+the runtime receives host addresses and host fds. The internal requests use
+syscall numbers 9, 10, and 11 with the affected cage in `arg1_cageid`, separate
+from the guest-facing RawPOSIX handlers. Results retain full-width addresses or
+negative errnos. Runtime `do_munmap` is a plain host unmap. Guest `munmap` and
+`brk` shrinking keep the runtime reservation because RawPOSIX itself requests a
+fixed anonymous `PROT_NONE` `do_mmap` over the released range instead of
+calling `do_munmap`. MPK mapping still uses its existing protection-key hook.
+Reservation bootstrap (`is_reservation = true`) and the other draft operations
+remain unimplemented and return `ENOSYS`.
 
 ## How To Use
 

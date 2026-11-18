@@ -1,8 +1,8 @@
 use lind_runtimes::{lind_mpk::lind_if::MpkRuntime, lind_wasm::lind_if::WasmRuntime};
 use typemap::lind_if::{
     AbiDescriptor, ConstLocalBuffer, Errno, LindAbiConversion, LindArgVec, LindCloneArgs,
-    LindError, LindInitArgs, LindIovecAccess, LindMmapArgs, LindResult, LindRuntime,
-    LindThreadDuplicateArgs, LocalBuffer, ThreadDuplicateMode, UserPtr,
+    LindError, LindInitArgs, LindIovecAccess, LindMmapArgs, LindMprotectArgs, LindMunmapArgs,
+    LindResult, LindRuntime, LindThreadDuplicateArgs, LocalBuffer, ThreadDuplicateMode, UserPtr,
 };
 
 fn assert_unimplemented<T: std::fmt::Debug>(result: LindResult<T>) {
@@ -13,7 +13,7 @@ fn assert_unimplemented<T: std::fmt::Debug>(result: LindResult<T>) {
 }
 
 #[test]
-fn unmigrated_runtimes_cannot_report_successful_lifecycle_or_mapping() {
+fn unmigrated_lifecycle_and_reservation_operations_fail_explicitly() {
     let init = LindInitArgs {
         argv: LindArgVec::Host(vec![]),
         envp: LindArgVec::Host(vec![]),
@@ -54,7 +54,75 @@ fn unmigrated_runtimes_cannot_report_successful_lifecycle_or_mapping() {
         assert_unimplemented(runtime.terminate_thread(1, 1));
         assert_unimplemented(runtime.terminate_cage(1));
         assert_unimplemented(runtime.do_mmap(1, &mmap, true));
-        assert_unimplemented(runtime.do_mmap(1, &mmap, false));
+    }
+}
+
+#[test]
+fn runtime_mappings_apply_host_operations_and_report_errors() {
+    for runtime in [&WasmRuntime as &dyn LindRuntime, &MpkRuntime] {
+        let mut args = LindMmapArgs {
+            address: 0,
+            length: 4096,
+            prot: libc::PROT_READ | libc::PROT_WRITE,
+            flags: libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+            fd: -1,
+            offset: 0,
+        };
+        let address = runtime.do_mmap(1, &args, false).unwrap();
+        unsafe { *(address as *mut u8) = 0xa5 };
+        runtime
+            .do_mprotect(
+                1,
+                &LindMprotectArgs {
+                    address,
+                    length: args.length,
+                    prot: libc::PROT_READ,
+                },
+            )
+            .unwrap();
+        assert_eq!(unsafe { *(address as *const u8) }, 0xa5);
+
+        assert!(matches!(
+            runtime.do_mprotect(
+                1,
+                &LindMprotectArgs {
+                    address: address + 1,
+                    length: args.length,
+                    prot: libc::PROT_READ,
+                }
+            ),
+            Err(LindError::Other(Errno::EINVAL))
+        ));
+        runtime
+            .do_munmap(
+                1,
+                &LindMunmapArgs {
+                    address,
+                    length: args.length,
+                },
+            )
+            .unwrap();
+        let maps = std::fs::read_to_string("/proc/self/maps").unwrap();
+        assert!(
+            !maps.lines().any(|line| {
+                let (start, end) = line
+                    .split_whitespace()
+                    .next()
+                    .unwrap()
+                    .split_once('-')
+                    .unwrap();
+                let start = u64::from_str_radix(start, 16).unwrap();
+                let end = u64::from_str_radix(end, 16).unwrap();
+                (start..end).contains(&address)
+            }),
+            "do_munmap must release the host pages"
+        );
+
+        args.length = 0;
+        assert!(matches!(
+            runtime.do_mmap(1, &args, false),
+            Err(LindError::Other(Errno::EINVAL))
+        ));
     }
 }
 
@@ -84,4 +152,47 @@ fn check_unavailable_accessors(
 fn unmigrated_conversions_reject_untrusted_pointers_without_touching_memory() {
     check_unavailable_accessors(&WasmRuntime, &WasmRuntime, AbiDescriptor::Wasm32);
     check_unavailable_accessors(&MpkRuntime, &MpkRuntime, AbiDescriptor::LinuxX86_64);
+}
+
+#[test]
+fn runtime_mmap_uses_host_fd_offset_and_shared_backing() {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
+    let fd = unsafe { libc::memfd_create(c"lind-if-map".as_ptr(), libc::MFD_CLOEXEC) };
+    assert!(fd >= 0);
+    let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    assert_eq!(unsafe { libc::ftruncate(fd.as_raw_fd(), 8192) }, 0);
+    for runtime in [&WasmRuntime as &dyn LindRuntime, &MpkRuntime] {
+        let value = 0x42u8;
+        assert_eq!(
+            unsafe { libc::pwrite(fd.as_raw_fd(), (&value as *const u8).cast(), 1, 4096) },
+            1
+        );
+        let mut args = LindMmapArgs {
+            address: 0,
+            length: 4096,
+            prot: libc::PROT_READ | libc::PROT_WRITE,
+            flags: libc::MAP_SHARED,
+            fd: fd.as_raw_fd(),
+            offset: 4096,
+        };
+        let address = runtime.do_mmap(1, &args, false).unwrap();
+        assert_eq!(unsafe { *(address as *const u8) }, value);
+        unsafe { *(address as *mut u8) = 0x7b };
+        let mut stored = 0u8;
+        assert_eq!(
+            unsafe { libc::pread(fd.as_raw_fd(), (&mut stored as *mut u8).cast(), 1, 4096) },
+            1
+        );
+        assert_eq!(stored, 0x7b);
+        assert_eq!(
+            unsafe { libc::munmap(address as *mut libc::c_void, 4096) },
+            0
+        );
+        args.fd = -1;
+        assert!(matches!(
+            runtime.do_mmap(1, &args, false),
+            Err(LindError::Other(Errno::EBADF))
+        ));
+    }
 }
