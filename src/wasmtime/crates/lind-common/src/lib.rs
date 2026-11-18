@@ -27,6 +27,18 @@ macro_rules! perf_stop {
 macro_rules! perf_stop {
     ($guard:ident) => {};
 }
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {
+        crate::perf::$counter.span_end();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {};
+}
 
 #[cfg(feature = "lind_perf")]
 pub mod perf;
@@ -179,6 +191,8 @@ fn add_syscall_to_linker<
             // check here to early-return when we are on a rewind replay path.
             if call_number as i32 == CLONE_SYSCALL {
                 if let Some(rewind_res) = wasmtime_lind_multi_process::catch_rewind(&mut caller) {
+                    // fork: the parent's rewind back into `clone` ends here.
+                    perf_span_end!(SPAN_FORK_PARENT_REWIND);
                     if rewind_res > 0 {
                         // On Asyncify rewind replay, `clone` must not be executed again.
                         // The positive rewind result is the real child cage id returned to the

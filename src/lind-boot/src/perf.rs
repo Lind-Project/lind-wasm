@@ -22,6 +22,7 @@ use rawposix::perf as rp;
 use threei::perf as ti;
 use wasmtime_lind_3i::perf as l3i;
 use wasmtime_lind_common::perf as lc;
+use wasmtime_lind_multi_process::perf as mp;
 
 /// Whole `grate_callback_trampoline` (3i's entry into the Wasmtime runtime for a grate call).
 pub static GRATE_CALLBACK_TRAMPOLINE: Counter =
@@ -41,6 +42,7 @@ fn all_counters() -> Vec<&'static Counter> {
         LIND_BOOT_COUNTERS,
         l3i::ALL_COUNTERS,
         ti::SPAN_COUNTERS,
+        mp::ALL_COUNTERS,
     ]
     .iter()
     .flat_map(|group| group.iter().copied())
@@ -115,6 +117,35 @@ static DERIVED: &[Derived] = &[
         label: "lind-3i: worker run excl. stack reset and Wasm call",
         outer: &l3i::WORKER_RUN,
         inner: &[&l3i::WORKER_RESET_STACK, &l3i::PASS_FPTR_CALL],
+    },
+    Derived {
+        label: "fork: parent setup excl. snapshots",
+        outer: &mp::FORK_PARENT_SETUP,
+        inner: &[&mp::FORK_PARENT_SNAPSHOTS],
+    },
+    Derived {
+        label: "fork: parent callback excl. thread spawn and waiting",
+        outer: &mp::FORK_PARENT_CALLBACK,
+        inner: &[&mp::FORK_PARENT_SPAWN, &mp::FORK_PARENT_WAIT],
+    },
+    Derived {
+        label: "fork: child setup excl. store, linker, instantiate",
+        outer: &mp::FORK_CHILD_SETUP,
+        inner: &[
+            &mp::FORK_CHILD_STORE,
+            &mp::FORK_CHILD_LINKER,
+            &mp::FORK_CHILD_INSTANTIATE,
+        ],
+    },
+    Derived {
+        label: "fork: instantiate excl. copying memory",
+        outer: &mp::FORK_CHILD_INSTANTIATE,
+        inner: &[&mp::FORK_COPY_MEMORY],
+    },
+    Derived {
+        label: "exit: cleanup excl. cage_finalize",
+        outer: &mp::EXIT_CLEANUP,
+        inner: &[&mp::EXIT_FINALIZE],
     },
 ];
 

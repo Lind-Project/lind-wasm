@@ -24,9 +24,12 @@ sysdefs = { path = "../sysdefs" }
 threei = { path = "../threei" }
 cage = { path = "../cage" }
 cfg-if = { workspace = true }
+lind-perf = { path = "../lind-perf", optional = true }
 
 [features]
 default = []
 disable_signals = []
 asyncify-setjmp = []
 lind-logging = ["sysdefs/lind-logging"]
+# fork/exit timing; perf builds only (see src/lind-perf).
+lind_perf = ["dep:lind-perf", "cage/lind_perf"]

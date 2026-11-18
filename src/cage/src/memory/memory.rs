@@ -83,6 +83,7 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// * `parent_cageid` - cageid of parent
 /// * `child_cageid` - caegid of child
 pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
+    perf_timer_any!(_t_copy = FORK_COPY_MEMORY);
     // first retrieve corresponding vmmaps
     let parent_cage = get_cage(parent_cageid).unwrap();
     let child_cage = get_cage(child_cageid).unwrap();

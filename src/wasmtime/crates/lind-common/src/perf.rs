@@ -1,6 +1,9 @@
 //! lind-perf counters and perf-only syscalls for lind-common (perf builds only).
 use lind_perf::{Counter, Unit};
 
+/// Ended in the `clone` rewind path of the syscall entry (see lind-multi-process `perf.rs`).
+pub use wasmtime_lind_multi_process::perf::SPAN_FORK_PARENT_REWIND;
+
 /// Benchmark syscall numbers live in 2001..=2999. Only these are timed.
 pub const BENCH_SYSCALL_MIN: u32 = 2001;
 pub const BENCH_SYSCALL_MAX: u32 = 2999;

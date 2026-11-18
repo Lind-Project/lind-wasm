@@ -82,6 +82,33 @@ impl Counter {
         }
     }
 
+    /// Like `timer()`, but records whenever this counter is the enabled one, whether or not the
+    /// thread is servicing a timed syscall. For paths that run outside a benchmark syscall or on
+    /// threads the syscall entry never saw: fork (whose child is built on a new thread) and exit.
+    #[inline(always)]
+    pub fn timer_any(&'static self) -> Option<Scope> {
+        if self.enabled.load(Ordering::Relaxed) {
+            Some(Scope {
+                counter: self,
+                slot: current_slot(),
+                start: read_start(),
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Like `span_start()`, but opens the span whenever this counter is enabled (see
+    /// `timer_any`). Close it with `span_end()` on the same thread.
+    #[inline(always)]
+    pub fn span_start_any(&'static self) {
+        if self.enabled.load(Ordering::Relaxed) {
+            let slot = current_slot();
+            let start = read_start();
+            SPAN.with(|s| s.set((start, slot, true)));
+        }
+    }
+
     /// End the span opened by `span_start()` on this thread and record it. No-op if this
     /// counter is disabled or no span is open.
     #[inline(always)]

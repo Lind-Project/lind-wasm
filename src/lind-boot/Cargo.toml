@@ -36,6 +36,7 @@ lind_perf = [
     "threei/lind_perf",
     "rawposix/lind_perf",
     "wasmtime-lind-3i/lind_perf",
+    "wasmtime-lind-multi-process/lind_perf",
 ]
 
 [dependencies]

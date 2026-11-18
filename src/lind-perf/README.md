@@ -133,6 +133,11 @@ startup syscalls, `printf`, `exit` and so on are never counted.
 
 2001/2002 can be interposed by a grate; 2003/2004 never reach 3i.
 
+`fork_wait.c` is not a benchmark syscall: it times `fork()` + `waitpid()` of a child that exits
+at once (200 times), reports that as `guest::per_call`, and is run with only the `fork::` and
+`exit::` counters. `run_microbench.sh` gives every benchmark only the counters on its path
+unless you pass `--perf-filter`.
+
 Two benchmark grates in `tests/benchmarks/lind-perf/` interpose on 2001/2002:
 
 | Grate | Handler | Path measured | Compare with |
@@ -173,6 +178,31 @@ report adds the per-syscall table (origin `cage` vs `fwd`) and skips the derived
 | `span::3i_trampoline_call_to_grate_wasm_call` | span: 3i `_call_grate_func` → lind-3i `GrateWorker::run` | from 3i calling the grate trampoline (`(trampoline)(…)`) to lind-3i about to call the grate's Wasm (`func.call(…)`): the way into a grate |
 | `span::grate_wasm_return_to_3i` | span: lind-3i `GrateWorker::run` → 3i `_call_grate_func` | from the grate's Wasm call returning to 3i getting the trampoline's result: the way back out |
 
+**fork and exit** (lind-multi-process, and `copy_memory` in the cage crate). These record on
+every fork and exit while their counter is enabled, not only during benchmark syscalls (fork
+builds the child on a new thread, which the syscall entry never sees). The `fork_wait` benchmark
+runs them.
+
+| Counter | Where | What it covers |
+|---|---|---|
+| `fork::parent_setup` | `fork_call` | parent: up to arming the Asyncify unwind |
+| `fork::parent_setup::snapshots` | `fork_call` | the linker and global snapshots taken for the child |
+| `fork::parent_unwind` | span: `fork_call` → unwind callback | the parent's Wasm stack unwinding |
+| `fork::parent_callback` | unwind callback | start the child's thread, wait for it, start the rewind |
+| `fork::parent_callback::thread_spawn` | unwind callback | creating the child's OS thread |
+| `fork::parent_callback::wait_for_child` | unwind callback | waiting until the child has its copy of the memory |
+| `fork::parent_rewind` | span: unwind callback → lind-common `clone` rewind | the parent's Wasm stack rewinding into `fork()` |
+| `fork::child_setup` | child thread | from thread start to the barrier: what the parent waits for |
+| `fork::child_setup::new_store` | child thread | new Wasmtime store and host context |
+| `fork::child_setup::new_child_linker` | child thread | the child's linker from the parent's snapshot |
+| `fork::child_setup::instantiate` | child thread | instantiating the module for the child |
+| `fork::child_setup::instantiate::copy_memory` | cage `fork_vmmap` | copying the parent's mapped memory into the child |
+| `fork::child_rewind_to_exit` | span: child `_start` → `exit_call` | the child rewinding into `fork()` and running until `exit` |
+| `exit::exit_call` | `exit_call` | arming the Asyncify unwind for exit |
+| `exit::unwind` | span: `exit_call` → exit callback | the Wasm stack unwinding |
+| `exit::cleanup` | exit callback | thread exit, `cage_finalize`, removing the VMContext |
+| `exit::cleanup::cage_finalize` | exit callback | zombie record and SIGCHLD (lets the parent's `waitpid` return), fdtable and cage removal |
+
 The report skips counters with no calls (e.g. grate counters in a direct run).
 
 ## Derived costs
@@ -186,6 +216,9 @@ Printed after the table when all their counters were measured, as outer avg minu
 - RawPOSIX fdtables handler excl. fdtables = `fdtables_call` - `close_virtualfd`
 - `call_grate_func` own work, trampoline own work, lind-3i submit bookkeeping,
   worker run excl. Wasm call
+- fork: parent setup excl. snapshots, parent callback excl. spawn and waiting, child setup
+  excl. store/linker/instantiate, instantiate excl. copying memory; exit cleanup excl.
+  `cage_finalize`
 
 Caveats: each counter comes from a separate run, so differences include run-to-run noise
 (small negative values mean "within noise of zero"); with `tsc`, lines mixing
@@ -195,7 +228,9 @@ Caveats: each counter comes from a separate run, so differences include run-to-r
 the same thread: `perf_span_start!(COUNTER)` at the start and `perf_span_end!(COUNTER)` at the
 end (the counter is defined once, e.g. in threei, and re-exported by the other crate's `perf`
 module). Grate calls run on the calling thread from 3i down to the grate's Wasm, so spans across
-3i, lind-boot and lind-3i are safe. One span is open per thread at a time.
+3i, lind-boot and lind-3i are safe. One span is open per thread at a time. For paths outside a
+benchmark syscall (fork, exit) use `perf_timer_any!` / `perf_span_start_any!`, which record
+whenever the counter is the enabled one.
 
 ## Adding a timer
 
