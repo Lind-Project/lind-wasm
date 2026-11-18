@@ -36,6 +36,16 @@ scripts/test/run_microbench.sh tsc        # CPU cycles
 scripts/test/run_microbench.sh --perf-filter=threei::,lind_3i::
 ```
 
+To compare machines, repeat the benchmarks and record the setup:
+
+```bash
+scripts/test/collect_microbench.sh -n 5 -c 2 -l my-server     # 5 runs pinned to CPU 2
+```
+
+It saves each run, `env.txt` (CPU, frequency settings, kernel mitigations, container and seccomp
+status, cgroup limits, load) and `summary.txt`/`summary.csv` (median, min and max of every counter
+across the runs) under `~/lind-perf-results/`. A large spread means a run was disturbed.
+
 Grates must be built static (`lind_compile -s --compile-grate`, as in lind-wasm-example-grates):
 lind-boot only creates a grate's worker pool for statically linked modules. Cages can be dynamic.
 
