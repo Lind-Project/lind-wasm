@@ -462,10 +462,10 @@ pub fn make_syscall(
     // would misinterpret the error as a valid address.
     // EXITING_TABLE persists after remove_cage, catching calls to fully
     // removed cages that is_cage_dead misses (it returns false for None).
-    if (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
+    if self_cageid != target_cageid
         && syscall_num != EXIT_SYSCALL
         && syscall_num != EXIT_GROUP_SYSCALL
-        && self_cageid != target_cageid
+        && (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
     {
         return -(Errno::ESRCH as i64);
     }
@@ -483,10 +483,10 @@ pub fn make_syscall(
             // Second check: catch in-flight grate-forwarded calls that
             // passed the initial check before is_dead was set or the cage
             // was removed.
-            if (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
+            if self_cageid != target_cageid
                 && syscall_num != EXIT_SYSCALL
                 && syscall_num != EXIT_GROUP_SYSCALL
-                && self_cageid != target_cageid
+                && (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
             {
                 return -(Errno::ESRCH as i64);
             }
