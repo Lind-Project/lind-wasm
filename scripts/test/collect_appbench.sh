@@ -94,6 +94,7 @@ make_data() { # make_data ROOT: ROOT is "" for the host or $LINDFS
   local d="$1${DATA}"
   mkdir -p "${d}/tree" "${d}/py-out" || return 1
   [[ -s "${d}/sample.bin" ]] || dd if=/dev/urandom of="${d}/sample.bin" bs=1M count=8 status=none
+  [[ -s "${d}/sample64.bin" ]] || dd if=/dev/urandom of="${d}/sample64.bin" bs=1M count=64 status=none
   python3 - "${d}" <<'PY'
 import os, sys
 d = sys.argv[1]
