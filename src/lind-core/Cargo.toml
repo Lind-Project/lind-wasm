@@ -1,0 +1,13 @@
+[package]
+name = "lind-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cage = { path = "../cage" }
+dashmap = "5.1"
+fdtables = { path = "../fdtables", default-features = false }
+sysdefs = { path = "../sysdefs" }
+threei = { path = "../threei" }
+lind-runtime = { path = "../lind-runtime" }
+typemap = { path = "../typemap" }

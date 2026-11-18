@@ -1,0 +1,11 @@
+[package]
+name = "lind-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2"
+sysdefs = { path = "../sysdefs" }
+
+[features]
+lind-logging = ["sysdefs/lind-logging"]

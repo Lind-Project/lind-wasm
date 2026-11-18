@@ -24,7 +24,9 @@ cargo test --lib memory::vmmap -- --nocapture
 These tests verify that the `change_prot` function correctly modifies memory protection flags while preserving other entry attributes.
 
 
-**Key Insight**: `change_prot` only modifies the `prot` field while preserving all other entry attributes including `maxprot`, `backing`, `flags`, etc.
+**Key Insight**: `change_prot` preserves entry attributes such as `maxprot`,
+`backing`, and `flags`. Making part of a reservation accessible marks that
+part as guest data so that a later fork copies it.
 
 ### 2. Entry Overwrite Behavior Tests (`add_entry_with_overwrite`)
 
@@ -43,5 +45,12 @@ These tests clarify parameter expectations and search behavior for finding avail
 - `pages_per_map`: alignment requirement in pages
 - Return value: interval of page numbers
 
+## Fork memory
 
+Fork copies private mappings and duplicates shared mappings, including
+`PROT_NONE` mappings. Reservations are tracked separately and are not copied.
+The child takes its mapping snapshot when memory is duplicated; RawPOSIX mapping
+updates hold the same Vmmap lock while changing host mappings and metadata.
+The host must initialize the protected-page reader before entering a filesystem
+jail; `lind-boot` does this before `chroot`.
 

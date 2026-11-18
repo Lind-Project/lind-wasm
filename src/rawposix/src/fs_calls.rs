@@ -904,10 +904,11 @@ pub extern "C" fn mmap_syscall(
     // round up length to be multiple of pages
     let rounded_length = round_up_page(len as u64);
 
+    // Keep host mappings and their Vmmap entries consistent for fork.
+    let mut vmmap = cage.vmmap.write();
     let mut useraddr = addr as u32;
     // if MAP_FIXED is not set, then we need to find an address for the user
     if flags & MAP_FIXED as i32 == 0 {
-        let vmmap = cage.vmmap.write();
         let result;
 
         // pick an address of appropriate size, anywhere
@@ -946,16 +947,35 @@ pub extern "C" fn mmap_syscall(
         return syscall_error(Errno::EINVAL, "mmap", "invalid flags") as i64;
     }
 
-    let vmmap = cage.vmmap.read();
-
     let sysaddr = vmmap.user_to_sys(useraddr);
 
-    drop(vmmap);
-
     if rounded_length > 0 {
-        if flags & MAP_ANONYMOUS as i32 > 0 {
+        let backing = if flags & MAP_ANONYMOUS as i32 > 0 {
             fildes = -1;
-        }
+            MemoryBackingType::Anonymous
+        } else {
+            // Validate the backing descriptor before changing the host mapping.
+            let file_flags = fcntl_syscall(
+                cageid,
+                fildes as u64,
+                vfd_cageid,
+                F_GETFL as u64,
+                flags_cageid,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ) as i32;
+            if file_flags < 0 {
+                return syscall_error(Errno::EINVAL, "mmap", "invalid file descriptor") as i64;
+            }
+            maxprot &= file_flags;
+            MemoryBackingType::FileDescriptor(fildes as u64)
+        };
 
         let result = mmap_inner(
             cageid,
@@ -973,9 +993,7 @@ pub extern "C" fn mmap_syscall(
             return (handle_errno(errno, "mmap")) as i64;
         }
 
-        let vmmap = cage.vmmap.read();
         let result = vmmap.sys_to_user(result);
-        drop(vmmap);
 
         // if mmap addr is positive, that would mean the mapping is successful and we need to update the vmmap entry
         if result >= 0 {
@@ -983,48 +1001,20 @@ pub extern "C" fn mmap_syscall(
                 panic!("MAP_FIXED not fixed");
             }
 
-            let mut vmmap = cage.vmmap.write();
-            let backing = {
-                if flags as u32 & MAP_ANONYMOUS > 0 {
-                    MemoryBackingType::Anonymous
-                } else {
-                    // if we are doing file-backed mapping, we need to set maxprot to the file permission
-                    let flags = fcntl_syscall(
-                        cageid,
-                        fildes as u64,
-                        vfd_cageid,
-                        F_GETFL as u64,
-                        flags_cageid,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                    ) as i32;
-                    if flags < 0 {
-                        return syscall_error(Errno::EINVAL, "mmap", "invalid file descriptor")
-                            as i64;
-                    }
-                    maxprot &= flags;
-                    MemoryBackingType::FileDescriptor(fildes as u64)
-                }
-            };
-
             // update vmmap entry
-            let _ = vmmap.add_entry_with_overwrite(
-                useraddr >> PAGESHIFT,
-                (rounded_length >> PAGESHIFT) as u32,
-                prot,
-                maxprot,
-                flags,
-                backing,
-                off,
-                len as i64,
-                cageid,
-            );
+            vmmap
+                .add_entry_with_overwrite(
+                    useraddr >> PAGESHIFT,
+                    (rounded_length >> PAGESHIFT) as u32,
+                    prot,
+                    maxprot,
+                    flags,
+                    backing,
+                    off,
+                    len as i64,
+                    cageid,
+                )
+                .expect("mmap: failed to record host mapping");
         }
     }
 
@@ -1033,7 +1023,8 @@ pub extern "C" fn mmap_syscall(
 
 /// Helper function for `mmap` / `munmap`
 ///
-/// This function calls underlying libc::mmap and serves as helper functions for memory related (vmmap related)
+/// This function asks the cage's runtime to make the mapping effective (Lind-IF `DoMmap`) and serves
+/// as helper for memory related (vmmap related)
 /// syscalls. This function provides fd translation between virtual to kernel.
 ///
 /// Returns:
@@ -1049,35 +1040,39 @@ pub extern "C" fn mmap_inner(
     vfd_arg: i32,
     off: i64,
 ) -> usize {
-    if vfd_arg != -1 {
+    let host_fd = if vfd_arg != -1 {
         match fdtables::translate_virtual_fd(cageid, vfd_arg as u64) {
-            Ok(kernel_fd) => {
-                let ret = unsafe {
-                    libc::mmap(
-                        addr as *mut c_void,
-                        len,
-                        prot,
-                        flags,
-                        kernel_fd.underfd as i32,
-                        off,
-                    ) as i64
-                };
-
-                // Return raw result (including -1 on error)
-                // Caller will check page alignment to detect errors
-                ret as usize
-            }
+            Ok(kernel_fd) => kernel_fd.underfd as i32,
             Err(_e) => {
                 return syscall_error(Errno::EBADF, "mmap", "Bad File Descriptor") as usize;
             }
         }
     } else {
-        // Handle mmap with fd = -1 (anonymous memory mapping or special case)
-        let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
-        // Return raw result (including -1 on error)
-        // Caller will check page alignment to detect errors
-        ret as usize
+        -1
+    };
+
+    // Lind-IF DoMmap: the cage's runtime makes the mapping effective.
+    let args = lind_runtime::LindMmapArgs {
+        addr: addr as u64,
+        len: len as u64,
+        prot,
+        flags,
+        fd: host_fd,
+        offset: off,
+    };
+    match lind_core::memory::do_mmap(cageid, args, false) {
+        Ok(host_addr) => host_addr as usize,
+        Err(error) => {
+            // Keep the legacy contract: -1 with errno set.
+            unsafe { *libc::__errno_location() = lind_errno(error) };
+            -1isize as usize
+        }
     }
+}
+
+/// Positive errno for a Lind-IF error, for the legacy `handle_errno` paths.
+fn lind_errno(error: lind_runtime::LindError) -> i32 {
+    -error.to_syscall_ret() as i32
 }
 
 /// Handler of the `munmap_syscall`, interacting with the `vmmap` structure.
@@ -1159,26 +1154,13 @@ pub extern "C" fn munmap_syscall(
         let (act_start, act_end) = (act_start as usize, act_end as usize);
         let act_start_addr = vmmap.user_to_sys((act_start as u32) << PAGESHIFT);
         let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
-        let result = unsafe {
-            libc::mmap(
-                act_start_addr as *mut c_void,
-                act_len,
-                PROT_NONE,
-                (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
-                -1,
-                0,
-            ) as usize
+        // Lind-IF DoMunmap: the runtime keeps the range reserved (PROT_NONE).
+        let args = lind_runtime::LindMunmapArgs {
+            addr: act_start_addr as u64,
+            len: act_len as u64,
         };
-        if result != act_start_addr {
-            lind_debug_panic!(
-                "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-                result as *const c_void,
-                act_start_addr as *const c_void
-            );
-        }
-        if result as isize == -1 {
-            let errno = get_errno();
-            return (handle_errno(errno, "munmap")) as i64;
+        if let Err(error) = lind_core::memory::do_munmap(cageid, args) {
+            return (handle_errno(lind_errno(error), "munmap")) as i64;
         }
     }
 
@@ -1282,22 +1264,6 @@ pub extern "C" fn brk_syscall(
         }
     }
 
-    // remove the old entries since new entry is overlapping with it.
-    vmmap.remove_entry(heap.page_num, heap.npages);
-
-    // update vmmap entry
-    vmmap.add_entry_with_overwrite(
-        heap.page_num,
-        brk_page - heap.page_num,
-        heap.prot,
-        heap.maxprot,
-        heap.flags,
-        heap.backing,
-        heap.file_offset,
-        heap.file_size,
-        heap.cage_id,
-    );
-
     let old_heap_end_u64 = (old_brk_page as u64) * (PAGESIZE as u64);
     let new_heap_end_u64 = (brk_page as u64) * (PAGESIZE as u64);
 
@@ -1315,8 +1281,6 @@ pub extern "C" fn brk_syscall(
 
     let new_heap_end_usr = new_heap_end_u64 as u32;
     let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
-
-    drop(vmmap);
 
     // if new brk is larger than old brk
     // we need to mmap the new region
@@ -1356,6 +1320,27 @@ pub extern "C" fn brk_syscall(
             let errno = get_errno();
             return (handle_errno(errno, "brk")) as i64;
         }
+    }
+
+    if heap.npages != 0 {
+        vmmap
+            .remove_entry(heap.page_num, heap.npages)
+            .expect("brk: failed to remove old heap mapping");
+    }
+    if brk_page != heap.page_num {
+        vmmap
+            .add_entry_with_overwrite(
+                heap.page_num,
+                brk_page - heap.page_num,
+                heap.prot,
+                heap.maxprot,
+                heap.flags,
+                heap.backing,
+                heap.file_offset,
+                heap.file_size,
+                heap.cage_id,
+            )
+            .expect("brk: failed to record heap mapping");
     }
 
     // return brk address
@@ -4723,18 +4708,24 @@ pub extern "C" fn mprotect_syscall(
     // Round length up to page boundary (mprotect operates on whole pages)
     let rounded_length = round_up_page(len as u64) as usize;
 
-    // Call the kernel mprotect
-    let ret = unsafe { libc::mprotect(addr as *mut c_void, rounded_length, prot) };
-    if ret < 0 {
-        let errno = get_errno();
-        return (handle_errno(errno, "mprotect")) as i64;
+    // Serialize the host change with fork's mapping snapshot.
+    let cage = get_cage(cageid).unwrap();
+    let mut vmmap = cage.vmmap.write();
+
+    // Lind-IF DoMprotect.
+    let args = lind_runtime::LindMprotectArgs {
+        addr: addr as u64,
+        len: rounded_length as u64,
+        prot,
+    };
+    if let Err(error) = lind_core::memory::do_mprotect(cageid, args) {
+        return (handle_errno(lind_errno(error), "mprotect")) as i64;
     }
+    let ret = 0;
 
     // Update vmmap to reflect the new protection flags
     // Skip if length is zero (no pages to update) — Linux treats len=0 as a no-op
     if rounded_length > 0 {
-        let cage = get_cage(cageid).unwrap();
-        let mut vmmap = cage.vmmap.write();
         let user_addr = vmmap.sys_to_user(addr as usize) as u32;
         vmmap.change_prot(
             user_addr >> PAGESHIFT,
@@ -5138,7 +5129,7 @@ pub extern "C" fn shmat_syscall(
 
     // Initialize the user address from the provided address pointer.
     // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
-    let vmmap = cage.vmmap.write();
+    let mut vmmap = cage.vmmap.write();
     let result;
     if useraddr == 0 {
         // Allocate a suitable space in the virtual memory map for the shared memory segment
@@ -5153,9 +5144,6 @@ pub extern "C" fn shmat_syscall(
             useraddr as u32 >> PAGESHIFT,
         );
     }
-    // drop the write lock of vmmap to avoid deadlock
-    drop(vmmap);
-
     if result.is_none() {
         // If no suitable memory space is found, return an error indicating insufficient memory.
         return (syscall_error(Errno::ENOMEM, "shmat", "no memory") as i32) as i64;
@@ -5172,13 +5160,8 @@ pub extern "C" fn shmat_syscall(
         ) as i64;
     }
 
-    // Convert the user address into a system address.
-    // Read the virtual memory map to access the user address space.
-    let vmmap = cage.vmmap.read();
-    // Convert the user address to the corresponding system address for the shared memory segment.
+    // Convert the user address to the system address for the shared segment.
     let sysaddr = vmmap.user_to_sys(useraddr);
-    // Release the lock on the virtual memory map as we no longer need it.
-    drop(vmmap);
 
     // Call the raw shmat helper to attach the shared memory segment.
     let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
@@ -5189,14 +5172,11 @@ pub extern "C" fn shmat_syscall(
         return (handle_errno(errno, "shmat")) as i64;
     }
 
-    let vmmap = cage.vmmap.read();
     let result = vmmap.sys_to_user(result);
-    drop(vmmap);
 
     if result as u32 != useraddr {
         panic!("shmat did not attach at the expected address");
     }
-    let mut vmmap = cage.vmmap.write();
     let backing = MemoryBackingType::SharedMemory(shmid as u64);
     let maxprot = prot;
     vmmap
@@ -5281,6 +5261,8 @@ pub extern "C" fn shmdt_syscall(
         return (syscall_error(Errno::EINVAL, "shmdt", "address is not aligned")) as i64;
     }
 
+    let mut vmmap = cage.vmmap.write();
+
     // Call shmdt_helper which returns length of the detached segment.
     // Pass the host address directly - rev_shm stores host addresses from shmat.
     let length = shmdt_helper(cageid, sysaddr as *mut u8);
@@ -5290,7 +5272,6 @@ pub extern "C" fn shmdt_syscall(
 
     // Remove the mapping from the vmmap.
     // Convert sys address back to user address for vmmap bookkeeping.
-    let mut vmmap = cage.vmmap.write();
     let useraddr = vmmap.sys_to_user(sysaddr);
     vmmap
         .remove_entry(useraddr >> PAGESHIFT, (length as u32) >> PAGESHIFT)
@@ -5349,7 +5330,6 @@ pub extern "C" fn shmctl_syscall(
 ) -> i64 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
-    let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid).unwrap();
 
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -5367,6 +5347,13 @@ pub extern "C" fn shmctl_syscall(
     if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
         match cmd {
             IPC_STAT => {
+                if buf_arg == 0 {
+                    return syscall_error(Errno::EFAULT, "shmctl", "null status buffer") as i64;
+                }
+                let buf = match sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid) {
+                    Ok(buf) => buf,
+                    Err(errno) => return -(errno as i64),
+                };
                 *buf = segment.shminfo;
             }
             IPC_RMID => {

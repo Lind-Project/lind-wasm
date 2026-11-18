@@ -248,6 +248,25 @@ fn _call_grate_func(
         ),
     };
 
+    // Lind-IF §6 RunHandler; runtimes not yet registered with Lind-IF use their raw trampoline.
+    if let Some(runtime) = lind_runtime::get_runtime(runtimeid) {
+        let args = lind_runtime::LindHandlerArgs {
+            handler: in_grate_fn_ptr_u64,
+            args: [
+                (arg1, arg1_cageid),
+                (arg2, arg2_cageid),
+                (arg3, arg3_cageid),
+                (arg4, arg4_cageid),
+                (arg5, arg5_cageid),
+                (arg6, arg6_cageid),
+            ],
+        };
+        return match runtime.run_handler(grateid, args) {
+            Ok(ret) => ret,
+            Err(error) => error.to_syscall_ret(),
+        };
+    }
+
     let trampoline = match get_runtime_trampoline(runtimeid) {
         Some(f) => f,
         None => panic!(

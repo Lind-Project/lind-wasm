@@ -19,6 +19,7 @@ wasmtime-environ = { workspace = true }
 wasmtime-lind-utils = { path = "../lind-utils" }
 wasmtime-lind-3i = { path = "../lind-3i" }
 rawposix = { path = "../rawposix" }
+lind-core = { path = "../lind-core" }
 typemap = { path = "../typemap" }
 sysdefs = { path = "../sysdefs" }
 threei = { path = "../threei" }

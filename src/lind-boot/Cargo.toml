@@ -16,6 +16,7 @@ lind-logging = [
     "wasmtime-lind-dylink/lind-logging",
     "wasmtime-lind-utils/lind-logging",
     "threei/lind-logging",
+    "lind-runtime/lind-logging",
     "wasmtime/lind-logging",
 ]
 debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
@@ -35,6 +36,8 @@ wasmtime-lind-dylink = { path = "../wasmtime/crates/lind-dylink" }
 wasmtime-lind-multi-process = { path = "../wasmtime/crates/lind-multi-process" }
 wasmtime-lind-utils = { path = "../wasmtime/crates/lind-utils" }
 rawposix = { path = "../wasmtime/crates/rawposix" }
+lind-core = { path = "../wasmtime/crates/lind-core" }
+lind-runtime = { path = "../wasmtime/crates/lind-runtime" }
 cage = { path = "../wasmtime/crates/cage" }
 threei = { path = "../wasmtime/crates/threei" }
 sysdefs = { path = "../wasmtime/crates/sysdefs" }

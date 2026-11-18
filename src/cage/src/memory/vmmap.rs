@@ -13,7 +13,7 @@ use nodit::{interval::ie, Interval};
 use std::io;
 use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+    MAP_SHARED, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
 };
 
 /// Default number of virtual memory pages in a `vmmap`.
@@ -54,6 +54,7 @@ pub struct VmmapEntry {
     pub file_size: i64,   // Size of the backing store
     pub cage_id: u64,     // Identifier for the security cage
     pub backing: MemoryBackingType, // Type of memory backing for this region
+    pub is_reservation: bool, // Uncommitted address space, not protected guest data
 }
 
 // Implement methods for VmmapEntry
@@ -99,6 +100,7 @@ impl VmmapEntry {
             file_size,
             cage_id,
             backing,
+            is_reservation: false,
         };
     }
 
@@ -326,6 +328,38 @@ impl Vmmap {
     pub fn set_base_address(&mut self, base_address: usize) {
         // Store the provided base address
         self.base_address = Some(base_address);
+    }
+
+    pub fn mark_reservation(&mut self, page_num: u32, npages: u32) -> io::Result<()> {
+        if npages == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "empty reservation",
+            ));
+        }
+        let end = page_num
+            .checked_add(npages)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "reservation overflows"))?;
+        let (interval, entry) = self
+            .entries
+            .overlapping(ie(page_num, end))
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "reservation not mapped"))?;
+        if interval.start() != page_num
+            || interval.end() + 1 != end
+            || entry.prot != PROT_NONE
+            || entry.flags & MAP_SHARED as i32 != 0
+            || entry.backing != MemoryBackingType::Anonymous
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "reservation does not match an inaccessible mapping",
+            ));
+        }
+        let mut reservation = entry.clone();
+        reservation.is_reservation = true;
+        let _ = self.entries.insert_overwrite(ie(page_num, end), reservation);
+        Ok(())
     }
 
     /// Sets the heap start page number for the memory
@@ -726,6 +760,7 @@ impl VmmapOps for Vmmap {
             file_size,
             removed: false,
             cage_id,
+            is_reservation: false,
         };
 
         // Insert new entry, overwriting any existing entries in the range
@@ -829,6 +864,9 @@ impl VmmapOps for Vmmap {
                     inside_entry.page_num = overlap_start;
                     inside_entry.npages = overlap_end - overlap_start;
                     inside_entry.prot = new_prot;
+                    if new_prot != PROT_NONE {
+                        inside_entry.is_reservation = false;
+                    }
                     let _ = self
                         .entries
                         .insert_overwrite(ie(overlap_start, overlap_end), inside_entry);

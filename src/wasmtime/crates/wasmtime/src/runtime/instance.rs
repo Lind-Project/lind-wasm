@@ -14,7 +14,7 @@ use crate::{
 use crate::{ValRaw, ValType, prelude::*};
 use alloc::sync::Arc;
 use cage::DashMap;
-use cage::memory::{fork_vmmap, init_vmmap};
+use cage::memory::init_vmmap;
 use core::ptr::NonNull;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -388,11 +388,8 @@ impl Instance {
     ///   each worker executes with its own independent Wasm stack range even
     ///   though workers share the same linear-memory object.
     ///
-    /// - `InstantiateChild { parent_cageid, child_cageid }` corresponds to fork
-    ///   semantics. After discovering the child instance’s memory base, lind-wasm
-    ///   clones the parent’s memory mappings / state into the child via
-    ///   `fork_vmmap`, so the child begins with the same address-space contents as
-    ///   the parent.
+    /// - `InstantiateChild { parent_cageid, child_cageid }` instantiates a forked
+    ///   image after the Lind runtime has duplicated the child's memory.
     ///
     /// - `InstantiateLib { cageid, memory_base }` initializes memory for a
     ///   dynamically loaded library instance by allocating its linear-memory region
@@ -421,10 +418,7 @@ impl Instance {
         // In the first case (`InstantiateType::InstantiateFirst(cageid)`), we are creating the very
         // first cage’s linear memory. After initialization, no additional steps are needed.
         //
-        // In the case of `InstantiateType::InstantiateChild { parent_cageid, child_cageid }`, which
-        // corresponds to a module created via fork. In this case, after the child’s memory is
-        // initialized, we must also copy the parent’s memory state (`fork_vmmap`) into the child t
-        // o have correct fork semantics.
+        // A forked child's memory has already been prepared by the Lind runtime.
         match instantiate_type {
             // InstantiateFirst: this is the first wasm instance
             InstantiateType::InstantiateFirst(cageid) => {
@@ -604,13 +598,12 @@ impl Instance {
 
                 // Reserve the rest of the arena as a PROT_NONE vmmap entry so
                 // vmmap's free-space search can't hand a guard page or an
-                // inactive worker slot to an unrelated guest mmap(). Still
-                // skipped by fork_vmmap, since it stays PROT_NONE.
+                // inactive worker slot to an unrelated guest mmap().
                 if !dylink_enabled {
                     let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
                         * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
                             + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
-                    make_syscall(
+                    let reservation = make_syscall(
                         cageid,
                         (MMAP_SYSCALL) as u64,
                         0,
@@ -628,6 +621,18 @@ impl Instance {
                         0,
                         cageid,
                     );
+                    assert_eq!(
+                        reservation, stack_arena_base as i64,
+                        "failed to reserve grate stack arena for cage {cageid}"
+                    );
+                    cage::with_cage(cageid, |cage| {
+                        cage.vmmap.write().mark_reservation(
+                            stack_arena_base >> PAGESHIFT,
+                            (stack_arena_size >> PAGESHIFT) as u32,
+                        )
+                    })
+                    .expect("cage missing while reserving grate stack arena")
+                    .expect("failed to record grate stack reservation");
                 }
             }
             // InstantiateChild: this is the child wasm instance forked by parent
@@ -635,27 +640,6 @@ impl Instance {
                 parent_cageid,
                 child_cageid,
             } => {
-                // if this is a child, we do not need to specifically set up the first memory region
-                // since this should be taken care of when we fork the entire memory region from parent
-                // therefore in this case, we only need to:
-                // 1. set memory base address
-                // 2. fork the memory space from parent
-                let export_memory = store
-                    .0
-                    .all_memories()
-                    .next()
-                    .expect("no defined memory found");
-                let child_address = match &export_memory {
-                    crate::runtime::vm::ExportMemory::Shared(..) => {
-                        export_memory.shared_base_ptr().unwrap() as usize
-                    }
-                    crate::runtime::vm::ExportMemory::Unshared(_) => {
-                        export_memory.unshared().unwrap().data_ptr(&*store) as usize
-                    }
-                };
-
-                fork_vmmap(parent_cageid as u64, child_cageid);
-
                 // For child instances, the stack arena is inherited from the parent cage, and grate calls
                 // only works at static build, so we only need to fork the stack arena base if dylink is not enabled.
                 if !dylink_enabled {

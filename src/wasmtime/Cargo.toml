@@ -64,6 +64,7 @@ wasmtime-lind-dylink = { path = "crates/lind-dylink" }
 wasmtime-lind-utils = { path = "crates/lind-utils" }
 wasmtime-wasi-http = { workspace = true, optional = true }
 rawposix = { workspace = true }
+lind-core = { workspace = true }
 typemap = { workspace = true }
 threei = { workspace = true }
 cage = { workspace = true, optional = false }
@@ -199,6 +200,8 @@ members = [
   # lind-specific crates
   "crates/threei",
   "crates/rawposix",
+  "crates/lind-core",
+  "crates/lind-runtime",
   "crates/fdtables",
   "crates/sysdefs",
   "crates/typemap",
@@ -317,6 +320,8 @@ wasmtime-lind-dylink = { path = "crates/lind-dylink" }
 wasmtime-lind-utils = { path = "crates/lind-utils" }
 threei = { path = "crates/threei" }
 rawposix = { path = "crates/rawposix" }
+lind-core = { path = "crates/lind-core" }
+lind-runtime = { path = "crates/lind-runtime" }
 typemap = { path = "crates/typemap", default-features = false }
 fdtables = { path = "crates/fdtables", default-features = false, features = ["dashmaparray"] }
 sysdefs = { path = "crates/sysdefs" }

@@ -1,34 +1,20 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
-use crate::fs_calls::kernel_close;
-use cage::memory::vmmap::{VmmapOps, *};
-use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
-use cage::timer::IntervalTimer;
-use cage::{add_cage, encode_wait_status, get_cage, remove_cage, Cage, ExitStatus};
-use dashmap::DashMap;
-use fdtables;
+use cage::signal::signal::{convert_signal_mask, signal_check_trigger};
+use cage::{encode_wait_status, get_cage};
 use libc::sched_yield;
-use parking_lot::{Condvar, Mutex, RwLock};
-use std::ffi::CString;
-use std::path::PathBuf;
 use std::sync::atomic::Ordering::*;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
-use std::sync::Arc;
 use std::time::Duration;
-use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
-use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::lind_platform_const::{
-    MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
-    WASMTIME_CAGEID,
+    MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE,
 };
 use sysdefs::constants::sys_const::{
-    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_CORE, RLIMIT_DATA,
-    RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
-    SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
+    ITIMER_REAL, RLIMIT_AS, RLIMIT_CORE, RLIMIT_DATA, RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS,
+    RLIMIT_STACK, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
-use sysdefs::constants::syscall_const;
-use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
+use sysdefs::data::fs_struct::SigactionStruct;
 use sysdefs::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
@@ -44,27 +30,20 @@ use typemap::datatype_conversion::*;
 /// `clone` entry point, but splits responsibility along abstraction
 /// boundaries.
 ///
-/// RawPOSIX is responsible for **Cage-level structure**, not instruction-level
-/// execution or address-space manipulation. As a result, RawPOSIX only expands
-/// the **fork-like subset** of `clone` (i.e., when `CLONE_VM` is *not* set).
-///
-/// After performing any required Cage-level setup, control is transferred
-/// back to Wasmtime via the 3i dispatch mechanism, where both fork and
-/// thread creation semantics are completed.
+/// RawPOSIX decodes the request and hands it to Lind Core, which composes it
+/// from Lind-IF operations on the cage's runtime: `DuplicateCage` +
+/// `DuplicateThread` for the fork-like subset (no `CLONE_VM`), and
+/// `DuplicateThread` alone for threads.
 ///
 /// ## fork
 ///
 /// We implement `fork` in user space because a Cage is not a host kernel process,
 /// and its granularity does not align with the host kernel’s notion of processes.
 /// Delegating directly to the kernel would not allow us to capture the Cage-level
-/// semantics we need. Instead, this function performs the resource management that
-/// `fork` implies in our model: duplicating the file descriptor table, cloning the
-/// virtual memory map, and constructing a new Cage object that mirrors the parent’s
-/// state. In this way, we preserve the familiar fork semantics while keeping control
-/// at the Cage abstraction level.
+/// semantics we need. Core duplicates the file descriptor table, clones the
+/// virtual memory map metadata, and constructs the child cage.
 ///
-/// Actual operations of the address space is handled by wasmtime when creating a new
-/// instance for the child cage.
+/// Address-space duplication is the runtime's `DuplicateCage`/`DuplicateThread` work.
 ///
 /// ## thread
 ///
@@ -109,118 +88,26 @@ pub extern "C" fn fork_syscall(
     let flags = args.flags;
     let isthread = flags & (sys_const::CLONE_VM);
 
-    // Effective parent cage ID.
-    let parent_cageid = cageid;
-    let mut child_cageid = 0;
-
-    // Fork path: create a new cage
+    // Lind Core composes the clone transaction from Lind-IF DuplicateCage/DuplicateThread
+    // on the runtime bound to this cage (currently Wasmtime).
+    let clone_args = lind_runtime::UserPtr {
+        addr: clone_arg,
+        cage: clone_arg_cageid,
+    };
+    let parent_tid = parent_tid as lind_runtime::ThreadId;
     if isthread == 0 {
-        // Allocate a fresh cage ID for the child.
-        child_cageid = cage::alloc_cage_id().unwrap();
-
-        // Duplicate the parent's file descriptor table.
-        fdtables::copy_fdtable_for_cage(parent_cageid, child_cageid).unwrap();
-
-        // Get the self cage
-        let selfcage = get_cage(parent_cageid).unwrap();
-
-        // Clone the parent's virtual memory map
-        let parent_vmmap = selfcage.vmmap.read();
-        let new_vmmap = parent_vmmap.clone();
-
-        // Creat the child cage object
-        let cageobj = Cage {
-            cageid: child_cageid,
-            cwd: RwLock::new(selfcage.cwd.read().clone()),
-            parent: parent_cageid,
-            rev_shm: Mutex::new(Vec::new()),
-            main_threadid: RwLock::new(0),
-            interval_timer: IntervalTimer::new(child_cageid),
-            epoch_handler: DashMap::new(),
-            os_tid_map: DashMap::new(),
-            pending_signals: RwLock::new(vec![]),
-            signalhandler: selfcage.signalhandler.clone(),
-            sigset: AtomicU64::new(0),
-            zombies: Mutex::new(vec![]),
-            wait_cond: Condvar::new(),
-            child_num: AtomicU64::new(0),
-            vmmap: RwLock::new(new_vmmap),
-            final_exit_status: RwLock::new(None),
-            exit_group_initiated: AtomicBool::new(false),
-            is_dead: AtomicBool::new(false),
-            grate_inflight: AtomicU64::new(0),
-        };
-
-        // increment child counter for parent
-        selfcage.child_num.fetch_add(1, SeqCst);
-
-        // Register the new cage to global cage table
-        add_cage(child_cageid, cageobj);
-
-        // Copy the 3i handler table from parent to child.
-        //
-        // This ensures that the child process inherits all syscall
-        // interposition and routing behavior, including RawPOSIX's
-        // syscall implementation
-        threei::copy_handler_table_to_cage(
-            UNUSED_ARG,
-            UNUSED_ARG,
-            parent_cageid,
-            child_cageid,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-        );
+        lind_core::clone::clone_cage(cageid, parent_tid, clone_args)
+    } else {
+        lind_core::clone::clone_thread(cageid, parent_tid, clone_args)
     }
-
-    // Delegate execution back to binary runtime (currently only support Wasmtime,
-    // but could be extended to other runtime ie: MPK in the future) via 3i.
-    //
-    // Call from RawPOSIX (selfcageid = RawPOSIX_CAGEID) into
-    // Wasmtime(targetcageid = WASMTIME_CAGEID)
-    // to complete the clone/fork operation.
-    //
-    // Wasmtime will:
-    //   - Resolve the correct VMContext
-    //   - Complete fork semantics
-    //   - Resume execution in parent and child
-    threei::make_syscall(
-        RAWPOSIX_CAGEID,
-        syscall_const::CLONE_SYSCALL as u64,
-        UNUSED_NAME,
-        WASMTIME_CAGEID,
-        clone_arg,
-        clone_arg_cageid,
-        parent_cageid,
-        parent_tid,
-        child_cageid,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exec.3.html
 ///
-/// In our implementation, Wasmtime is responsible for handling functionalities such as loading and executing
-/// the new program, preserving process attributes, and resetting memory and the stack.
-///
-/// In RawPOSIX, the focus is on memory management inheritance and resource cleanup and release. Specifically,
-/// RawPOSIX handles tasks such as clearing memory mappings, resetting shared memory, managing file descriptors
-/// (closing or inheriting them based on the `should_cloexec` flag in fdtable), resetting semaphores, and
-/// managing process attributes and threads (terminating unnecessary threads). This allows us to fully implement
-/// the exec functionality while aligning with POSIX standards. Cage fields remained in exec():
+/// Lind Core runs the exec transaction: the runtime selected by `BelongsToRuntime` prepares
+/// the new image under a staging identity (`InitCage` + `CreateThread`) and swaps it in with
+/// `ApplyStagingCage`. Core then applies the exec resource rules (close-on-exec descriptors,
+/// shared memory, mappings, signal dispositions and mask). Cage fields that survive exec:
 /// cageid, cwd, parent, interval_timer
 pub extern "C" fn exec_syscall(
     cageid: u64,
@@ -249,61 +136,15 @@ pub extern "C" fn exec_syscall(
         );
     }
 
-    let ret = threei::make_syscall(
-        RAWPOSIX_CAGEID,
-        syscall_const::EXEC_SYSCALL as u64,
-        UNUSED_NAME,
-        WASMTIME_CAGEID,
-        path,
-        cageid, // Pass cageid as the second argument to identify the execing cage in wasmtime
-        argv,
-        argv_cageid,
-        envs,
-        envs_cageid,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    );
-
-    // Clean up the cage only if exec succeeds.
-    // A return value < 0 indicates exec failure.
-    //
-    // We rely on Asyncify to detect success:
-    // if Asyncify begins unwinding, exec has succeeded.
-    // By convention, Asyncify unwind returns 0, which we use as the success signal.
-    if ret == 0 {
-        // Empty fd with flag should_cloexec
-        fdtables::empty_fds_for_exec(cageid);
-
-        // Copy necessary data from current cage
-        let selfcage = get_cage(cageid).unwrap();
-
-        selfcage.rev_shm.lock().clear();
-
-        // ensures that all old mappings and states are discarded, allowing the new cage to
-        // run in a clean virtual address space, while reusing the existing `Vmmap` container
-        // to avoid extra allocations.
-        let mut vmmap = selfcage.vmmap.write();
-        vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
-
-        // perform signal related clean up
-        // all the signal handler becomes default after exec
-        // pending signals should be perserved though
-        selfcage.signalhandler.clear();
-        // the sigset will be reset after exec
-        selfcage.sigset.store(0, Relaxed);
-        // Do NOT clear epoch_handler or main_threadid here.
-        // If exec-ed module crashes, the thread is still running and needs its
-        // epoch_handler entry for proper exit tracking.  On success,
-        // wasmtime re-instantiates and lind_signal_init (called from
-        // lind-multi-process/src/lib.rs during new instance setup) will
-        // overwrite the stale entries in epoch_handler and main_threadid.
-    }
-
-    ret
+    // Lind Core runs the exec transaction (InitCage(staging) -> CreateThread ->
+    // ApplyStagingCage) and applies the exec resource rules once the replacement commits.
+    let user_ptr = |addr, cage| lind_runtime::UserPtr { addr, cage };
+    lind_core::exec::exec(
+        cageid,
+        user_ptr(path, path_cageid),
+        user_ptr(argv, argv_cageid),
+        user_ptr(envs, envs_cageid),
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
@@ -341,36 +182,12 @@ pub extern "C" fn exit_syscall(
         );
     }
 
-    let _status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
+    let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
 
-    // Thread-only exit: trigger asyncify unwind for this thread only.
-    // Do NOT call cage_record_exit_status here — SYS_exit is only called by
-    // non-main threads when their thread function returns (glibc start_thread),
-    // and a thread's individual exit code does not determine the cage's
-    // process-level exit status.  Calling it here would race with and
-    // overwrite the exit_group(1) recorded by e.g. the faulthandler thread,
-    // causing the cage to exit with code 0 instead of 1.
-
-    // Call wasmtime to trigger asyncify unwind for this thread.
-    // OnCalledAction handles lind_thread_exit + cage_finalize if last.
-    threei::make_syscall(
-        RAWPOSIX_CAGEID,
-        syscall_const::EXIT_SYSCALL as u64,
-        UNUSED_NAME,
-        WASMTIME_CAGEID,
-        status_arg,
-        cageid,
-        tid,
-        UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    )
+    // Thread-only exit: the thread's status does not become the cage's exit status, so a
+    // late SYS_exit cannot overwrite an exit_group status recorded by another thread.
+    // The runtime (TerminateThread) finalizes the cage if this was its last thread.
+    lind_core::exit::exit_thread(cageid, tid as lind_runtime::ThreadId, status)
 }
 
 /// Syscall 231 — exit_group: terminate all threads in the cage.
@@ -406,66 +223,7 @@ pub extern "C" fn exit_group_syscall(
     }
 
     let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
-
-    // Only the first thread to win the CAS initiates cage shutdown.
-    // Other threads just fall through and will be killed via epoch_kill_all.
-    if cage::signal::signal::try_initiate_exit_group(cageid) {
-        cage::cage_record_exit_status(cageid, ExitStatus::Exited(status));
-
-        if let Some(c) = cage::get_cage(cageid) {
-            c.is_dead.store(true, std::sync::atomic::Ordering::Release);
-        }
-
-        // Mark cage as exiting BEFORE epoch_kill_all — killed threads
-        // wake up and may make syscalls; EXITING_TABLE must be set so
-        // make_syscall returns -ESRCH instead of dispatching.
-        //
-        // TODO: this cleanup (EXITING_TABLE insert, epoch_kill_all,
-        // _rm_grate_from_handler) should be moved into
-        // trigger_harsh_cage_exit / harsh_cage_exit so all exit paths
-        // go through a single cage teardown sequence.  We currently
-        // inline it here because trigger_harsh_cage_exit dispatches
-        // harsh_cage_exit through the grate chain, which causes
-        // additional syscall traffic during exit and widens race
-        // windows with concurrent threads.
-        threei::EXITING_TABLE.insert(cageid);
-
-        cage::signal::signal::epoch_kill_all(cageid, tid as i32);
-        threei::handler_table::_rm_grate_from_handler(cageid);
-    }
-
-    // Use the cage's authoritative recorded exit status so that whichever
-    // thread wins the CAS (e.g. faulthandler calling _exit(1)) determines
-    // the OS-level exit code.  Late threads calling exit_group(0) after
-    // the cage has already been marked Exited(1) will use code=1.
-    let canonical_status_arg = cage::get_cage(cageid)
-        .and_then(|c| *c.final_exit_status.read())
-        .map(|st| match st {
-            cage::ExitStatus::Exited(code) => code as u64,
-            cage::ExitStatus::Signaled(_, _) => 1u64,
-        })
-        .unwrap_or(status_arg as u64);
-
-    // Call wasmtime to trigger asyncify unwind.
-    // OnCalledAction handles lind_thread_exit + cage_finalize if last.
-    threei::make_syscall(
-        RAWPOSIX_CAGEID,
-        60, // reuse exit trampoline in wasmtime
-        UNUSED_NAME,
-        WASMTIME_CAGEID,
-        canonical_status_arg,
-        cageid,
-        tid,
-        UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    )
+    lind_core::exit::exit_group(cageid, tid as lind_runtime::ThreadId, status)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/waitpid.3p.html
@@ -1076,11 +834,17 @@ pub extern "C" fn kill_syscall(
     // Attempt to send the signal using a helper function such as lind_send_signal.
     // This helper returns a boolean indicating whether the operation was successful.
     // The caller's cage id is not directly used to send the signal; instead, the target cage id is used.
-    if !lind_send_signal(target_cage as u64, sig) {
-        return (syscall_error(Errno::ESRCH, "kill", "Target cage does not exist")) as i64;
+    let info = lind_runtime::LindSigInfo {
+        signo: sig,
+        sender_cage: cageid,
+    };
+    match lind_core::signal::send_signal(target_cage as u64, lind_runtime::ANY_THREAD, info) {
+        Ok(()) => 0,
+        Err(lind_runtime::LindError::Other(Errno::ESRCH)) => {
+            (syscall_error(Errno::ESRCH, "kill", "Target cage does not exist")) as i64
+        }
+        Err(error) => error.to_syscall_ret(),
     }
-
-    0
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sigprocmask.2.html

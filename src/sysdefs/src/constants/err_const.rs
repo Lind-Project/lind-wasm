@@ -31,7 +31,7 @@ macro_rules! reversible_enum {
 }
 
 reversible_enum! {
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[repr(i32)]
     pub enum Errno {
         EPERM = 1,	// Operation not permitted

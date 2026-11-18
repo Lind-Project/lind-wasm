@@ -28,7 +28,7 @@ use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, LindHost, THREAD_START
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_3i::{VmCtxWrapper, get_vmctx, init_vmctx_pool, rm_vmctx, set_vmctx};
-use wasmtime_lind_utils::LindCageManager;
+use lind_core::LindCageManager;
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
 use core::ffi::c_void;

@@ -391,6 +391,8 @@ pub fn cage_finalize(cageid: u64) {
             std::hint::spin_loop();
         }
 
+        crate::memory::unmap_shm_mappings(cageid);
+
         // Record zombie and notify parent.
         if cage.parent != cageid {
             if let Some(parent) = get_cage(cage.parent) {

@@ -3,20 +3,18 @@ use crate::lind_wasmtime::host::{
     cleanup_grate_handler, init_grate_pool, register_grate_handler_for_cage,
     unregister_grate_handler,
 };
+use crate::lind_wasmtime::runtime::WasmRuntime;
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
 use cfg_if::cfg_if;
+use lind_core::LindCageManager;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::{ffi::c_void, sync::Mutex};
-use sysdefs::constants::lind_platform_const::{
-    INSTANCE_NUMBER, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
-    unmark_grate_handler_registered,
-};
-use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
+use sysdefs::constants::lind_platform_const::unmark_grate_handler_registered;
 use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_START_INDEX};
 use sysdefs::lind_debug_panic;
 use sysdefs::lind_log;
@@ -30,38 +28,23 @@ use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{
     CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, early_init_stack,
+    main_module_snapshot_name,
 };
 use wasmtime_lind_utils::symbol_table::SymbolMap;
-use wasmtime_lind_utils::{LindCageManager, LindGOT};
+use wasmtime_lind_utils::LindGOT;
 
 /// Boots the Lind + RawPOSIX + 3i runtime and executes the initial Wasm program
 /// in the first cage.
 ///
 /// This function is the *only* entry point for the initial launch of `lind-boot`.
-/// It performs three high-level tasks.
 ///
-/// First, it initializes the Wasmtime execution environment by creating the
-/// engine/store and loading the main module from disk.
+/// It registers the Wasmtime grate trampoline with 3i and the Wasmtime Lind-IF
+/// backend (`WasmRuntime`) with the runtime registry, then asks Lind Core to launch
+/// the first cage (`InitCage` + `CreateThread`). Fork, exec and exit reach the
+/// backend through Lind Core, so no per-syscall handlers are registered with 3i.
 ///
-/// Second, it brings up the Lind runtime by starting RawPOSIX, creating the first
-/// cage, and initializing the `VMContext` pool used for later re-entry into Wasmtime
-/// during *grate calls*. It also registers the Wasmtime-specific 3i trampoline, which
-/// serves as the unified callback path for interposed syscalls routed through 3i.
-///
-/// Third, it registers the syscall handlers (clone/exec/exit) with 3i exactly once
-/// during the initial boot. This is intentional: during `fork()`, RawPOSIX clones
-/// the parent process's handler table into the child, so children automatically
-/// inherit all registered handlers without additional registration. In contrast,
-/// `exec()` replaces the guest program within an existing cage and does not require
-/// rebuilding the handler table. Special needs will be handled per user request in
-/// their implementation through `register_handler` via glibc.
-///
-/// After initialization, the function attaches all host-side APIs (Lind common,
-/// WASI threads, and Lind multi-process contexts) to the wasmtime linker,
-/// instantiates the module into the starting cage, and runs the program's
-/// entrypoint. On successful completion it waits for all cages to exit before
-/// shutting down RawPOSIX, ensuring runtime-wide cleanup happens only after the
-/// last process terminates.
+/// It waits for the initial cage's guest entry to finish and then for all cages to
+/// exit, so runtime-wide cleanup happens only after the last process terminates.
 pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // -- Initialize Lind + RawPOSIX + 3i runtime --
     // Initialize the Lind cage counter
@@ -78,11 +61,6 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
         grate_cleanup_funcptr,
     );
 
-    // Register syscall handlers (clone/exec/exit) with 3i
-    if !register_wasmtime_syscall_entry() {
-        panic!("[lind-boot] register syscall handlers (clone/exec/exit) with 3i failed");
-    }
-
     // initialize the vmctx pool for exit/exec/clone reentry into wasmtime runtime
     init_vmctx_pool();
 
@@ -95,29 +73,55 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create execution engine")?;
-    let module = read_main_wasm_or_cwasm(&engine, &lindboot_cli)?;
 
-    // -- Run the first module in the first cage --
-    let result = execute_with_lind(
+    let exe_path = lindboot_cli.wasm_file().to_owned();
+    let init_args = lind_runtime::LindInitArgs {
+        argv: lind_runtime::LindArgVector::Owned(lindboot_cli.args.clone()),
+        envp: lind_runtime::LindArgVector::Owned(
+            lindboot_cli
+                .vars
+                .iter()
+                .map(|(key, value)| format!("{key}={}", value.as_deref().unwrap_or("")))
+                .collect(),
+        ),
+    };
+
+    // The launcher owns the execution-wide wait; the Wasm worker owns guest
+    // execution and stays available until the entire Lind execution ends.
+    let runtime = Arc::new(WasmRuntime::new(
         lindboot_cli,
-        lind_manager.clone(),
         engine,
-        module,
-        CAGE_START_ID as u64,
-        None, // the first cage has no memory to inherit
-    );
+        Arc::clone(&lind_manager),
+    )?);
+    lind_runtime::register_runtime(runtime.clone());
 
-    match result {
-        Ok(ref ret_vals) => {
+    let cageid = CAGE_START_ID as u64;
+    if let Err(error) = lind_core::launch_cage(
+        cageid,
+        threei_const::RUNTIME_TYPE_WASMTIME,
+        &exe_path,
+        init_args,
+    ) {
+        runtime.shutdown()?;
+        return Err(anyhow!("failed to launch {exe_path}: {error:?}"));
+    }
+
+    let Some(completed) = runtime.take_root_result() else {
+        runtime.shutdown()?;
+        return Err(anyhow!("Wasm runtime did not start the initial cage"));
+    };
+    let result = match completed.recv() {
+        Ok(result) => result,
+        Err(_) => {
+            runtime.shutdown()?;
+            return Err(anyhow!("Wasm runtime worker exited without a result"));
+        }
+    };
+
+    let result = match result {
+        Ok(exit_code) => {
             // we wait until all other cage exits
             lind_manager.wait();
-            // Interpret the first return value of the Wasm entry point
-            // as the process exit code. If the module does not explicitly
-            // return an i32, we treat it as a successful exit (code = 0).
-            let exit_code = match ret_vals.first() {
-                Some(Val::I32(code)) => *code,
-                _ => 0,
-            };
             // Propagate the exit code to the main, which will translate it
             // into the host process exit status.
             Ok(exit_code)
@@ -126,7 +130,6 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             // Initial cage crashed.  Do the same cleanup as the
             // fork-crash and signal-handler error paths so child
             // cages see proper termination and resources are freed.
-            let cageid = CAGE_START_ID as u64;
             cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
             if let Some(c) = cage::get_cage(cageid) {
                 c.is_dead.store(true, std::sync::atomic::Ordering::Release);
@@ -134,12 +137,14 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             threei::EXITING_TABLE.insert(cageid);
             threei::handler_table::_rm_grate_from_handler(cageid);
             cage::signal::lind_thread_exit(cageid, THREAD_START_ID as u64);
-            cage::cage_finalize(cageid);
+            lind_core::finalize_cage(cageid);
             lind_manager.decrement();
             lind_manager.wait();
-            return Err(e);
+            Err(e)
         }
-    }
+    };
+    runtime.shutdown()?;
+    result
 }
 
 /// Executes a Wasm program *within an existing Lind runtime* as part of an `exec()` path.
@@ -385,97 +390,6 @@ pub fn execute_with_lind(
     result
 }
 
-/// Register Wasmtime re-entry trampolines into the 3i handler table.
-///
-/// During `lind-boot` initialization, we extract raw function pointers for a
-/// small set of syscalls whose semantics must be completed inside Wasmtime
-/// (e.g., instance/thread creation and termination). These functions act as
-/// **Wasmtime re-entry trampolines**:
-///
-/// ```
-///   Wasm
-///     -> Wasmtime lind-common trampoline
-///     -> 3i dispatch
-///     -> RawPOSIX handling
-///     -> 3i dispatch
-///     -> **back to Wasmtime (registered trampolines)**
-/// ```
-/// All handlers are registered from the RawPOSIX cage (`RAWPOSIX_CAGEID`)
-/// targeting the Wasmtime runtime cage (`WASMTIME_CAGEID`).
-///
-/// Registered syscalls:
-/// - `clone` (56): fork / pthread_create completion in Wasmtime
-/// - `exec`  (59): exec completion in Wasmtime (instance replacement / image switch)
-/// - `exit`  (60): thread/process termination completion in Wasmtime
-fn register_wasmtime_syscall_entry() -> bool {
-    // Register clone trampoline (syscall 56).
-    let fp_clone = clone_syscall_entry;
-    let clone_call_u64: u64 = fp_clone as *const () as usize as u64;
-    let clone_ret = threei::register_handler(
-        UNUSED_ID,
-        WASMTIME_CAGEID,                     // target cageid for this syscall handler
-        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        CLONE_SYSCALL as u64,                // clone syscall number
-        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        WASMTIME_CAGEID,                     // handler function is in the 3i
-        clone_call_u64,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    );
-
-    // Register exec trampoline (syscall 59).
-    let fp_exec = exec_syscall_entry;
-    let exec_call_u64: u64 = fp_exec as *const () as usize as u64;
-    let exec_ret = threei::register_handler(
-        UNUSED_ID,
-        WASMTIME_CAGEID,                     // target cageid for this syscall handler
-        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        EXEC_SYSCALL as u64,                 // exec syscall number
-        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        WASMTIME_CAGEID,                     // handler function is in the 3i
-        exec_call_u64,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    );
-
-    // Register exit trampoline (syscall 60).
-    let fp_exit = exit_syscall_entry;
-    let exit_call_u64: u64 = fp_exit as *const () as usize as u64;
-    let exit_ret = threei::register_handler(
-        UNUSED_ID,
-        WASMTIME_CAGEID,                     // target cageid for this syscall handler
-        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        EXIT_SYSCALL as u64,                 // exit syscall number
-        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        WASMTIME_CAGEID,                     // handler function is in the 3i
-        exit_call_u64,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    );
-
-    // Return false if registration failed
-    if (clone_ret | exec_ret | exit_ret) != 0 {
-        return false;
-    };
-    // Succeed
-    true
-}
-
 /// Attaches all host-side APIs and Lind runtime contexts to the linker and store.
 ///
 /// This function constructs the host interface that the guest expects and stores
@@ -635,12 +549,11 @@ fn load_main_module(
         .map_err(anyhow::Error::from)
         .context(format!("failed to instantiate"))?;
 
-    // Register the main module so get_global_snapshot can find it by name.
-    if let Some(name) = module.name() {
-        store
-            .as_context_mut()
-            .register_named_instance(name.to_string(), cage_instanceid);
-    }
+    // Unnamed main modules need a stable snapshot key too.
+    store.as_context_mut().register_named_instance(
+        main_module_snapshot_name(module).to_string(),
+        cage_instanceid,
+    );
 
     // If `_initialize` is present, meaning a reactor, then invoke
     // the function.
@@ -953,7 +866,7 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
 /// The default is path-based loading from `WASM_FILE`. If `cli.wasm_bytes` is
 /// present, those in-memory bytes take precedence while `WASM_FILE` remains the
 /// guest-visible argv[0].
-fn read_main_wasm_or_cwasm(engine: &Engine, cli: &CliOptions) -> Result<Module> {
+pub(crate) fn read_main_wasm_or_cwasm(engine: &Engine, cli: &CliOptions) -> Result<Module> {
     match cli.wasm_bytes.as_ref() {
         Some(bytes) => read_wasm_or_cwasm_bytes(engine, bytes, cli.wasm_file()),
         None => read_wasm_or_cwasm(engine, Path::new(cli.wasm_file())),

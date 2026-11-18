@@ -10,10 +10,11 @@ At a high level, lind-boot sits at the boundary between the command-line interfa
 src/
 ├── main.rs
 ├── cli.rs
-└── lind-wasmtime/
+└── lind_wasmtime/
     ├── mod.rs
     ├── execute.rs
     ├── host.rs
+    ├── runtime.rs
     └── trampoline.rs
 ```
 
@@ -43,6 +44,11 @@ From the user’s perspective, lind-boot behaves like a conventional process lau
 
 Execution begins in main.rs, where command-line arguments are parsed and passed to the core execution logic. The entry point accepts a WebAssembly binary followed by program arguments.
 
+For execution, the launcher opens Linux `/proc/self/mem` before entering the
+filesystem jail. The fork implementation uses this descriptor to copy protected
+private mappings without changing their permissions in the parent. Procfs must
+be available and readable at startup; precompilation does not require it.
+
 ### host.rs
 
 Host-side runtime state is encapsulated in `HostCtx`, defined in host.rs. This structure holds the WASI Preview1 context, the WASI threads context, and the Lind multi-process context. 
@@ -56,6 +62,15 @@ The core logic lives in execute.rs. Here, lind-boot creates a Wasmtime engine an
 3) function pointers for all RawPOSIX syscall implementation
 
 Before execution begins, lind-boot attaches all required host-side APIs to the Wasmtime linker. This includes WASI Preview1 for argument and environment handling, WASI threads, and Lind-specific common and multi-process APIs.
+
+The initial execution is submitted to the Wasm worker in `runtime.rs`. The
+launcher waits for the root result and then for the Core cage counter to reach
+zero. Fork resource preparation and rollback live in `lind-core`; Wasmtime
+still captures continuations through its existing Asyncify path.
+
+This is an incremental split, not the complete Lind-IF implementation:
+cage-wide synchronous `SIGSTOP`, staged exec, the runtime operation interface,
+and Core-owned thread/TID lifecycle handling remain to be implemented.
 
 Module instantiation occurs in `load_main_module`. The WebAssembly module is instantiated inside a Lind cage, after which the runtime checks for and invokes the `main` function because of our glibc modification. The main entry point is then resolved, stack bounds are initialized, and signal and epoch-related state is set up for the main thread of the cage. At this point, the WebAssembly program is fully initialized and starts running code logic.
 

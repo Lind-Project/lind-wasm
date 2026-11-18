@@ -7,6 +7,7 @@ edition = "2021"
 libc = "0.2"
 memchr = "2"
 sysdefs = { path = "../sysdefs" }
+lind-runtime = { path = "../lind-runtime" }
 typemap = { path = "../typemap" }
 cage = { path = "../cage" }
 dashmap = { version = "6" }

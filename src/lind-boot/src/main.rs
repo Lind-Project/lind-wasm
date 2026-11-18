@@ -70,6 +70,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    cage::memory::init_fork_memory_reader()?;
+
     // Not a precompile command, chroot to lindfs
     chroot_to_lindfs();
 

@@ -8,7 +8,8 @@ use std::ptr::NonNull;
 use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
 use sysdefs::constants::lind_platform_const::{
     LIND_MEMORY_IMPORT_MODULE, LIND_MEMORY_IMPORT_NAME, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
-    fork_grate_handler_flag_for_child, is_grate_handler_registered, unset_stack_arena_base,
+    fork_grate_handler_flag_for_child, get_stack_arena_base, is_grate_handler_registered,
+    unmark_grate_handler_registered, unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
@@ -17,13 +18,13 @@ use sysdefs::lind_log;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::*;
-use wasmtime_lind_utils::{LindCageManager, LindGOT};
+use wasmtime_lind_utils::LindGOT;
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Barrier, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
@@ -33,6 +34,7 @@ use wasmtime::{
 
 use cage::alloc_cage_id;
 use cage::signal::{lind_signal_init, lind_thread_exit};
+use lind_core::LindCageManager;
 use wasmtime_environ::MemoryIndex;
 
 use crate::shebang::{build_shebang_argv, parse_shebang};
@@ -42,6 +44,11 @@ pub mod signal;
 
 mod shebang;
 mod utils;
+
+/// Snapshot key for the main module, including modules without a Wasm name.
+pub fn main_module_snapshot_name(module: &Module) -> &str {
+    module.name().unwrap_or("\0lind-main")
+}
 
 pub const CAGE_START_ID: i32 = 1; // cage id starts from 1
 pub const THREAD_START_ID: i32 = 1; // thread id starts from 1
@@ -54,6 +61,118 @@ const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
 // Two u32 fields: buf[0] = write/read position, buf[4] = end limit.
 // Binaryen's asyncify uses 32-bit pointers regardless of host word size.
 const UNWIND_METADATA_SIZE: u64 = 8;
+
+fn rollback_runtime_fork(parent_cageid: u64, child_cageid: u64) -> Result<(), i64> {
+    rm_vmctx_thread(child_cageid, 0);
+    unmark_grate_handler_registered(child_cageid as usize);
+    if get_stack_arena_base(child_cageid as usize).is_some() {
+        if let Err(error) = unset_stack_arena_base(child_cageid as usize) {
+            eprintln!("failed to remove fork stack arena {child_cageid}: {error}");
+        }
+    }
+    lind_core::fork::abort_unstarted_fork(parent_cageid, child_cageid)
+}
+
+fn publish_fork_startup(
+    startup_tx: &mpsc::SyncSender<Result<(), (i32, String)>>,
+    result: Result<(), (i32, String)>,
+    parent_cageid: u64,
+    child_cageid: u64,
+    started_manager: Option<&LindCageManager>,
+) -> bool {
+    match startup_tx.send(result) {
+        Ok(()) => true,
+        Err(mpsc::SendError(result)) => {
+            match result {
+                Ok(()) => eprintln!("fork parent exited before child startup completed"),
+                Err((_, message)) => eprintln!("{message}"),
+            }
+            if started_manager.is_some() {
+                lind_thread_exit(child_cageid, THREAD_START_ID as u64);
+            }
+            if let Err(error) = rollback_runtime_fork(parent_cageid, child_cageid) {
+                eprintln!("failed to roll back abandoned fork {child_cageid}: {error}");
+            }
+            if let Some(manager) = started_manager {
+                manager.decrement();
+            }
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod fork_startup_tests {
+    use super::*;
+    use std::time::Duration;
+    use sysdefs::constants::lind_platform_const::{
+        init_stack_arena_base, mark_grate_handler_registered,
+    };
+
+    #[test]
+    fn abandoned_startup_rolls_back_before_and_after_thread_registration() {
+        rawposix::init::rawposix_start(0);
+        init_vmctx_pool();
+        let parent_cageid = CAGE_START_ID as u64;
+        threei::set_cage_runtime(parent_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
+        let parent = cage::get_cage(parent_cageid).unwrap();
+
+        for started in [false, true] {
+            let pending = lind_core::fork::prepare_fork(parent_cageid).unwrap();
+            let child_cageid = pending.cageid();
+            pending.commit();
+            mark_grate_handler_registered(child_cageid as usize);
+            init_stack_arena_base(child_cageid as usize, 4096).unwrap();
+            set_vmctx_thread(
+                child_cageid,
+                THREAD_START_ID as u64,
+                VmCtxWrapper {
+                    vmctx: NonNull::<u8>::dangling().cast(),
+                },
+            );
+            let manager = Arc::new(LindCageManager::new(1));
+            let mut epoch = 0u64;
+            if started {
+                lind_signal_init(child_cageid, &mut epoch, THREAD_START_ID, true);
+            }
+
+            let (startup_tx, startup_rx) = mpsc::sync_channel(0);
+            drop(startup_rx);
+            let result = if started {
+                Ok(())
+            } else {
+                Err((Errno::ENOMEM as i32, "fork setup failed".to_owned()))
+            };
+            assert!(!publish_fork_startup(
+                &startup_tx,
+                result,
+                parent_cageid,
+                child_cageid,
+                started.then_some(manager.as_ref()),
+            ));
+
+            assert!(cage::get_cage(child_cageid).is_none());
+            assert_eq!(threei::get_cage_runtime(child_cageid), None);
+            assert_eq!(parent.child_num.load(Ordering::SeqCst), 0);
+            assert!(get_vmctx_thread(child_cageid, THREAD_START_ID as u64).is_none());
+            assert!(!is_grate_handler_registered(child_cageid as usize));
+            assert_eq!(get_stack_arena_base(child_cageid as usize), None);
+            if started {
+                let (done_tx, done_rx) = mpsc::channel();
+                let waiter = thread::spawn(move || {
+                    manager.wait();
+                    done_tx.send(()).unwrap();
+                });
+                assert!(done_rx.recv_timeout(Duration::from_secs(2)).is_ok());
+                waiter.join().unwrap();
+            }
+        }
+
+        cage::remove_cage(parent_cageid);
+        threei::handler_table::_rm_cage_from_handler(parent_cageid);
+        threei::remove_cage_runtime(parent_cageid);
+    }
+}
 
 // Define the trait with the required method
 pub trait LindHost<T, U> {
@@ -111,10 +230,8 @@ pub struct LindCtx<T, U> {
     // bookkeeping; this value only affects what the parent guest observes as the
     // return value of `fork()`.
     //
-    // This must be shared state rather than a plain `Option<i32>` because the
-    // host/Lind context can be cloned during fork/rewind setup. Using an
-    // `Arc<Mutex<_>>` ensures that the normal path and the rewind replay path
-    // observe the same pending slot.
+    // Clones of one thread's context share this slot across the hostcall and
+    // replay. New process and thread contexts receive independent slots.
     pending_clone_visible_retval: Arc<Mutex<Option<i32>>>,
 
     // host thread stack size for spawned cage/thread processes
@@ -411,22 +528,16 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
         let syscall_asyncify_data = store.get_syscall_asyncify_data();
-        let is_parent_thread = store.is_thread();
-
         store.set_on_called(Box::new(move |mut store| {
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
-            // use a barrier to make sure the child has fully copied parent's memory before parent
-            // resumes its execution
-            let barrier = Arc::new(Barrier::new(2));
-            let barrier_clone = Arc::clone(&barrier);
+            let (startup_tx, startup_rx) = mpsc::sync_channel::<Result<(), (i32, String)>>(0);
 
             let builder = thread::Builder::new()
                 .name(format!("lind-fork-{}", child_cageid))
                 .stack_size(thread_stack_size);
-            builder
-                .spawn(move || {
+            let child_worker = builder.spawn(move || {
                     // create a new instance
                     let store_inner = Store::<T>::new_inner(&engine, symbol_table)
                         .expect("failed to create store inner");
@@ -554,9 +665,18 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     store.set_stack_snapshots(parent_stack_snapshots);
 
-                    // if parent is a thread, so does the child
-                    if is_parent_thread {
-                        store.set_is_thread(true);
+                    // Duplicate the cage's memory before instantiating the child;
+                    // Wasmtime instance construction must not initiate the copy.
+                    if let Err(error) = cage::fork_vmmap(parent_cageid as u64, child_cageid) {
+                        let message = format!("failed to duplicate fork memory: {error}");
+                        publish_fork_startup(
+                            &startup_tx,
+                            Err((Errno::ENOMEM as i32, message)),
+                            parent_cageid as u64,
+                            child_cageid,
+                            None,
+                        );
+                        return -1;
                     }
 
                     // don't use child's stack_arena_base since it is not initialized yet, use parent's stack_arena_base instead
@@ -582,10 +702,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     //    Snapshots are looked up by module name from the HashMap captured before
                     //    the unwind; backup instances are never registered so they are naturally
                     //    excluded from the snapshot map.
-                    let main_module_name = module.name().unwrap_or_else(|| {
-                        lind_debug_panic!("module has no name");
-                        "" // best-effort fallback in LogOnly/NoAction mode
-                    });
+                    let main_module_name = main_module_snapshot_name(&module);
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -694,22 +811,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         }
                     };
 
-                    // initialize the signal for the main thread of forked cage
-                    lind_signal_init(
-                        child_cageid,
-                        epoch_pointer,
-                        THREAD_START_ID,
-                        true, /* this is the main thread */
-                    );
-
-                    // new cage created, increment the cage counter
-                    lind_manager.increment();
-
-                    // Notify threei of the cage runtime type
-                    threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
-
-                    barrier_clone.wait();
-
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
@@ -764,24 +865,40 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         Ok(func) => {
                             child_rewind_start = func;
                         }
-                        Err(_error) => {
+                        Err(error) => {
+                            let message = format!("failed to find child Asyncify rewind: {error}");
+                            publish_fork_startup(
+                                &startup_tx,
+                                Err((Errno::EIO as i32, message)),
+                                parent_cageid as u64,
+                                child_cageid,
+                                None,
+                            );
                             return -1;
                         }
                     };
 
                     // mark the child to rewind state
-                    let _ = child_rewind_start.call(&mut store, unwind_data_start_usr as i32);
+                    if let Err(error) = child_rewind_start.call(&mut store, unwind_data_start_usr as i32) {
+                        let message = format!("failed to start child Asyncify rewind: {error}");
+                        publish_fork_startup(
+                            &startup_tx,
+                            Err((Errno::EIO as i32, message)),
+                            parent_cageid as u64,
+                            child_cageid,
+                            None,
+                        );
+                        return -1;
+                    }
 
                     // set up rewind state and fork return value for child
                     store
                         .as_context_mut()
                         .set_asyncify_state(AsyncifyState::Rewind(0));
 
-                    if store.is_thread() {
-                        // fork inside a thread is currently not supported
-                        return -1;
-                    } else {
-                        // main thread calls fork, then we just call _start function
+                    {
+                        // Asyncify rewinds through _start for both main and worker
+                        // threads; the selected worker becomes the child's main thread.
                         let child_start_func = instance
                             .get_func(&mut store, "_start")
                             .ok_or_else(|| anyhow!("no func export named `_start` found"))
@@ -801,6 +918,18 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             .as_context_mut()
                             .set_syscall_asyncify_data(syscall_asyncify_data);
 
+                        lind_signal_init(child_cageid, epoch_pointer, THREAD_START_ID, true);
+                        lind_manager.increment();
+                        if !publish_fork_startup(
+                            &startup_tx,
+                            Ok(()),
+                            parent_cageid as u64,
+                            child_cageid,
+                            Some(&lind_manager),
+                        ) {
+                            return -1;
+                        }
+
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
                         // Wasm instance crashed — perform the same cleanup
                         // as the signal-handler error path so the parent
@@ -817,7 +946,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             threei::EXITING_TABLE.insert(child_cageid);
                             threei::handler_table::_rm_grate_from_handler(child_cageid);
                             cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
-                            cage::cage_finalize(child_cageid);
+                            lind_core::finalize_cage(child_cageid);
                             if !rm_vmctx_thread(child_cageid, 0) {
                                 lind_log!(
                                     Default,
@@ -842,17 +971,43 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     }
 
                     return 0;
-                })
-                .unwrap();
+                });
 
-            // wait until child has fully copied the memory
-            barrier.wait();
+            let startup = match child_worker {
+                Ok(worker) => match startup_rx.recv() {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(error)) => {
+                        if worker.join().is_err() {
+                            eprintln!("fork child panicked after reporting a startup failure");
+                        }
+                        Err(error)
+                    }
+                    Err(_) => {
+                        let detail = match worker.join() {
+                            Ok(status) => format!("child exited during startup with status {status}"),
+                            Err(_) => "child panicked during startup".to_owned(),
+                        };
+                        Err((Errno::EIO as i32, detail))
+                    }
+                },
+                Err(error) => Err((Errno::EAGAIN as i32, format!("failed to start fork worker: {error}"))),
+            };
+
+            let rewind_result = match startup {
+                Ok(()) => child_cageid as i32,
+                Err((errno, message)) => {
+                    eprintln!("fork of cage {parent_cageid} failed: {message}");
+                    rollback_runtime_fork(parent_cageid as u64, child_cageid)
+                        .map_err(|error| anyhow!("failed to roll back forked cage {child_cageid}: {error}"))?;
+                    -errno
+                }
+            };
 
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
 
             // set up asyncify state and fork return value for parent
-            store.set_asyncify_state(AsyncifyState::Rewind(child_cageid as i32));
+            store.set_asyncify_state(AsyncifyState::Rewind(rewind_result));
 
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
@@ -1167,10 +1322,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     //    Store/Instance, so globals must be explicitly synced from the parent's
                     //    snapshot. Snapshots are looked up by module name; backup instances are
                     //    never registered and are therefore naturally excluded.
-                    let main_module_name = module.name().unwrap_or_else(|| {
-                        lind_debug_panic!("module has no name");
-                        "" // best-effort fallback in LogOnly/NoAction mode
-                    });
+                    let main_module_name = main_module_snapshot_name(&module);
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -1583,7 +1735,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 threei::EXITING_TABLE.insert(cloned_cageid as u64);
                 threei::handler_table::_rm_grate_from_handler(cloned_cageid as u64);
                 cage::signal::lind_thread_exit(cloned_cageid as u64, THREAD_START_ID as u64);
-                cage::cage_finalize(cloned_cageid as u64);
+                lind_core::finalize_cage(cloned_cageid as u64);
                 cloned_lind_manager.decrement();
                 return Ok(OnCalledAction::Finish(vec![Val::I32(1)]));
             }
@@ -1657,7 +1809,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             if is_last {
                 // cage_finalize waits for grate_inflight to drain,
                 // records zombie/SIGCHLD, removes fdtable + cage.
-                cage::cage_finalize(deferred_cageid);
+                lind_core::finalize_cage(deferred_cageid);
 
                 // Remove the VMContext pool
                 if !rm_vmctx_thread(deferred_cageid, 0) {
@@ -1898,7 +2050,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
-            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
+            pending_clone_visible_retval: Arc::new(Mutex::new(None)),
             thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
@@ -1927,7 +2079,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             next_threadid: self.next_threadid.clone(),
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
-            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
+            pending_clone_visible_retval: Arc::new(Mutex::new(None)),
             thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
@@ -2646,8 +2798,8 @@ fn has_correct_signature(module: &Module) -> bool {
 /// `make-syscall` import again. At that point, `take_pending_clone_visible_retval`
 /// consumes this value and uses it to override the positive real child cage id.
 ///
-/// The slot is protected by a mutex and stored behind an `Arc` so that it
-/// survives `HostCtx`/`LindCtx` cloning across fork setup.
+/// The slot is shared by clones of the same thread's context across replay.
+/// A newly forked process or thread has its own slot.
 pub fn set_pending_clone_visible_retval<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,

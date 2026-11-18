@@ -1,0 +1,14 @@
+[
+  {"op": "launch", "cage": 1, "image": "parent.wasm"},
+  {"op": "fork", "source": 1, "child": 2, "save": "fork"},
+  {"op": "tick"},
+  {"op": "check", "path": "last", "equals": []},
+  {"op": "unwind", "barrier": "$fork"},
+  {"op": "init", "cage": 10, "image": "replacement.elf", "staging": true},
+  {"op": "create", "cage": 10},
+  {"op": "tick"},
+  {"op": "check", "path": "last", "equals": [[1, 1], [2, 1]]},
+  {"op": "apply", "staging": 10, "target": 2},
+  {"op": "tick"},
+  {"op": "state"}
+]

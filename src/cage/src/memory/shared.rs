@@ -1,7 +1,7 @@
 // Filesystem metadata struct
 #![allow(dead_code)]
 
-use crate::cage::get_cage;
+use crate::cage::{get_cage, Cage};
 
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 pub use parking_lot::Mutex;
@@ -227,10 +227,39 @@ pub fn get_shm_length(shmid: i32) -> Option<usize> {
     metadata.get_shm_length(shmid)
 }
 
+pub fn fork_shm_mappings(
+    parent: &Cage,
+    child: &Cage,
+    parent_base: usize,
+    child_base: usize,
+) -> std::io::Result<()> {
+    let mappings = parent.rev_shm.lock().clone();
+    for (address, shmid) in mappings {
+        let address = usize::try_from(address)
+            .map_err(|_| std::io::Error::other("invalid parent shared-memory address"))?;
+        let offset = address
+            .checked_sub(parent_base)
+            .filter(|offset| *offset <= u32::MAX as usize)
+            .ok_or_else(|| std::io::Error::other("invalid parent shared-memory address"))?;
+        let child_address = child_base
+            .checked_add(offset)
+            .ok_or_else(|| std::io::Error::other("invalid child shared-memory address"))?;
+        let mut segment = SHM_METADATA
+            .shmtable
+            .get_mut(&shmid)
+            .ok_or_else(|| std::io::Error::other("forked shared-memory segment disappeared"))?;
+        segment.shminfo.shm_nattch += 1;
+        *segment.attached_cages.entry(child.cageid).or_insert(0) += 1;
+        child.rev_shm.lock().push((child_address as u64, shmid));
+    }
+    Ok(())
+}
+
 pub fn unmap_shm_mappings(cageid: u64) {
     let cage = get_cage(cageid).unwrap();
     //unmap shm mappings on exit or exec
-    for rev_mapping in cage.rev_shm.lock().iter() {
+    let mappings = std::mem::take(&mut *cage.rev_shm.lock());
+    for rev_mapping in mappings {
         let shmid = rev_mapping.1;
         let metadata = &SHM_METADATA;
         match metadata.shmtable.entry(shmid) {

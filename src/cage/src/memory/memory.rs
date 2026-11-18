@@ -4,15 +4,45 @@
 //! initializing vmmap, helper functions for handling vmmap during a fork syscall, and
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, with_cage, Cage};
-use crate::memory::VmmapOps;
-use sysdefs::constants::err_const::{get_errno, Errno};
+use crate::memory::{fork_shm_mappings, MemoryBackingType, VmmapOps};
+use once_cell::sync::OnceCell;
+use std::fs::File;
+use std::io;
+use std::os::fd::{AsRawFd, FromRawFd};
+use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::fs_const::{
-    MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
+    MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_READ, PROT_WRITE,
 };
-use sysdefs::{lind_debug_panic, lind_log};
+use sysdefs::lind_debug_panic;
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
+
+static FORK_MEMORY_READER: OnceCell<File> = OnceCell::new();
+
+/// Open the host memory reader before entering a filesystem jail.
+pub fn init_fork_memory_reader() -> io::Result<()> {
+    fork_memory_reader().map(|_| ())
+}
+
+fn fork_memory_reader() -> io::Result<&'static File> {
+    FORK_MEMORY_READER.get_or_try_init(|| {
+        let reader = File::open("/proc/self/mem")?;
+        let reader = if reader.as_raw_fd() <= libc::STDERR_FILENO {
+            // Guest stdio maps host descriptors 0-2 directly.
+            let fd = unsafe { libc::fcntl(reader.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 3) };
+            if fd < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            drop(reader);
+            // F_DUPFD_CLOEXEC returns a newly owned descriptor.
+            unsafe { File::from_raw_fd(fd) }
+        } else {
+            reader
+        };
+        Ok(reader)
+    })
+}
 
 /// Round up the address length to be multiple of pages
 ///
@@ -71,97 +101,142 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// to either `vmmap` do not affect the other.
 ///
 /// The copying behavior varies based on the type of memory region:
-/// 1. **PROT_NONE regions**:
-///    - No action is taken, as memory regions are already configured with `PROT_NONE` by default.
-/// 2. **Shared memory regions**:
-///    - The function uses the `mremap` syscall to replicate shared memory efficiently. Refer to `man 2 mremap` for details.
-/// 3. **Private memory regions**:
-///    - The function uses `process_vm_writev` to copy memory contents from the parent into
-///      the child's address space.
+/// 1. **Shared memory regions**:
+///    - The function uses `mremap`, including when the current protection is `PROT_NONE`.
+/// 2. **Private reservations** remain inaccessible without copying.
+/// 3. **Private mappings** are copied without changing the parent's protections.
 ///
 /// # Arguments
 /// * `parent_cageid` - cageid of parent
 /// * `child_cageid` - caegid of child
-pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
+///
+/// On error, the caller must discard the unstarted child and its resources.
+pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) -> io::Result<()> {
+    if parent_cageid == child_cageid {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "fork source and destination must be different cages",
+        ));
+    }
+
     // first retrieve corresponding vmmaps
-    let parent_cage = get_cage(parent_cageid).unwrap();
-    let child_cage = get_cage(child_cageid).unwrap();
+    let parent_cage = get_cage(parent_cageid)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "parent cage not found"))?;
+    let child_cage = get_cage(child_cageid)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "child cage not found"))?;
     let parent_vmmap = parent_cage.vmmap.read();
-    let child_vmmap = child_cage.vmmap.read();
+    let mut child_vmmap = child_cage.vmmap.write();
+    let child_base = child_vmmap
+        .base_address
+        .ok_or_else(|| io::Error::other("child memory base is missing"))?;
+    let mut snapshot = parent_vmmap.clone();
+    snapshot.set_base_address(child_base);
+    *child_vmmap = snapshot;
+
+    fork_shm_mappings(
+        &parent_cage,
+        &child_cage,
+        parent_vmmap
+            .base_address
+            .ok_or_else(|| io::Error::other("parent memory base is missing"))?,
+        child_base,
+    )?;
 
     // iterate through each vmmap entry
-    for (_interval, entry) in parent_vmmap.entries.iter() {
-        // PROT_NONE regions are already configured with PROT_NONE by default,
-        // and reading from a host PROT_NONE page would cause a SIGSEGV
-        if entry.prot == PROT_NONE {
+    for (interval, entry) in parent_vmmap.entries.iter() {
+        if entry.is_reservation {
             continue;
         }
 
         // translate page number to user address
-        let addr_st = (entry.page_num << PAGESHIFT) as u32;
-        let addr_len = (entry.npages << PAGESHIFT) as usize;
+        let addr_st = interval.start() << PAGESHIFT;
+        let addr_len = ((interval.end() + 1 - interval.start()) as usize) << PAGESHIFT;
 
         // translate user address to system address
         let parent_st = parent_vmmap.user_to_sys(addr_st);
         let child_st = child_vmmap.user_to_sys(addr_st);
-        if entry.flags & (MAP_SHARED as i32) > 0 {
+        if entry.flags & (MAP_SHARED as i32) > 0
+            || matches!(entry.backing, MemoryBackingType::SharedMemory(_))
+        {
             // for shared memory, we are using mremap to fork shared memory
             // See "man 2 mremap" for description of what MREMAP_MAYMOVE does with old_size=0
             // when old_address points to a shared mapping
-            unsafe {
+            let result = unsafe {
                 libc::mremap(
                     parent_st as *mut libc::c_void,
                     0,
                     addr_len,
                     (MREMAP_MAYMOVE | MREMAP_FIXED) as i32,
                     child_st as *mut libc::c_void,
-                );
+                )
             };
+            if result == libc::MAP_FAILED {
+                return Err(io::Error::last_os_error());
+            }
+            if result as usize != child_st {
+                return Err(io::Error::other(
+                    "shared fork mapping moved to an unexpected address",
+                ));
+            }
         } else {
             unsafe {
                 // temporarily enable write on child's memory region to write parent data
-                libc::mprotect(
+                if libc::mprotect(
                     child_st as *mut libc::c_void,
                     addr_len,
                     PROT_READ | PROT_WRITE,
-                );
+                ) != 0
+                {
+                    return Err(io::Error::last_os_error());
+                }
 
-                // write parent data
-                let local_iov = libc::iovec {
-                    iov_base: parent_st as *mut libc::c_void,
-                    iov_len: addr_len,
-                };
-                let remote_iov = libc::iovec {
-                    iov_base: child_st as *mut libc::c_void,
-                    iov_len: addr_len,
-                };
-                let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
-                if ret < 0 {
-                    lind_log!(
-                        Default,
-                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={}), falling back to copy_nonoverlapping",
-                        get_errno(),
-                        parent_st,
-                        child_st,
-                        addr_len,
-                    );
-                    std::ptr::copy_nonoverlapping(
-                        parent_st as *const u8,
-                        child_st as *mut u8,
-                        addr_len,
-                    );
+                let mut copied = 0;
+                while copied < addr_len {
+                    let ret = if entry.prot & PROT_READ == 0 {
+                        // Procfs can read protected pages without changing the parent's permissions.
+                        let reader = fork_memory_reader()?;
+                        libc::pread(
+                            reader.as_raw_fd(),
+                            (child_st + copied) as *mut libc::c_void,
+                            addr_len - copied,
+                            (parent_st + copied) as libc::off_t,
+                        )
+                    } else {
+                        let local_iov = libc::iovec {
+                            iov_base: (parent_st + copied) as *mut libc::c_void,
+                            iov_len: addr_len - copied,
+                        };
+                        let remote_iov = libc::iovec {
+                            iov_base: (child_st + copied) as *mut libc::c_void,
+                            iov_len: addr_len - copied,
+                        };
+                        libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0)
+                    };
+                    if ret < 0 {
+                        let error = io::Error::last_os_error();
+                        if error.kind() == io::ErrorKind::Interrupted {
+                            continue;
+                        }
+                        return Err(error);
+                    }
+                    if ret == 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::WriteZero,
+                            "fork memory copy made no progress",
+                        ));
+                    }
+                    copied += ret as usize;
                 }
 
                 // revert child's memory region prot
-                libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);
+                if libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
             };
         }
     }
 
-    // update program break for child
-    drop(child_vmmap);
-    let mut child_vmmap = child_cage.vmmap.write();
-    child_vmmap.set_heap_start(parent_vmmap.heap_start);
+    Ok(())
 }
 
 // set the wasm linear memory base address to vmmap
