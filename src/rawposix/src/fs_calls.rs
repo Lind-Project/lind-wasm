@@ -269,8 +269,11 @@ pub extern "C" fn read_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
+    perf_timer!(_t_read = READ);
     // Convert the virtual fd to the underlying kernel file descriptor.
+    perf_timer!(_t_fd = READ_FD_LOOKUP);
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    perf_stop!(_t_fd);
     // Return error
     if kernel_fd < 0 {
         return (handle_errno(-kernel_fd, "read")) as i64;
@@ -291,7 +294,9 @@ pub extern "C" fn read_syscall(
     }
 
     // Call the underlying libc read.
+    perf_timer!(_t_kernel = READ_KERNEL);
     let ret = unsafe { libc::read(kernel_fd, buf as *mut c_void, count) as i64 };
+    perf_stop!(_t_kernel);
     if ret < 0 {
         let errno = get_errno();
         return (handle_errno(errno, "read")) as i64;
@@ -435,7 +440,10 @@ pub extern "C" fn write_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
+    perf_timer!(_t_write = WRITE);
+    perf_timer!(_t_fd = WRITE_FD_LOOKUP);
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    perf_stop!(_t_fd);
     // Return error
     if kernel_fd < 0 {
         return (handle_errno(-kernel_fd, "write")) as i64;
@@ -454,7 +462,9 @@ pub extern "C" fn write_syscall(
         );
     }
 
+    perf_timer!(_t_kernel = WRITE_KERNEL);
     let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i64 };
+    perf_stop!(_t_kernel);
 
     if ret < 0 {
         let errno = get_errno();
@@ -1789,11 +1799,14 @@ pub extern "C" fn stat_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
+    perf_timer!(_t_stat = STAT);
     // Type conversion
+    perf_timer!(_t_path = STAT_PATH);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return (syscall_error(e, "stat", "path conversion failed")) as i64,
     };
+    perf_stop!(_t_path);
 
     // Validate unused args
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -1809,7 +1822,9 @@ pub extern "C" fn stat_syscall(
 
     // Declare statbuf by ourselves
     let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
+    perf_timer!(_t_kernel = STAT_KERNEL);
     let libcret = unsafe { libc::stat(path.as_ptr(), &mut libc_statbuf) };
+    perf_stop!(_t_kernel);
 
     if libcret < 0 {
         let errno = get_errno();
@@ -1817,10 +1832,12 @@ pub extern "C" fn stat_syscall(
     }
 
     // Convert libc stat to StatData and copy to user buffer
+    perf_timer!(_t_copy = STAT_COPY_OUT);
     match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
         Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
         Err(e) => return (syscall_error(e, "xstat", "Bad address")) as i64,
     }
+    perf_stop!(_t_copy);
 
     (libcret) as i64
 }
@@ -3091,6 +3108,7 @@ pub extern "C" fn clock_gettime_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
+    perf_timer!(_t_clock = CLOCK_GETTIME);
     let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
     let tp = tp_arg as *mut u8;
     // would sometimes check, sometimes be a no-op depending on the compiler settings
@@ -3105,7 +3123,9 @@ pub extern "C" fn clock_gettime_syscall(
         );
     }
 
+    perf_timer!(_t_kernel = CLOCK_GETTIME_KERNEL);
     let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) };
+    perf_stop!(_t_kernel);
 
     if ret < 0 {
         let errno = get_errno();

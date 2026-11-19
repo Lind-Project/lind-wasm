@@ -33,7 +33,7 @@ USER_FILTER=0
 for arg in "$@"; do
   [[ "${arg}" == --perf-filter* ]] && USER_FILTER=1
 done
-SYSCALL_COUNTERS="guest::,lind_common::,threei::,rawposix::,fdtables::,lind_boot::,lind_3i::,span::"
+SYSCALL_COUNTERS="guest::,lind_common::,threei::,rawposix::libc_call,rawposix::fdtables_call,fdtables::,lind_boot::,lind_3i::,span::"
 FORK_COUNTERS="guest::,fork::,exit::"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

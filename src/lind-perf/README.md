@@ -203,6 +203,21 @@ runs them.
 | `exit::cleanup` | exit callback | thread exit, `cage_finalize`, removing the VMContext |
 | `exit::cleanup::cage_finalize` | exit callback | zombie record and SIGCHLD (lets the parent's `waitpid` return), fdtable and cage removal |
 
+**Inside RawPOSIX handlers** (`rawposix::read`, `::write`, `::stat`, `::select`,
+`::clock_gettime`, each with its steps: fd lookup in fdtables, path conversion, the kernel call,
+copying results back, fd-set conversion). These time real syscalls, so they record under
+`--perf-scope=all`, for example on lmbench:
+
+```bash
+sudo -E taskset -c 2 build/lind-boot-perf --preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm \
+    --perf --perf-scope=all --perf-filter=rawposix::stat bin/lat_syscall -W 1 -N 5 stat /tmp/f
+```
+
+`rawposix::select` and its steps record only zero-timeout calls (polls, as in lmbench's
+`lat_select`), since a call that may sleep would swamp the handler's own cost. Their derived
+lines ("RawPOSIX ... excl. ...") are printed in any scope. `run_microbench.sh` doesn't select
+them.
+
 The report skips counters with no calls (e.g. grate counters in a direct run).
 
 ## Derived costs

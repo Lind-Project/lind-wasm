@@ -30,6 +30,24 @@ macro_rules! perf_stop {
 macro_rules! perf_stop {
     ($guard:ident) => {};
 }
+// Like `perf_timer!`, but only times when `$cond` is true. Without the feature the condition is
+// not compiled either.
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_timer_if {
+    ($guard:ident = $counter:ident, $cond:expr) => {
+        let $guard = if $cond {
+            crate::perf::$counter.timer()
+        } else {
+            None
+        };
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_timer_if {
+    ($guard:ident = $counter:ident, $cond:expr) => {};
+}
 
 #[cfg(feature = "lind_perf")]
 pub mod bench_calls;

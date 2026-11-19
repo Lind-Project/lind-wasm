@@ -43,6 +43,7 @@ fn all_counters() -> Vec<&'static Counter> {
         l3i::ALL_COUNTERS,
         ti::SPAN_COUNTERS,
         mp::ALL_COUNTERS,
+        rp::HANDLER_COUNTERS,
     ]
     .iter()
     .flat_map(|group| group.iter().copied())
@@ -52,6 +53,40 @@ fn all_counters() -> Vec<&'static Counter> {
 /// Costs derived by subtracting nested timers. A line is printed only when all of its
 /// counters were measured in this benchmark, so direct-path and grate-path lines appear
 /// in the matching runs only.
+/// Derived costs inside RawPOSIX handlers. Each uses counters of one syscall only, so unlike
+/// `DERIVED` they are valid in any scope, including `--perf-scope=all`.
+static HANDLER_DERIVED: &[Derived] = &[
+    Derived {
+        label: "RawPOSIX read excl. fd lookup and kernel read",
+        outer: &rp::READ,
+        inner: &[&rp::READ_FD_LOOKUP, &rp::READ_KERNEL],
+    },
+    Derived {
+        label: "RawPOSIX write excl. fd lookup and kernel write",
+        outer: &rp::WRITE,
+        inner: &[&rp::WRITE_FD_LOOKUP, &rp::WRITE_KERNEL],
+    },
+    Derived {
+        label: "RawPOSIX stat excl. path, kernel stat, copy-out",
+        outer: &rp::STAT,
+        inner: &[&rp::STAT_PATH, &rp::STAT_KERNEL, &rp::STAT_COPY_OUT],
+    },
+    Derived {
+        label: "RawPOSIX select (poll) excl. fd sets, kernel loop, results",
+        outer: &rp::SELECT,
+        inner: &[
+            &rp::SELECT_PREPARE,
+            &rp::SELECT_KERNEL_LOOP,
+            &rp::SELECT_RESULTS,
+        ],
+    },
+    Derived {
+        label: "RawPOSIX clock_gettime excl. kernel call",
+        outer: &rp::CLOCK_GETTIME,
+        inner: &[&rp::CLOCK_GETTIME_KERNEL],
+    },
+];
+
 static DERIVED: &[Derived] = &[
     Derived {
         label: "guest side: glibc wrapper + Wasm<->host transition",
@@ -403,6 +438,8 @@ pub fn run_parent(cli: &CliOptions, timer: PerfTimer) -> i32 {
         // without forwarded calls.
         lind_perf::print_derived(DERIVED);
     }
+    // Handler-internal derived costs are valid in any scope (printed only if measured).
+    lind_perf::print_derived(HANDLER_DERIVED);
 
     if failed { 1 } else { 0 }
 }
