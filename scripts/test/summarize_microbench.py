@@ -24,6 +24,31 @@ SYSCALL_ROW = re.compile(r"^(.+?)\s{2,}(cage|grate|fwd)\s+\d+\s+[\d.]+\s+\S+\s+[
 SYSCALL_COLS = ["entry", "3i", "3i lookup", "rawposix", "3i call", "grate", "grate wasm"]
 OVERHEAD = re.compile(r"^timer overhead per measurement: ([\d.]+) (\S+)")
 
+# The lind-perf report picks a unit per value (ns below 1,000 ns, then us, ms, s), so one row can
+# switch units between runs. Convert to ns before comparing; print back in a readable unit.
+TO_NS = {"ns": 1.0, "us": 1e3, "\u00b5s": 1e3, "ms": 1e6, "s": 1e9}
+
+
+def to_base(value, unit):
+    """(value, unit) -> (value in ns, "ns"), or unchanged for units like cycles."""
+    if unit in TO_NS:
+        return value * TO_NS[unit], "ns"
+    return value, unit
+
+
+def fmt(v, unit):
+    """Format a value in base unit `unit` the way the lind-perf report does."""
+    if unit != "ns":
+        return f"{v:9.1f}", unit
+    a = abs(v)
+    if a < 1e3:
+        return f"{v:9.1f}", "ns"
+    if a < 1e6:
+        return f"{v / 1e3:9.3f}", "us"
+    if a < 1e9:
+        return f"{v / 1e6:9.3f}", "ms"
+    return f"{v / 1e9:9.3f}", "s"
+
 
 def parse(path):
     """Return {benchmark: {name: (value, unit, kind)}} for one run's output."""
@@ -49,12 +74,12 @@ def parse(path):
             continue
         m = OVERHEAD.match(line)
         if m:
-            out[bench]["timer overhead"] = (float(m.group(1)), m.group(2), "overhead")
+            out[bench]["timer overhead"] = (*to_base(float(m.group(1)), m.group(2)), "overhead")
             continue
         if section.startswith("DERIVED"):
             m = DERIVED.match(line)
             if m:
-                out[bench][m.group(1)] = (float(m.group(2)), m.group(3), "derived")
+                out[bench][m.group(1)] = (*to_base(float(m.group(2)), m.group(3)), "derived")
             continue
         if section.startswith("PER SYSCALL"):
             m = SYSCALL_ROW.match(line)
@@ -70,11 +95,11 @@ def parse(path):
                 for col, v in zip(SYSCALL_COLS, vals):
                     if v is not None:
                         name = f"{m.group(1)} [{m.group(2)}] {col}"
-                        out[bench][name] = (v[0], v[1], "per-syscall")
+                        out[bench][name] = (*to_base(v[0], v[1]), "per-syscall")
             continue
         m = COUNTER.match(line)
         if m:
-            out[bench][m.group(1)] = (float(m.group(3)), m.group(4), "counter")
+            out[bench][m.group(1)] = (*to_base(float(m.group(3)), m.group(4)), "counter")
     return out
 
 
@@ -97,6 +122,7 @@ def main():
                 values.setdefault((b, n), []).append((v, unit, kind))
 
     print(f"lind-perf summary: {len(runs)} runs; net per call; median [min .. max] spread")
+    print("(values converted to ns before comparing; the CSV is in ns, or cycles with --perf=tsc)")
     table = []
     for b in benches:
         print()
@@ -109,8 +135,13 @@ def main():
             unit, kind = vals[0][1], vals[0][2]
             med, lo, hi = statistics.median(xs), min(xs), max(xs)
             label = n if kind == "counter" else f"{n} ({kind})"
+            # all four numbers in the median's unit, so they compare at a glance
+            m_s, u = fmt(med, unit)
+            scale = 1.0 if unit != "ns" else {"ns": 1.0, "us": 1e3, "ms": 1e6, "s": 1e9}[u]
+            d = 1 if u in ("ns", unit) and unit != "ns" or u == "ns" else 3
             print(
-                f"{label[:60]:<60} {med:9.1f} [{lo:8.1f} .. {hi:8.1f}] {hi - lo:7.1f} {unit}"
+                f"{label[:60]:<60} {m_s} [{lo / scale:8.{d}f} .. {hi / scale:8.{d}f}] "
+                f"{(hi - lo) / scale:7.{d}f} {u}"
                 + ("" if len(xs) == len(runs) else f"   (in {len(xs)}/{len(runs)} runs)")
             )
             table.append([b, n, kind, unit, len(xs), f"{med:.1f}", f"{lo:.1f}", f"{hi:.1f}"])
