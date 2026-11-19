@@ -818,7 +818,9 @@ pub fn convert_virtualfds_for_poll(
     // BUG?: I'm ignoring the fact that virtualfds can show up multiple times.
     // I'm not sure this actually matters, but I didn't think hard about it.
     for virtfd in virtualfds {
-        if let Some(entry) = thefdrow[virtfd as usize] {
+        // A number past the table (e.g. FD_PER_PROCESS_MAX itself) is not an
+        // open fd: report it as invalid (POLLNVAL) instead of panicking.
+        if let Some(entry) = thefdrow.get(virtfd as usize).copied().flatten() {
             // Insert an empty HashSet, if needed
             rethashmap.entry(entry.fdkind).or_default();
             mappingtable
