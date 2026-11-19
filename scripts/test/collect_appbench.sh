@@ -201,9 +201,9 @@ while IFS= read -r line; do
       raw="raw/${name}.${mode}.${i}.txt"
       start=$(date +%s%N)
       case "${mode}" in
-        native) (cd "${DATA}" && timeout "${TIMEOUT}" taskset -c "${CPU}" "${native_argv[@]}") > "${OUT}/${raw}" 2>&1 ;;
-        lind) timeout "${TIMEOUT}" taskset -c "${CPU}" "${LIND_RUN}" "${lind_argv[@]}" > "${OUT}/${raw}" 2>&1 ;;
-        grate) timeout "${TIMEOUT}" taskset -c "${CPU}" "${LIND_RUN}" "${GRATE}" -s "${rules}" "${lind_argv[@]}" > "${OUT}/${raw}" 2>&1 ;;
+        native) (cd "${DATA}" && timeout -k 10 "${TIMEOUT}" taskset -c "${CPU}" "${native_argv[@]}") > "${OUT}/${raw}" 2>&1 ;;
+        lind) timeout -k 10 "${TIMEOUT}" taskset -c "${CPU}" "${LIND_RUN}" "${lind_argv[@]}" > "${OUT}/${raw}" 2>&1 ;;
+        grate) timeout -k 10 "${TIMEOUT}" taskset -c "${CPU}" "${LIND_RUN}" "${GRATE}" -s "${rules}" "${lind_argv[@]}" > "${OUT}/${raw}" 2>&1 ;;
       esac
       rc=$?
       end=$(date +%s%N)
