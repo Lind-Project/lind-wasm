@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <sys/wait.h>
 
 int main(void) {
     void *handle;
@@ -9,6 +10,10 @@ int main(void) {
     char *error;
 
     int pid = fork();
+    if (pid < 0) {
+        perror("fork failed");
+        return 1;
+    }
 
     if(pid == 0)
     {
@@ -41,6 +46,14 @@ int main(void) {
     else
     {
         // parent routine
+
+        // wait for the child to finish first so the output order is
+        // deterministic (child line always comes before parent line)
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            perror("waitpid failed");
+            return 1;
+        }
 
         /* Load the math library */
         handle = dlopen("lib.so", RTLD_LAZY);
