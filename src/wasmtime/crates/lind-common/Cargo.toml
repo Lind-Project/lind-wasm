@@ -23,8 +23,11 @@ sysdefs = { path = "../sysdefs" }
 wasmtime-lind-3i = { path = "../lind-3i" }
 cage = { path = "../cage" }
 typemap = { path = "../typemap" }
+lind-perf = { path = "../lind-perf", optional = true }
 
 [features]
 lind_debug = []
 lind-logging = ["sysdefs/lind-logging"]
 asyncify-setjmp = ["wasmtime-lind-multi-process/asyncify-setjmp"]
+# Per-layer syscall timing + benchmark syscalls 2003/2004; perf builds only (see src/lind-perf).
+lind_perf = ["dep:lind-perf", "wasmtime-lind-multi-process/lind_perf"]

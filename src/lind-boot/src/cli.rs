@@ -11,6 +11,26 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
     Ok((parts[0].into(), parts[1].into()))
 }
 
+/// Clock used by `--perf` (perf builds only).
+#[cfg(feature = "lind_perf")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PerfTimer {
+    /// `clock_gettime(CLOCK_MONOTONIC_RAW)`: nanoseconds.
+    Clock,
+    /// `rdtsc`/`rdtscp`: CPU cycles (x86_64).
+    Tsc,
+}
+
+/// Which syscalls `--perf` times (perf builds only).
+#[cfg(feature = "lind_perf")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PerfScopeArg {
+    /// Only the lind-perf benchmark syscalls (2001-2999).
+    Bench,
+    /// Every syscall, with a per-syscall breakdown. For real programs and grates.
+    All,
+}
+
 #[derive(Debug, Parser, Clone)]
 #[command(name = "lind-boot")]
 pub struct CliOptions {
@@ -81,6 +101,37 @@ pub struct CliOptions {
     /// Internal memory reservation for Lind's own use (e.g., GC Heap) in bytes.
     #[arg(long = "lind-internal-memory-reservation", default_value_t = 10 * 1024 * 1024)]
     pub lind_internal_memory_reservation: u64,
+
+    /// Per-layer syscall timing (perf builds only). Runs the program once per counter in a
+    /// fresh lind-boot process and prints a report. `--perf` = `--perf=clock` (ns);
+    /// `--perf=tsc` for CPU cycles.
+    #[cfg(feature = "lind_perf")]
+    #[arg(
+        long,
+        value_enum,
+        value_name = "clock|tsc",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "clock"
+    )]
+    pub perf: Option<PerfTimer>,
+
+    /// With `--perf`: only run counters whose names start with one of these prefixes,
+    /// comma-separated (e.g. `threei::,lind_3i::`).
+    #[cfg(feature = "lind_perf")]
+    #[arg(long = "perf-filter", value_name = "PREFIX[,PREFIX...]")]
+    pub perf_filter: Option<String>,
+
+    /// With `--perf`: `bench` times only the benchmark syscalls (default); `all` times every
+    /// syscall and adds a per-syscall table.
+    #[cfg(feature = "lind_perf")]
+    #[arg(long = "perf-scope", value_enum, default_value = "bench")]
+    pub perf_scope: PerfScopeArg,
+
+    /// With `--perf-scope=all`: number of rows in the per-syscall table.
+    #[cfg(feature = "lind_perf")]
+    #[arg(long = "perf-top", default_value_t = 25)]
+    pub perf_top: usize,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {

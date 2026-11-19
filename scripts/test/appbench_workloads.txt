@@ -1,0 +1,58 @@
+# Workloads for scripts/test/collect_appbench.sh.
+#
+# One workload per line, fields separated by " | ":
+#   name | metric | native command | Lind command | grate syscalls
+#
+# metric   us     lmbench latency: the number before "microseconds" (else the last number)
+#          MBps   lmbench bandwidth: the number before "MB/sec" (else the last number)
+#          wall   wall-clock time of the whole command, in ms, measured by the script
+#                 (for Lind this includes starting lind-boot and loading the program)
+# native   run on the host, from {DATA}. Placeholders: {LMN} = native lmbench bin dir
+#          ($LMBENCH_NATIVE), {DATA} = /tmp/lindperf-apps
+# Lind     run with scripts/bin/lind_run; paths are inside lindfs. Placeholders: {LML} = Lind
+#          lmbench dir in lindfs ($LMBENCH_LIND), {APPS} = app bin dir in lindfs ($APPS_LIND),
+#          {DATA} = /tmp/lindperf-apps (the script creates the same files on the host and in
+#          lindfs)
+# grate    syscalls the pass-through grate (testing-grate) intercepts and forwards unchanged:
+#          empty = the default set (file, I/O, socket and identity calls; see the script),
+#          a comma list of numbers, or "-" = don't run this workload behind the grate
+#
+# Commands are split like a shell would (quotes work). A workload whose program is missing is
+# skipped with a note.
+
+# ---- Stage 2: lmbench, one syscall class at a time --------------------------------------------
+# The standard lmbench summary rows: function call = lat_proc_procedure, context switch = lat_ctx_2,
+# null syscall = lat_syscall_null, signal = lat_sig_catch, process creation = lat_proc_fork /
+# lat_proc_exec, IPC = lat_pipe / lat_unix, file read bandwidth = bw_file_rd_64m. (TCP needs a
+# separately started server, which this script doesn't do yet.)
+lat_syscall_null  | us   | {LMN}/lat_syscall -W 1 -N 5 null                    | {LML}/lat_syscall -W 1 -N 5 null                    |
+lat_syscall_read  | us   | {LMN}/lat_syscall -W 1 -N 5 read                    | {LML}/lat_syscall -W 1 -N 5 read                    |
+lat_syscall_write | us   | {LMN}/lat_syscall -W 1 -N 5 write                   | {LML}/lat_syscall -W 1 -N 5 write                   |
+lat_syscall_stat  | us   | {LMN}/lat_syscall -W 1 -N 5 stat {DATA}/sample.bin  | {LML}/lat_syscall -W 1 -N 5 stat {DATA}/sample.bin  |
+lat_syscall_fstat | us   | {LMN}/lat_syscall -W 1 -N 5 fstat {DATA}/sample.bin | {LML}/lat_syscall -W 1 -N 5 fstat {DATA}/sample.bin |
+lat_syscall_open  | us   | {LMN}/lat_syscall -W 1 -N 5 open {DATA}/sample.bin  | {LML}/lat_syscall -W 1 -N 5 open {DATA}/sample.bin  |
+lat_select_file10 | us   | {LMN}/lat_select -n 10 -W 1 -N 5 file               | {LML}/lat_select -n 10 -W 1 -N 5 file               |
+lat_sig_install   | us   | {LMN}/lat_sig -W 1 -N 5 install                     | {LML}/lat_sig -W 1 -N 5 install                     |
+lat_sig_catch     | us   | {LMN}/lat_sig -W 1 -N 5 catch                       | {LML}/lat_sig -W 1 -N 5 catch                       |
+lat_ctx_2         | us   | {LMN}/lat_ctx -W 1 -N 5 -s 0 2                      | {LML}/lat_ctx -W 1 -N 5 -s 0 2                      |
+lat_pipe          | us   | {LMN}/lat_pipe -W 1 -N 5                            | {LML}/lat_pipe -W 1 -N 5                            |
+lat_unix          | us   | {LMN}/lat_unix -W 1 -N 5                            | {LML}/lat_unix -W 1 -N 5                            |
+lat_mmap_1m       | us   | {LMN}/lat_mmap -W 1 -N 5 1m {DATA}/sample.bin       | {LML}/lat_mmap -W 1 -N 5 1m {DATA}/sample.bin       |
+lat_pagefault     | us   | {LMN}/lat_pagefault -W 1 -N 5 {DATA}/sample.bin     | {LML}/lat_pagefault -W 1 -N 5 {DATA}/sample.bin     |
+lat_proc_procedure| us   | {LMN}/lat_proc -W 1 -N 5 procedure                  | {LML}/lat_proc -W 1 -N 5 procedure                  | -
+lat_proc_fork     | us   | {LMN}/lat_proc -W 0 -N 3 fork                       | {LML}/lat_proc -W 0 -N 3 fork                       |
+lat_proc_exec     | us   | {LMN}/lat_proc -W 0 -N 3 exec                       | {LML}/lat_proc -W 0 -N 3 exec                       |
+bw_file_rd_64m    | MBps | {LMN}/bw_file_rd -W 1 -N 5 64m io_only {DATA}/sample64.bin | {LML}/bw_file_rd -W 1 -N 5 64m io_only {DATA}/sample64.bin |
+bw_file_rd_4m     | MBps | {LMN}/bw_file_rd -W 1 -N 5 4m io_only {DATA}/sample.bin | {LML}/bw_file_rd -W 1 -N 5 4m io_only {DATA}/sample.bin |
+bw_pipe           | MBps | {LMN}/bw_pipe -W 1 -N 5                             | {LML}/bw_pipe -W 1 -N 5                             |
+bw_unix           | MBps | {LMN}/bw_unix -W 1 -N 5                             | {LML}/bw_unix -W 1 -N 5                             |
+
+# ---- Stage 3: whole programs, wall-clock -------------------------------------------------------
+# Native runs use the host's own programs, which can be different versions or builds from the
+# Lind ones: compare "Lind" with "Lind + grate" exactly, and with "native" as a reference.
+startup_hello     | wall | {LMN}/hello                                         | {LML}/hello                                         |
+bash_arith_loop   | wall | bash -c 'i=0; while [ $i -lt 200000 ]; do i=$((i+1)); done' | {APPS}/bash -c 'i=0; while [ $i -lt 200000 ]; do i=$((i+1)); done' |
+bash_spawn_50     | wall | bash -c 'i=0; while [ $i -lt 50 ]; do {DATA}/hello-native; i=$((i+1)); done' | {APPS}/bash -c 'i=0; while [ $i -lt 50 ]; do {DATA}/hello; i=$((i+1)); done' |
+python_startup    | wall | python3 -c pass                                     | {APPS}/python3 -c pass                              |
+python_fileio     | wall | python3 {DATA}/fileio.py {DATA}/py-out              | {APPS}/python3 {DATA}/fileio.py {DATA}/py-out       |
+grep_tree         | wall | grep -r -c lind {DATA}/tree                         | {APPS}/grep -r -c lind {DATA}/tree                  |

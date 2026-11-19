@@ -28,6 +28,16 @@ fdtables-dashmaparray = ["rawposix/fdtables-dashmaparray"]
 fdtables-dashmapvec = ["rawposix/fdtables-dashmapvec"]
 fdtables-muthashmax = ["rawposix/fdtables-muthashmax"]
 fdtables-vanilla = ["rawposix/fdtables-vanilla"]
+# Per-layer syscall timing (`--perf`). Perf builds only: `make lind-boot-perf`.
+# Without this feature, no lind-perf code, counters, CLI flags or benchmark syscalls are compiled.
+lind_perf = [
+    "dep:lind-perf",
+    "wasmtime-lind-common/lind_perf",
+    "threei/lind_perf",
+    "rawposix/lind_perf",
+    "wasmtime-lind-3i/lind_perf",
+    "wasmtime-lind-multi-process/lind_perf",
+]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
@@ -48,3 +58,4 @@ clap = { version = "4", features = ["derive"] }
 cfg-if = "1.0"
 libc = "0.2"
 rustix = "1"
+lind-perf = { path = "../wasmtime/crates/lind-perf", optional = true }

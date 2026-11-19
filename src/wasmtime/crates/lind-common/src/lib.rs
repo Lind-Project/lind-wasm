@@ -1,5 +1,48 @@
 #![allow(dead_code)]
 
+// lind-perf timing hooks. With the `lind_perf` feature they start/stop a timer on a counter
+// from this crate's `perf` module; without it they expand to nothing, so normal builds contain
+// no perf code. Defined before the `mod` declarations so every module can use them.
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_timer {
+    ($guard:ident = $counter:ident) => {
+        let $guard = crate::perf::$counter.timer();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_timer {
+    ($guard:ident = $counter:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_stop {
+    ($guard:ident) => {
+        drop($guard);
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_stop {
+    ($guard:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {
+        crate::perf::$counter.span_end();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {};
+}
+
+#[cfg(feature = "lind_perf")]
+pub mod perf;
+
 use anyhow::Result;
 use cage::memory::{check_addr_read, check_addr_write};
 use rand::Rng;
@@ -112,6 +155,25 @@ fn add_syscall_to_linker<
               arg6: u64,
               arg6cageid: u64|
               -> wasmtime::Result<i64> {
+            // lind-perf (perf builds only): record on this thread which syscall is being
+            // serviced and whether it is timed (benchmark syscalls 2001..=2999, or every
+            // syscall with --perf-scope=all), so timers in every layer record under it; time
+            // this whole function; and answer the perf-only syscalls (2003 null round trip,
+            // 2004 guest report) here, before 3i.
+            #[cfg(feature = "lind_perf")]
+            let _call = lind_perf::CallGuard::enter(
+                perf::should_time(call_number),
+                call_number,
+                || lind_platform_const::is_grate_handler_registered(self_cageid as usize),
+            );
+            perf_timer!(_t_entry = SYSCALL_ENTRY);
+            #[cfg(feature = "lind_perf")]
+            {
+                if let Some(ret) = perf::handle_perf_syscall(call_number, arg1, arg2) {
+                    return Ok(ret);
+                }
+            }
+
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
@@ -129,6 +191,8 @@ fn add_syscall_to_linker<
             // check here to early-return when we are on a rewind replay path.
             if call_number as i32 == CLONE_SYSCALL {
                 if let Some(rewind_res) = wasmtime_lind_multi_process::catch_rewind(&mut caller) {
+                    // fork: the parent's rewind back into `clone` ends here.
+                    perf_span_end!(SPAN_FORK_PARENT_REWIND);
                     if rewind_res > 0 {
                         // On Asyncify rewind replay, `clone` must not be executed again.
                         // The positive rewind result is the real child cage id returned to the

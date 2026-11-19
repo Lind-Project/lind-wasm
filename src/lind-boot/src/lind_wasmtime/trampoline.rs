@@ -27,6 +27,8 @@ pub extern "C" fn grate_callback_trampoline(
     arg6: u64,
     arg6cageid: u64,
 ) -> i64 {
+    perf_timer!(_t = GRATE_CALLBACK_TRAMPOLINE);
+
     // Form the grate request with the provided arguments and the handler address
     let req = GrateRequest {
         handler_addr: in_grate_fn_ptr_u64,
