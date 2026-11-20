@@ -2,8 +2,7 @@
 //!
 //! A single 3i handler is registered per syscall.  Each shim resolves the
 //! runtime type of the cage that originally issued the syscall, then
-//! delegates to the appropriate `lind-runtimes` implementation via
-//! `SyscallRuntime` (lifecycle) or `LindRuntime` (memory).
+//! drives the cage's `lind-runtimes` implementation through `LindRuntime`.
 //!
 //! Memory requests originate in RawPOSIX after validation and translation.
 //! `arg1_cageid` selects the affected cage; arguments contain host addresses
@@ -18,8 +17,10 @@
 //!     arg1_cageid     = clone_arg_cageid
 //!     arg2            = parent_cageid  ← runtime is looked up here
 //!     arg2_cageid     = parent_tid
-//!     arg3            = child_cageid
-//!     …
+//!     arg3            = child_cageid (0 for a thread clone)
+//!     arg4            = clone flags
+//!     arg5            = clone_args.parent_tid (owned by clone_arg_cageid)
+//!     arg6            = clone_args.child_tid (owned by clone_arg_cageid)
 //!
 //!   exec   (EXEC_SYSCALL = 59), dispatched by RawPOSIX `exec_syscall`:
 //!     cageid          = WASMTIME_CAGEID
@@ -38,88 +39,188 @@
 use sysdefs::constants::lind_platform_const::{
     RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
 };
+use sysdefs::constants::sys_const::{
+    CLONE_CHILD_SETTID, CLONE_PARENT_SETTID, CLONE_THREAD, CLONE_VFORK, CLONE_VM,
+};
 use sysdefs::constants::syscall_const::{
     CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, MMAP_SYSCALL, MPROTECT_SYSCALL, MUNMAP_SYSCALL,
 };
 use threei::threei_const;
 use lind_if::{
-    LindError, LindMmapArgs, LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime,
+    CageId, Errno, LindArgVec, LindCloneArgs, LindError, LindInitArgs, LindMmapArgs,
+    LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime, LindThreadDuplicateArgs,
+    ThreadDuplicateMode, ThreadId, UserPtr,
 };
+use typemap::datatype_conversion::sc_convert_ptr_to_host;
 
-use lind_runtimes::lifecycle::SyscallRuntime;
+use lind_runtimes::lifecycle::{begin_clone, begin_thread_exit, take_clone_result};
 use lind_runtimes::lind_mpk::lind_if::MpkRuntime;
-use lind_runtimes::lind_wasm::lifecycle::WasmLifecycle;
 use lind_runtimes::lind_wasm::lind_if::WasmRuntime;
+use wasmtime_lind_multi_process::THREAD_START_ID;
 
 use crate::cli::CliOptions;
 use crate::lind_wasmtime::host::HostCtx;
 
 // ── Runtime dispatch ─────────────────────────────────────────────────────────
 
-/// The Wasm runtime's lifecycle handlers, instantiated with lind-boot's
-/// Wasmtime host state and launch options.
-static WASM_LIFECYCLE: WasmLifecycle<HostCtx, CliOptions> = WasmLifecycle::new();
+/// The Wasm runtime, instantiated with lind-boot's Wasmtime host state and
+/// launch options.
+static WASM_RUNTIME: WasmRuntime<HostCtx, CliOptions> = WasmRuntime::new();
 
-/// Resolve a runtime type constant to its corresponding trait implementation.
-fn get_runtime_handler(runtime_type: u64) -> &'static dyn SyscallRuntime {
-    match runtime_type {
-        threei_const::RUNTIME_TYPE_WASMTIME => &WASM_LIFECYCLE,
-        threei_const::RUNTIME_TYPE_MPK => &MpkRuntime,
-        _ => panic!("get_runtime_handler: unknown runtime_type={}", runtime_type),
+/// The Lind-IF runtime of `cage_id`.
+fn lind_runtime(cage_id: u64) -> &'static dyn LindRuntime {
+    match threei::get_cage_runtime(cage_id) {
+        Some(threei_const::RUNTIME_TYPE_WASMTIME) => &WASM_RUNTIME,
+        Some(threei_const::RUNTIME_TYPE_MPK) => &MpkRuntime,
+        runtime => panic!("invalid runtime {runtime:?} for cage {cage_id}"),
+    }
+}
+
+fn lind_errno(error: LindError) -> i32 {
+    match error {
+        LindError::Other(errno) => -(errno as i32),
+        LindError::MemoryFault(_) => -(Errno::EFAULT as i32),
     }
 }
 
 // ── Syscall shims ────────────────────────────────────────────────────────────
 
+/// Universal clone handler: Core's fork and thread-clone transactions on top
+/// of `LindRuntime::duplicate_cage` and `LindRuntime::duplicate_thread`.
+///
+/// The child continuation never returns through this handler, except a child
+/// of MPK's optional `mpk-process-fork`. So nothing may follow
+/// `duplicate_thread` except selecting the result, and Core work must happen
+/// before it.
 extern "C" fn shim_clone_handler(
-    cageid: u64,
-    arg1: u64,
-    arg1_cageid: u64,
-    arg2: u64,         // parent_cageid — whose runtime we dispatch on
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
+    _cageid: u64,
+    clone_arg: u64,
+    clone_arg_cageid: u64,
+    parent_cageid: u64,
+    parent_tid: u64,
+    child_cageid: u64,
+    _arg3_cageid: u64,
+    flags: u64,
+    _arg4_cageid: u64,
+    parent_tid_addr: u64,
+    _arg5_cageid: u64,
+    child_tid_addr: u64,
+    _arg6_cageid: u64,
 ) -> i32 {
-    let parent_cageid = arg2;
-    let runtime_type = threei::get_cage_runtime(parent_cageid)
-        .unwrap_or_else(|| {
-            panic!(
-                "shim_clone_handler: no runtime found for parent_cageid={}",
-                parent_cageid
-            )
-        });
+    let runtime = lind_runtime(parent_cageid);
+    let source_thread_id = parent_tid as ThreadId;
+    let clone_args = UserPtr {
+        address: clone_arg,
+        cage_id: clone_arg_cageid,
+    };
+    // Both addresses are owned by `clone_arg_cageid`; that is the parent's
+    // memory and, for fork, the same guest address in the child's copy.
+    let set_parent_tid = (flags & CLONE_PARENT_SETTID != 0).then_some(parent_tid_addr);
+    let set_child_tid = (flags & CLONE_CHILD_SETTID != 0).then_some(child_tid_addr);
 
-    let runtime = get_runtime_handler(runtime_type);
-    // Lind-IF: this call is to be replaced by Core-driven lifecycle calls on
-    // `runtime` (a `LindRuntime`):
-    // - Fork (CLONE_VM clear; RawPOSIX allocated `child_cageid = arg3 != 0`
-    //   and created the child cage record, fd table, and handler table):
-    //     runtime.duplicate_cage(parent_cageid, child_cageid)
-    //     runtime.duplicate_thread(parent_cageid, parent_tid = arg2_cageid,
-    //         child_cageid, child main thread, LindThreadDuplicateArgs {
-    //             mode: SyscallFork, clone_args: (arg1, arg1_cageid),
-    //             set_parent_tid, set_child_tid })
-    //   If either fails, Core rolls back the child cage (terminate_cage if
-    //   duplicate_cage had succeeded) and returns the errno to the parent.
-    // - Thread clone (CLONE_VM set; `child_cageid == 0`): no duplicate_cage;
-    //     runtime.duplicate_thread(parent_cageid, parent_tid, parent_cageid,
-    //         new thread ID allocated by Core, { mode: PthreadClone, .. })
-    // Both continuations stay held until this handler unwinds through 3i.
-    runtime.handle_clone(
-        cageid,
-        arg1, arg1_cageid,
-        arg2, arg2_cageid,
-        arg3, arg3_cageid,
-        arg4, arg4_cageid,
-        arg5, arg5_cageid,
-        arg6, arg6_cageid,
-    )
+    if flags & CLONE_VM == 0 {
+        // Fork. RawPOSIX already created the child cage record, fd table, and
+        // handler table.
+        assert_ne!(child_cageid, 0, "fork without a child cage");
+
+        if clone_arg_cageid != parent_cageid {
+            return clone_on_behalf_of_running_cage();
+        }
+
+        // CLONE_VFORK without CLONE_VM (glibc's posix_spawn, which lind builds
+        // without CLONE_VM): held-parent protocol. Core registers the child
+        // here; the runtime holds the parent continuation in
+        // `cage::vfork_wait` once the child runs (Wasm: after the child copied
+        // the parent; MPK: after the child thread launched), and the child
+        // releases it when it execs (`shim_exec_handler`) or is finalized.
+        let vfork = flags & CLONE_VFORK != 0;
+        if vfork {
+            cage::vfork_hold(child_cageid);
+        }
+
+        if let Err(error) = runtime.duplicate_cage(parent_cageid, child_cageid) {
+            cage::vfork_release(child_cageid);
+            // TODO: roll back the child cage record, fd table, and handler
+            // table created by RawPOSIX.
+            return lind_errno(error);
+        }
+        begin_clone();
+        let duplicate = LindThreadDuplicateArgs {
+            mode: ThreadDuplicateMode::SyscallFork,
+            clone_args,
+            set_parent_tid,
+            set_child_tid,
+        };
+        if let Err(error) = runtime.duplicate_thread(
+            parent_cageid,
+            source_thread_id,
+            child_cageid,
+            THREAD_START_ID as ThreadId,
+            &duplicate,
+        ) {
+            // Neither runtime implements terminate_cage yet; Core's rollback
+            // of the child cage (see above) is still missing as well.
+            cage::vfork_release(child_cageid);
+            let _ = runtime.terminate_cage(child_cageid);
+            return lind_errno(error);
+        }
+        // The parent's result is the child PID.
+        take_clone_result().unwrap_or(child_cageid as i32)
+    } else if flags & CLONE_THREAD != 0 {
+        begin_clone();
+        let duplicate = LindThreadDuplicateArgs {
+            mode: ThreadDuplicateMode::PthreadClone,
+            clone_args,
+            set_parent_tid,
+            set_child_tid,
+        };
+        // TODO: Core should allocate the thread ID; both runtimes still assign
+        // it themselves, so 0 is passed.
+        if let Err(error) =
+            runtime.duplicate_thread(parent_cageid, source_thread_id, parent_cageid, 0, &duplicate)
+        {
+            return lind_errno(error);
+        }
+        // MPK records the TID it assigned. Wasm injects the parent's result
+        // on the Asyncify rewind, so this handler's return value is not
+        // observed there.
+        take_clone_result().unwrap_or(0)
+    } else {
+        // CLONE_VM without CLONE_THREAD: a new process sharing the parent's
+        // memory (e.g. native glibc's posix_spawn, CLONE_VM | CLONE_VFORK).
+        // Implementation steps:
+        // 1. Have RawPOSIX allocate a child cage as for fork, without copying
+        //    the vmmap.
+        // 2. Add a Lind-IF operation that creates a cage aliasing the
+        //    source's address space instead of duplicate_cage's copy.
+        // 3. duplicate_thread into the child with the supplied stack and TLS.
+        // 4. For CLONE_VFORK, suspend the parent continuation until the child
+        //    execs or exits.
+        lind_errno(lind_runtimes::unsupported::<()>().unwrap_err())
+    }
+}
+
+/// Fork on behalf of another cage that is not blocked in this syscall.
+///
+/// This is detected only when the clone arguments belong to a cage other than
+/// the one being forked: a grate forwarding a cage's own fork passes that
+/// cage's arguments through, and the cage is blocked in its syscall. A request
+/// made with the target's own arguments from outside its syscall is not yet
+/// detected.
+///
+/// Implementation steps:
+/// 1. Select the target thread; the target cage and thread must be preserved
+///    through forwarding instead of using the requester's thread.
+/// 2. Stop that thread (SIGSTOP-like, thread-only stop extension) and wait
+///    until it has halted, remembering whether it was already stopped.
+/// 3. duplicate_cage, then duplicate_thread with
+///    `ThreadDuplicateMode::RawInterrupted` from the captured state, without
+///    injecting fork return values into source or child.
+/// 4. Restore the prior stop state of the source (SIGCONT unless it was
+///    stopped before) and return the child ID to the requester only.
+fn clone_on_behalf_of_running_cage() -> i32 {
+    // TODO: roll back the child cage record created by RawPOSIX.
+    lind_errno(lind_runtimes::unsupported::<()>().unwrap_err())
 }
 
 extern "C" fn shim_exec_handler(
@@ -137,38 +238,74 @@ extern "C" fn shim_exec_handler(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    let _ = (cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
     let execing_cageid = arg1_cageid;
-    let runtime_type = threei::get_cage_runtime(execing_cageid)
-        .unwrap_or_else(|| {
-            panic!(
-                "shim_exec_handler: no runtime found for execing_cageid={}",
-                execing_cageid
-            )
-        });
+    let runtime = lind_runtime(execing_cageid);
+    // Release a parent held by CLONE_VFORK. Linux does so only once exec has
+    // passed its point of no return; releasing at the start lets the parent
+    // run while a failing exec returns its error to the child, which then
+    // exits.
+    //TODO: give reference for linux behavior, give reference to test that requires this.
+    cage::vfork_release(execing_cageid);
 
-    let runtime = get_runtime_handler(runtime_type);
-    // Lind-IF: this call is to be replaced by Core's exec transaction, which
-    // may switch runtimes:
-    //     target = registered runtime whose belongs_to_runtime(path) is true
-    //     staging = staging cage ID allocated by Core
-    //     target.init_cage(staging, path, LindInitArgs { argv, envp }, true)
-    //     target.create_thread(staging, main thread, LindCloneArgs { .. })
-    //     target.apply_staging_cage(staging, execing_cageid)
-    // A failure before apply_staging_cage's point of no return discards the
-    // staging cage (target.terminate_cage(staging)) and returns the errno to
-    // the old image. Afterwards the old image is released by the source
-    // runtime (`runtime` here), e.g. runtime.terminate_cage(execing_cageid)
-    // restricted to its own metadata (open in Lind-IF), and a later failure
-    // terminates the cage instead of returning.
-    runtime.handle_exec(
-        cageid,
-        arg1, arg1_cageid,
-        arg2, arg2_cageid,
-        arg3, arg3_cageid,
-        arg4, arg4_cageid,
-        arg5, arg5_cageid,
-        arg6, arg6_cageid,
-    )
+    // RawPOSIX passes host addresses (shifted by the owning cage's logical
+    // offset in a gs-forked MPK cage).
+    let path = match typemap::get_cstr_lossy(sc_convert_ptr_to_host(arg1, arg1_cageid)) {
+        Ok(path) => path,
+        Err(_) => return -(Errno::EFAULT as i32),
+    };
+    let init_args = LindInitArgs {
+        argv: LindArgVec::Guest(UserPtr {
+            address: arg2,
+            cage_id: arg2_cageid,
+        }),
+        envp: LindArgVec::Guest(UserPtr {
+            address: arg3,
+            cage_id: arg3_cageid,
+        }),
+    };
+
+    // Lind-IF exec transaction. The image is staged by the execing cage's
+    // runtime: switching runtimes on exec is not supported yet.
+    // Implementation steps for a runtime switch:
+    // 1. Pick the registered runtime whose belongs_to_runtime(path) is true
+    //    and stage the image there.
+    // 2. After apply_staging_cage's point of no return, have the source
+    //    runtime release the old image (terminate_cage restricted to its own
+    //    metadata, open in Lind-IF) and switch the cage's runtime type.
+    // 3. The target runtime takes over the calling OS thread as the new
+    //    image's initial thread.
+    let staging_id = staging_cage_id(execing_cageid);
+    if let Err(error) = runtime.init_cage(staging_id, &path, &init_args, true) {
+        return lind_errno(error);
+    }
+    let main_thread = LindCloneArgs {
+        flags: 0,
+        stack: None,
+        tls: None,
+    };
+    if let Err(error) = runtime.create_thread(staging_id, THREAD_START_ID as ThreadId, &main_thread)
+    {
+        let _ = runtime.terminate_cage(staging_id);
+        return lind_errno(error);
+    }
+    // Consumes the staging cage. Wasm returns 0 once the old image unwinds
+    // (RawPOSIX then performs its exec cleanup); MPK only returns on failure.
+    // Errors past the point of no return still return to the old image (see
+    // the runtimes).
+    match runtime.apply_staging_cage(staging_id, execing_cageid) {
+        Ok(()) => 0,
+        Err(error) => lind_errno(error),
+    }
+}
+
+/// Staging cage ID for an exec of `target_cage_id`.
+///
+/// Deviation until Core allocates staging cages: staging IDs are not entered
+/// in the cage table and only name the image a runtime staged. They lie above
+/// the 32-bit range, so they never collide with cage IDs.
+fn staging_cage_id(target_cage_id: CageId) -> CageId {
+    (1 << 32) | target_cage_id
 }
 
 extern "C" fn shim_exit_handler(
@@ -186,45 +323,27 @@ extern "C" fn shim_exit_handler(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    let _ = (cageid, arg2_cageid, arg3, arg3_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
     let exiting_cageid = arg1_cageid;
-    let runtime_type = threei::get_cage_runtime(exiting_cageid)
-        .unwrap_or_else(|| {
-            panic!(
-                "shim_exit_handler: no runtime found for exiting_cageid={}",
-                exiting_cageid
-            )
-        });
+    let tid = arg2;
+    let runtime = lind_runtime(exiting_cageid);
 
-    let runtime = get_runtime_handler(runtime_type);
-    // Lind-IF: this call is to be replaced by:
-    //     runtime.terminate_thread(exiting_cageid, tid = arg2)
-    //     if cage::signal::lind_thread_exit(exiting_cageid, tid) reports the
-    //     last thread: runtime.terminate_cage(exiting_cageid), then Core
-    //     finalizes the cage (cage_finalize: zombie, SIGCHLD).
-    // terminate_thread on the calling thread must hand off to a different
-    // stack or worker rather than tear down the stack it is running on; both
-    // runtimes currently defer this into their own exit paths (Wasmtime's
-    // OnCalledAction, MPK's exit stack).
-    runtime.handle_exit(
-        cageid,
-        arg1, arg1_cageid,
-        arg2, arg2_cageid,
-        arg3, arg3_cageid,
-        arg4, arg4_cageid,
-        arg5, arg5_cageid,
-        arg6, arg6_cageid,
-    )
+    // The status becomes the thread's (and for the last thread the host's)
+    // exit value; exit_group recorded the process-level status in Core.
+    begin_thread_exit(arg1 as i32);
+    // Commits the calling thread to exit and returns; the result is
+    // discarded. The runtime retires the thread at its next scheduling point,
+    // once this handler returned through 3i (Wasm: after the Asyncify unwind;
+    // MPK: on return to the supervisor's syscall entry), and reports it with
+    // Core's ThreadExited, which for the last thread calls terminate_cage and
+    // finalizes the cage (zombie, SIGCHLD).
+    match runtime.terminate_thread(exiting_cageid, tid as ThreadId) {
+        Ok(()) => 0,
+        Err(error) => lind_errno(error),
+    }
 }
 
 // ── Memory dispatch ──────────────────────────────────────────────────────────
-
-fn memory_runtime(cage_id: u64) -> &'static dyn LindRuntime {
-    match threei::get_cage_runtime(cage_id) {
-        Some(threei_const::RUNTIME_TYPE_WASMTIME) => &WasmRuntime,
-        Some(threei_const::RUNTIME_TYPE_MPK) => &MpkRuntime,
-        runtime => panic!("memory operation: invalid runtime {runtime:?} for cage {cage_id}"),
-    }
-}
 
 fn memory_result(result: LindResult<u64>) -> i64 {
     match result {
@@ -251,7 +370,7 @@ extern "C" fn shim_mmap_handler(
     offset: u64,
     _offset_cageid: u64,
 ) -> i64 {
-    memory_result(memory_runtime(cage_id).do_mmap(
+    memory_result(lind_runtime(cage_id).do_mmap(
         cage_id,
         &LindMmapArgs {
             address,
@@ -281,7 +400,7 @@ extern "C" fn shim_mprotect_handler(
     _arg6_cageid: u64,
 ) -> i64 {
     memory_result(
-        memory_runtime(cage_id)
+        lind_runtime(cage_id)
             .do_mprotect(
                 cage_id,
                 &LindMprotectArgs {
@@ -310,7 +429,7 @@ extern "C" fn shim_munmap_handler(
     _arg6_cageid: u64,
 ) -> i64 {
     memory_result(
-        memory_runtime(cage_id)
+        lind_runtime(cage_id)
             .do_munmap(cage_id, &LindMunmapArgs { address, length })
             .map(|()| 0),
     )
@@ -588,9 +707,10 @@ mod memory_dispatch_tests {
 }
 
 /// Register the Lind-IF runtimes with Core so it can notify them, e.g. of
-/// pending signals.
+/// pending signals, and Core's services with the runtimes.
 fn register_lind_runtimes() {
-    cage::register_runtime(threei_const::RUNTIME_TYPE_WASMTIME, &WasmRuntime);
+    lind_if::register_core(&cage::CORE);
+    cage::register_runtime(threei_const::RUNTIME_TYPE_WASMTIME, &WASM_RUNTIME);
     cage::register_runtime(threei_const::RUNTIME_TYPE_MPK, &MpkRuntime);
 }
 

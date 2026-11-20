@@ -227,17 +227,14 @@ pub extern "C" fn fork_syscall(
         );
     }
 
-    // Delegate execution back to binary runtime (currently only support Wasmtime,
-    // but could be extended to other runtime ie: MPK in the future) via 3i.
+    // Delegate to the boot clone shim via 3i (selfcageid = RawPOSIX_CAGEID,
+    // targetcageid = WASMTIME_CAGEID, the cage hosting the runtime shims). The
+    // shim duplicates the cage and the calling thread through the cage's
+    // runtime and resumes execution in parent and child.
     //
-    // Call from RawPOSIX (selfcageid = RawPOSIX_CAGEID) into
-    // Wasmtime(targetcageid = WASMTIME_CAGEID)
-    // to complete the clone/fork operation.
-    //
-    // Wasmtime will:
-    //   - Resolve the correct VMContext
-    //   - Complete fork semantics
-    //   - Resume execution in parent and child
+    // The clone flags and the CLONE_PARENT_SETTID/CLONE_CHILD_SETTID
+    // addresses are passed decoded, since the shim cannot dereference
+    // `clone_arg` without the runtime's address translation.
     threei::make_syscall(
         RAWPOSIX_CAGEID,
         syscall_const::CLONE3_SYSCALL as u64,
@@ -249,12 +246,12 @@ pub extern "C" fn fork_syscall(
         parent_tid,
         child_cageid,
         UNUSED_ID,
-        UNUSED_ARG,
+        flags,
         UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
+        args.parent_tid,
+        clone_arg_cageid,
+        args.child_tid,
+        clone_arg_cageid,
     )
 }
 
@@ -399,7 +396,7 @@ pub extern "C" fn exit_syscall(
     // causing the cage to exit with code 0 instead of 1.
 
     // Call wasmtime to trigger asyncify unwind for this thread.
-    // OnCalledAction handles lind_thread_exit + cage_finalize if last.
+    // The runtime retires the thread with Core's ThreadExited (finalizes if last).
     threei::make_syscall(
         RAWPOSIX_CAGEID,
         syscall_const::EXIT_SYSCALL as u64,
@@ -494,7 +491,7 @@ pub extern "C" fn exit_group_syscall(
         .unwrap_or(status_arg as u64);
 
     // Call wasmtime to trigger asyncify unwind.
-    // OnCalledAction handles lind_thread_exit + cage_finalize if last.
+    // The runtime retires the thread with Core's ThreadExited (finalizes if last).
     threei::make_syscall(
         RAWPOSIX_CAGEID,
         60, // reuse exit trampoline in wasmtime

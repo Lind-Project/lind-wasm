@@ -3,7 +3,6 @@
 
 pub mod execute;
 pub mod gs_fork;
-pub mod lifecycle;
 pub mod lind_if;
 pub mod loader;
 pub mod pkeys;

@@ -437,6 +437,7 @@ pub fn alloc_cage_id() -> Option<u64> {
 ///    waitpid() in the parent unblocks.
 /// 3. Removes the cage from the fd table and global cage table.
 pub fn cage_finalize(cageid: u64) {
+    vfork_release(cageid);
     if let Some(cage) = get_cage(cageid) {
         // Wait for all in-flight grate dispatches to drain.
         while cage.grate_inflight.load(Ordering::Acquire) > 0 {
@@ -463,6 +464,46 @@ pub fn cage_finalize(cageid: u64) {
 
     fdtables::remove_cage_from_fdtable(cageid);
     remove_cage(cageid);
+}
+
+/// Children created with `CLONE_VFORK` whose parent is still held.
+///
+/// Core's side of the held-parent protocol: the clone transaction registers
+/// the child with [`vfork_hold`] before duplicating, the runtime holds the
+/// parent continuation in [`vfork_wait`] once the child is running, and the
+/// child releases it with [`vfork_release`] when it execs or is finalized.
+static VFORK_HELD: Lazy<(Mutex<std::collections::HashSet<u64>>, parking_lot::Condvar)> =
+    Lazy::new(|| (Mutex::new(std::collections::HashSet::new()), parking_lot::Condvar::new()));
+
+/// Marks `child_cageid` as a vfork child whose parent must be held.
+pub fn vfork_hold(child_cageid: u64) {
+    VFORK_HELD.0.lock().insert(child_cageid);
+}
+
+/// Releases the parent held by `child_cageid`, if any.
+pub fn vfork_release(child_cageid: u64) {
+    let (held, released) = &*VFORK_HELD;
+    if held.lock().remove(&child_cageid) {
+        released.notify_all();
+    }
+}
+
+/// Holds the calling parent until `child_cageid` releases it. Returns
+/// immediately unless the child was registered with [`vfork_hold`].
+///
+/// Must only be called once the child runs independently of the caller.
+pub fn vfork_wait(child_cageid: u64) {
+    let (held, released) = &*VFORK_HELD;
+    let mut held = held.lock();
+    while held.contains(&child_cageid) {
+        // A child that dies without reaching `cage_finalize` (or is already
+        // marked dead) must not hold the parent forever.
+        if get_cage(child_cageid).map_or(true, |c| c.is_dead.load(Ordering::Acquire)) {
+            held.remove(&child_cageid);
+            break;
+        }
+        released.wait_for(&mut held, std::time::Duration::from_millis(50));
+    }
 }
 
 mod tests {

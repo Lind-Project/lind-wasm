@@ -67,18 +67,59 @@ unsafe extern "C" {
 thread_local! {
     static GUEST_FORK_RETURNS: std::cell::Cell<[*mut MpkJumpBuffer; LIND_MPK_MAX_CONTEXTS]> =
         const { std::cell::Cell::new([std::ptr::null_mut(); LIND_MPK_MAX_CONTEXTS]) };
+    /// Exit committed by Lind-IF `TerminateThread` on this OS thread:
+    /// (exiting cage, status). For a forked cage this is its parent worker.
+    static PENDING_EXIT: std::cell::Cell<Option<(u64, i32)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Commits the calling thread of `cage_id` to exit with `status` (Lind-IF
+/// `TerminateThread`). The thread is retired by [`retire_pending_exit`].
+pub(crate) fn defer_thread_exit(cage_id: u64, status: i32) {
+    PENDING_EXIT.with(|pending| pending.set(Some((cage_id, status))));
+}
+
+/// Whether the calling OS thread committed to exiting `cage_id`. Such a
+/// thread receives no further signals.
+pub(super) fn exit_pending(cage_id: u64) -> bool {
+    PENDING_EXIT.with(|pending| matches!(pending.get(), Some((cage, _)) if cage == cage_id))
+}
+
+/// Scheduling point: retires a thread committed to exit by `TerminateThread`
+/// once its syscall handler returned to the supervisor, so no frame on the
+/// handler path (locks, guards, in-flight accounting) is skipped. With
+/// `Some(cage_id)`, only an exit of that cage is retired, so an exit issued by
+/// a grate on the cage's behalf completes only after the grate's handler
+/// returned. Does not return if an exit is retired.
+pub(super) fn retire_pending_exit(cage_id: Option<u64>) {
+    let Some((exiting_cage, status)) = PENDING_EXIT.with(|pending| pending.get()) else {
+        return;
+    };
+    if cage_id.is_some_and(|cage_id| cage_id != exiting_cage) {
+        return;
+    }
+    PENDING_EXIT.with(|pending| pending.set(None));
+    mpk_exit_thread(exiting_cage, status as u64);
+    unreachable!("mpk_exit_thread returned");
 }
 
 struct GuestForkReturn(usize);
 
 impl Drop for GuestForkReturn {
     fn drop(&mut self) {
-        GUEST_FORK_RETURNS.with(|returns| {
-            let mut entries = returns.get();
-            entries[self.0] = std::ptr::null_mut();
-            returns.set(entries);
-        });
+        clear_guest_fork_return(self.0);
     }
+}
+
+/// Not inlined, so the TLS address is computed on the current thread: a fork
+/// or thread child resumes a copied `with_guest_fork_return` frame on another
+/// OS thread, where TLS addresses cached in that frame are the parent's.
+#[inline(never)]
+fn clear_guest_fork_return(context: usize) {
+    GUEST_FORK_RETURNS.with(|returns| {
+        let mut entries = returns.get();
+        entries[context] = std::ptr::null_mut();
+        returns.set(entries);
+    });
 }
 
 pub(super) fn guest_fork_return(context: usize) -> Option<*mut MpkJumpBuffer> {
@@ -1301,18 +1342,17 @@ pub extern "C" fn mpk_clone_syscall_entry(
     _arg6: u64,
     _arg6_cageid: u64,
 ) -> i32 {
-    //do setjmp here to save the current execution context for the child thread
-    //then return inner_mpk_clone_syscall_entry()
-    //the longjmp back will just return 0;
-
-    let mut jump_buffer = MpkJumpBuffer::default();
-
-    let jump_result = unsafe {
-        setjmp(&mut jump_buffer as *mut MpkJumpBuffer as *mut libc::c_long)
+    // Children resume at the guest syscall entry (`with_guest_fork_return`)
+    // of the current context and return 0 to the guest from there. They must
+    // not return through the frames between that entry and this handler: the
+    // child runs on a copy of the parent's supervisor stack, so those frames
+    // (3i, RawPOSIX, the boot shim, and `LindRuntime::duplicate_thread`) may
+    // still refer to the parent's stack, e.g. for results returned in memory.
+    let context = unsafe { (*current_context_stack()).current_context };
+    let Some(jump_buffer) = guest_fork_return(context) else {
+        lind_debug_panic("mpk_clone: clone was not issued from a guest syscall entry");
+        return -EINVAL;
     };
-    if jump_result != 0 {
-        return 0;
-    }
 
     let result = inner_mpk_clone_syscall_entry(
         cageid,
@@ -1322,7 +1362,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
         _arg2_cageid,
         _child_cageid_hint,
         _arg3_cageid,
-        &mut jump_buffer,
+        jump_buffer,
         _arg4_cageid,
         _arg5,
         _arg5_cageid,
@@ -1891,6 +1931,10 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                                 msg.arg5, msg.arg5_cageid,
                                 msg.arg6, msg.arg6_cageid,
                             );
+                            // Scheduling point of the forked cage's thread:
+                            // retire it if the call committed it to exit
+                            // (the child process waits to be killed).
+                            retire_pending_exit(None);
                             let execute_on_client = if msg.syscall_num == SIGACTION_SYSCALL as u64 {
                                 1
                             } else {
@@ -1960,49 +2004,23 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             // Update the active context to reflect the new child cage id.
             update_active_cage_context(child_cageid, _parent_cageid);
 
-            // Return the child cage id in the child process too.
+            // The forked process returns through the clone handler frames,
+            // which keep their addresses in the new process; Core reads the
+            // child result recorded here.
+            crate::lifecycle::set_clone_result(0);
             0 as i32
         }
         }
     }
 }
 
-/// MPK exit handler called when a cage terminates.
+/// Retires the calling thread of `exiting_cageid` with `exit_status`, the
+/// completion of Lind-IF `TerminateThread` at its scheduling point.
 ///
-/// This function handles cleanup for MPK-based cages:
-/// - Closes the dlmopen handles for the isolated namespace
-/// - If the cage's PID indicates a different process, kills that process
-///
-/// Called from shim_exit_handler based on the cage's runtime type.
-pub extern "C" fn mpk_exit_syscall_entry(
-    _cageid: u64,
-    exit_status: u64,
-    exiting_cageid: u64,
-    _tid: u64,
-    _arg2_cageid: u64,
-    _arg3: u64,
-    _arg3_cageid: u64,
-    _arg4: u64,
-    _arg4_cageid: u64,
-    _arg5: u64,
-    _arg5_cageid: u64,
-    _arg6: u64,
-    _arg6_cageid: u64,
-) -> i32 {
-    let _ = (
-        _cageid,
-        _tid,
-        _arg2_cageid,
-        _arg3,
-        _arg3_cageid,
-        _arg4,
-        _arg4_cageid,
-        _arg5,
-        _arg5_cageid,
-        _arg6,
-        _arg6_cageid,
-    );
-
+/// Switches to the thread's exit stack where one is set up, so that the
+/// supervisor stack can be released, then completes the exit there. Does not
+/// return.
+fn mpk_exit_thread(exiting_cageid: u64, exit_status: u64) -> i32 {
     #[cfg(target_arch = "x86_64")]
     {
         if let Some(cage) = get_cage(exiting_cageid) {
@@ -2024,6 +2042,7 @@ pub extern "C" fn mpk_exit_syscall_entry(
                     .unwrap_or(0);
 
                 if exit_stack != 0 {
+                    drop(runtime_info);
                     return unsafe { call_mpk_exit_on_stack(exit_stack, exit_status, exiting_cageid) };
                 }
             }
@@ -2061,86 +2080,95 @@ unsafe fn call_mpk_exit_on_stack(
     ret
 }
 
+/// Releases the MPK runtime state of `cage_id` once its last thread exited
+/// (Lind-IF TerminateCage): kills the host process of a forked cage, or closes
+/// the cage's dlmopen namespace and unmaps its memory.
+pub(crate) fn release_cage_runtime(cage_id: u64) {
+    let Some(cage) = get_cage(cage_id) else {
+        return;
+    };
+    let runtime_info = cage.runtime_info.read();
+    let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() else {
+        return;
+    };
+    let cage_pid = mpk_info.pid;
+    let my_pid = unsafe { libc::getpid() };
+    mpk_debug(format!("mpk_terminate_cage: cage {} cage_pid={}, my_pid={}", cage_id, cage_pid, my_pid));
+
+    if cage_pid != 0 {
+        // If the cage has a non-zero PID and it's different from our own,
+        // kill that process (it's a forked child)
+        assert!(
+            cage_pid != my_pid,
+            "mpk_terminate_cage: Cannot kill self (cage_pid={}, my_pid={})",
+            cage_pid, my_pid
+        );
+        mpk_debug(format!("mpk_terminate_cage: killing child process {}", cage_pid));
+        unsafe {
+            libc::kill(cage_pid, libc::SIGKILL);
+        }
+    } else {
+        // Close the dlmopen handles for this cage's isolated namespace
+        mpk_debug("mpk_terminate_cage: closing dlmopen handles");
+        unsafe {
+            if !mpk_info.loader_libc_handle.is_null() {
+                libc::dlclose(mpk_info.loader_libc_handle);
+            }
+            if !mpk_info.loader_cage_handle.is_null() {
+                libc::dlclose(mpk_info.loader_cage_handle);
+            }
+        }
+        // Unmap the cage's 4 GB virtual address space.
+        if !mpk_info.memory_base.is_null() && mpk_info.memory_size > 0 {
+            mpk_debug("mpk_terminate_cage: unmapping cage memory region");
+            gs_fork::release_cage_memory(cage_id, mpk_info.memory_base as usize);
+        }
+        // Remaining MpkThreadInfos in the threads map are freed when
+        // MPKRuntimeInfo is dropped with the cage.
+    }
+}
+
 extern "C" fn mpk_exit_syscall_entry_inner(
     exit_status: u64,
     exiting_cageid: u64,
 ) -> i32 {
     mpk_debug(format!("mpk_exit: cage {} exiting with status {}", exiting_cageid, exit_status));
 
-    // Get the exiting cage and retrieve its MPKRuntimeInfo
+    // `cage` stays alive until this thread exits below: its MPKRuntimeInfo
+    // owns the stack this may run on.
     if let Some(cage) = get_cage(exiting_cageid) {
-        let runtime_info = cage.runtime_info.read();
-        if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-            
-            let mut cage_tid = 0;
-            let cage_pid = mpk_info.pid;
-            if cage_pid != 0 {
-                // Retrieve the thread ID from MPKSupervisorCtxStack and store it in cage_tid, we cant use gettid() directly.
-                cage_tid = unsafe { (*current_context_stack()).os_tid as libc::pid_t };
-            }
-            else {
-                //This cage is running in the same process, so we need to clean up the linker state.
-                // Remove the exiting thread's MpkThreadInfo from the map; Drop frees its
-                // supervisor stack and GS context data.
-                cage_tid = current_tid();
-                gs_fork::forget_guest_stack(cage_tid);
-            }
+        let thread = {
+            let runtime_info = cage.runtime_info.read();
+            runtime_info
+                .as_any()
+                .downcast_ref::<MPKRuntimeInfo>()
+                .map(|mpk_info| {
+                    if mpk_info.pid != 0 {
+                        // Retrieve the thread ID from MPKSupervisorCtxStack, we cant use gettid() directly.
+                        unsafe { (*current_context_stack()).os_tid as libc::pid_t }
+                    } else {
+                        // Forget the guest stack recorded for this thread of
+                        // a cage running in this process.
+                        let cage_tid = current_tid();
+                        gs_fork::forget_guest_stack(cage_tid);
+                        cage_tid
+                    }
+                })
+        };
 
+        if let Some(cage_tid) = thread {
             let lind_tid = cage
                 .os_tid_map
                 .iter()
                 .find(|entry| *entry.value() == cage_tid as i64)
                 .map(|entry| *entry.key())
                 .expect("mpk_exit: current OS thread is not registered in os_tid_map");
-            let is_last = cage::signal::lind_thread_exit(exiting_cageid, lind_tid as u64);
-            mpk_debug(format!("mpk_exit: cage {} is_last_thread: {}", exiting_cageid, is_last));            
-            if is_last {               
-                
-                let my_pid = unsafe { libc::getpid() };
-                
-                mpk_debug(format!("mpk_exit: cage_pid={}, my_pid={}", cage_pid, my_pid));
-                
-                if cage_pid != 0 {
-                    // If the cage has a non-zero PID and it's different from our own,
-                    // kill that process (it's a forked child)
-                    assert!(
-                        cage_pid != my_pid,
-                        "mpk_exit: Cannot kill self (cage_pid={}, my_pid={})",
-                        cage_pid, my_pid
-                    );
-                    
-                    
-                    
-                    mpk_debug(format!("mpk_exit: killing child process {}", cage_pid));
-                    unsafe {
-                        libc::kill(cage_pid, libc::SIGKILL);
-                    }
-                }
-                else {
-
-                    
-                    // Close the dlmopen handles for this cage's isolated namespace
-                    mpk_debug("mpk_exit: closing dlmopen handles");
-                    unsafe {
-                        if !mpk_info.loader_libc_handle.is_null() {
-                            libc::dlclose(mpk_info.loader_libc_handle);
-                        }
-                        if !mpk_info.loader_cage_handle.is_null() {
-                            libc::dlclose(mpk_info.loader_cage_handle);
-                        }
-                    }
-                    // Unmap the cage's 4 GB virtual address space.
-                    if !mpk_info.memory_base.is_null() && mpk_info.memory_size > 0 {
-                        mpk_debug("mpk_exit: unmapping cage memory region");
-                        gs_fork::release_cage_memory(exiting_cageid, mpk_info.memory_base as usize);
-                    }
-                    // Any remaining MpkThreadInfos in the threads map (e.g. for threads that
-                    // exit without going through mpk_exit) are freed when MPKRuntimeInfo
-                    // is dropped (cage_finalize below).
-                }
-                
-                cage::cage_finalize(exiting_cageid);
-                
+            // Core completes the thread exit; for the last thread it releases
+            // the cage's runtime state (release_cage_runtime via
+            // TerminateCage) and finalizes the cage.
+            let is_last = lind_if::core().thread_exited(exiting_cageid, lind_tid as lind_if::ThreadId);
+            mpk_debug(format!("mpk_exit: cage {} is_last_thread: {}", exiting_cageid, is_last));
+            if is_last {
                 // Decrement the cage counter
                 if let Some(lind_manager) = LIND_MANAGER.get() {
                     //ultimate teardown if this was the last cage
@@ -2150,79 +2178,73 @@ extern "C" fn mpk_exit_syscall_entry_inner(
                         unsafe { libc::syscall(libc::SYS_exit_group, exit_status); }
                     }
                 }
-            }
-            else {
-                
-                let thread_info = mpk_info.threads.write().remove(&cage_tid).map(|cage_thread_info| {
-                    Arc::clone(&cage_thread_info.thread_info)
-                });
+            } else {
+                let runtime_info = cage.runtime_info.read();
+                if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                    let thread_info = mpk_info.threads.write().remove(&cage_tid).map(|cage_thread_info| {
+                        Arc::clone(&cage_thread_info.thread_info)
+                    });
     
-                if let Some(thread_info) = thread_info {
-                    let clear_tid_addr = thread_info.child_tid.swap(0, Ordering::SeqCst);
-                    if clear_tid_addr != 0 {
-                        unsafe {
-                            let atomic_tid = clear_tid_addr as *const AtomicI32;
-                            (*atomic_tid).store(0, Ordering::Release);
-                            //TODO: can we do this in rawposix?
-                            libc::syscall(
-                                libc::SYS_futex,
-                                clear_tid_addr,
-                                libc::FUTEX_WAKE,
-                                1,
-                                std::ptr::null::<libc::c_void>(),
-                                std::ptr::null::<libc::c_void>(),
-                                0,
-                            );
-                        }
-                    }
-    
-                    let cage_ids = thread_info.cage_ids.lock().unwrap().clone();
-                    for cage_id in cage_ids {
-                        if cage_id == exiting_cageid {
-                            continue;
-                        }
-                        if let Some(cage) = get_cage(cage_id) {
-                            let runtime_info = cage.runtime_info.read();
-                            if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-                                mpk_info.threads.write().remove(&cage_tid);
-                                //log the removal of the thread info for this cage
-                                mpk_debug(format!("mpk_exit: removed thread info for tid={} from cage {}", cage_tid, cage_id));
+                    if let Some(thread_info) = thread_info {
+                        let clear_tid_addr = thread_info.child_tid.swap(0, Ordering::SeqCst);
+                        if clear_tid_addr != 0 {
+                            unsafe {
+                                let atomic_tid = clear_tid_addr as *const AtomicI32;
+                                (*atomic_tid).store(0, Ordering::Release);
+                                //TODO: can we do this in rawposix?
+                                libc::syscall(
+                                    libc::SYS_futex,
+                                    clear_tid_addr,
+                                    libc::FUTEX_WAKE,
+                                    1,
+                                    std::ptr::null::<libc::c_void>(),
+                                    std::ptr::null::<libc::c_void>(),
+                                    0,
+                                );
                             }
                         }
-                    }
     
-                    // We are still executing on this OS thread's supervisor stack, which
-                    // `thread_info` owns. Hand the last reference to the reaper thread so
-                    // it is only dropped (and the stack unmapped) once this OS thread has
-                    // actually exited.
-                    crate::lind_mpk::RuntimeInfo::queue_thread_info_for_reap(cage_tid, thread_info);
-                }
-                else {
-                    mpk_debug(format!("mpk_exit: no thread info found for cage {}", exiting_cageid));
+                        let cage_ids = thread_info.cage_ids.lock().unwrap().clone();
+                        for cage_id in cage_ids {
+                            if cage_id == exiting_cageid {
+                                continue;
+                            }
+                            if let Some(cage) = get_cage(cage_id) {
+                                let runtime_info = cage.runtime_info.read();
+                                if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                                    mpk_info.threads.write().remove(&cage_tid);
+                                    //log the removal of the thread info for this cage
+                                    mpk_debug(format!("mpk_exit: removed thread info for tid={} from cage {}", cage_tid, cage_id));
+                                }
+                            }
+                        }
+    
+                        // We are still executing on this OS thread's supervisor stack, which
+                        // `thread_info` owns. Hand the last reference to the reaper thread so
+                        // it is only dropped (and the stack unmapped) once this OS thread has
+                        // actually exited.
+                        crate::lind_mpk::RuntimeInfo::queue_thread_info_for_reap(cage_tid, thread_info);
+                    }
+                    else {
+                        mpk_debug(format!("mpk_exit: no thread info found for cage {}", exiting_cageid));
+                    }
                 }
             }
-            
-            
         } else {
             mpk_debug(format!("mpk_exit: cage {} has no MPKRuntimeInfo", exiting_cageid));
         }
-        
-        
     } else {
         mpk_debug(format!("mpk_exit: cage {} not found", exiting_cageid));
     }
-    
 
     mpk_debug(format!("mpk_exit: cage {} cleanup complete, exiting (exit, not exit_group) with status {}", exiting_cageid, exit_status));
-
-    
 
     //Here the thread is terminated. (exit does not return in this implementation)
     //it is assumed that there are no references to rust objects stored on the supervisor stack at this point.
     unsafe {
         libc::syscall(libc::SYS_exit, exit_status); // One test expects lind to exit with the cages exit code
     }
-    
+
     0 //dummy
 }
 
@@ -2295,7 +2317,7 @@ pub extern "C" fn mpk_make_threei_call_wrapper(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
-    with_guest_fork_return(|| {
+    let retval = with_guest_fork_return(|| {
         let retval = threei::make_syscall(
             self_cageid,
             syscall_num,
@@ -2315,7 +2337,12 @@ pub extern "C" fn mpk_make_threei_call_wrapper(
             arg6_cageid,
         );
         //TODO: This should check all cages for which we can handle signals in this OS thread, not just self_cageid
-        crate::lind_mpk::signals::handle_signal(self_cageid, None);
+        if !exit_pending(self_cageid) {
+            crate::lind_mpk::signals::handle_signal(self_cageid, None);
+        }
         retval
-    })
+    });
+    // Scheduling point: the call returned through 3i to this cage.
+    retire_pending_exit(Some(self_cageid));
+    retval
 }

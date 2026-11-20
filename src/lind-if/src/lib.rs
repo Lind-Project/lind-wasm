@@ -7,6 +7,8 @@
 
 pub use sysdefs::constants::Errno;
 
+use std::sync::OnceLock;
+
 pub type GuestAddress = u64;
 pub type HostAddress = u64;
 pub type CageId = u64;
@@ -273,4 +275,33 @@ pub trait LindRuntime: Send + Sync {
     /// Release host pages. Callers that must retain a cage reservation remap
     /// the range with `PROT_NONE` through `do_mmap` instead.
     fn do_munmap(&self, cage_id: CageId, args: &LindMunmapArgs) -> LindResult<()>;
+}
+
+/// The runtime-to-Core lifecycle services (Lind-IF section 8). Core registers
+/// its implementation once at boot with [`register_core`], before any cage
+/// runs, so runtimes do not depend on Core's implementation.
+pub trait LindCore: Send + Sync {
+    /// The runtime retired `thread_id` of `cage_id`: after `TerminateThread`
+    /// committed it to exit, or after it faulted, it runs no more guest code
+    /// and the call is made off its guest and handler stacks. Core removes the
+    /// thread; for the cage's last thread it waits for in-flight grate calls
+    /// into the cage, has the runtime release the cage (`TerminateCage`) and
+    /// finalizes it (zombie, SIGCHLD). Called exactly once per thread exit.
+    /// Returns whether this was the cage's last thread.
+    fn thread_exited(&self, cage_id: CageId, thread_id: ThreadId) -> bool;
+}
+
+static CORE: OnceLock<&'static dyn LindCore> = OnceLock::new();
+
+/// Registers Core's services. Later registrations are ignored.
+pub fn register_core(core: &'static dyn LindCore) {
+    let _ = CORE.set(core);
+}
+
+/// Core's registered services.
+///
+/// # Panics
+/// If Core has not registered with [`register_core`].
+pub fn core() -> &'static dyn LindCore {
+    *CORE.get().expect("Lind-IF: Core services are not registered")
 }

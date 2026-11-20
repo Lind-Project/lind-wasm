@@ -4,6 +4,27 @@ use lind_if::{
     LindResult, LindRuntime, LindThreadDuplicateArgs, LocalBuffer, ThreadDuplicateMode, UserPtr,
 };
 use lind_runtimes::{lind_mpk::lind_if::MpkRuntime, lind_wasm::lind_if::WasmRuntime};
+use wasmtime_lind_multi_process::{LindCtx, LindHost};
+
+/// Host state for instantiating `WasmRuntime`; tests never reach Wasmtime.
+#[derive(Clone)]
+struct StubHost;
+
+impl LindHost<StubHost, ()> for StubHost {
+    fn get_ctx(&self) -> LindCtx<StubHost, ()> {
+        unreachable!()
+    }
+
+    fn get_ctx_mut(&mut self) -> &mut LindCtx<StubHost, ()> {
+        unreachable!()
+    }
+}
+
+static WASM: WasmRuntime<StubHost, ()> = WasmRuntime::new();
+
+fn runtimes() -> [&'static dyn LindRuntime; 2] {
+    [&WASM, &MpkRuntime]
+}
 
 fn assert_unimplemented<T: std::fmt::Debug>(result: LindResult<T>) {
     assert!(
@@ -23,15 +44,6 @@ fn unmigrated_lifecycle_and_reservation_operations_fail_explicitly() {
         stack: None,
         tls: None,
     };
-    let duplicate = LindThreadDuplicateArgs {
-        mode: ThreadDuplicateMode::SyscallFork,
-        clone_args: UserPtr {
-            address: 0,
-            cage_id: 1,
-        },
-        set_parent_tid: Some(0x1000),
-        set_child_tid: Some(0x2000),
-    };
     let mmap = LindMmapArgs {
         address: 0,
         length: 4096,
@@ -41,25 +53,73 @@ fn unmigrated_lifecycle_and_reservation_operations_fail_explicitly() {
         offset: 0,
     };
 
-    for runtime in [&WasmRuntime as &dyn LindRuntime, &MpkRuntime] {
+    for runtime in runtimes() {
         assert_unimplemented(runtime.belongs_to_runtime("program"));
         assert_unimplemented(runtime.get_host_address(1, 0x1000));
         assert_unimplemented(runtime.get_cage_abi(1));
+        // Only staged init from guest argv/envp is implemented.
         assert_unimplemented(runtime.init_cage(1, "program", &init, false));
         assert_unimplemented(runtime.init_cage(2, "program", &init, true));
-        assert_unimplemented(runtime.apply_staging_cage(2, 1));
-        assert_unimplemented(runtime.duplicate_cage(1, 2));
+        // Thread creation is only implemented for a staged cage's main thread.
         assert_unimplemented(runtime.create_thread(1, 1, &clone));
-        assert_unimplemented(runtime.duplicate_thread(1, 1, 2, 2, &duplicate));
-        assert_unimplemented(runtime.terminate_thread(1, 1));
-        assert_unimplemented(runtime.terminate_cage(1));
         assert_unimplemented(runtime.do_mmap(1, &mmap, true));
     }
 }
 
 #[test]
+fn staging_operations_reject_unstaged_cages() {
+    let clone = LindCloneArgs {
+        flags: 0,
+        stack: None,
+        tls: None,
+    };
+    for runtime in runtimes() {
+        assert!(matches!(
+            runtime.apply_staging_cage(2, 1),
+            Err(LindError::Other(Errno::EINVAL))
+        ));
+        assert!(matches!(
+            runtime.create_thread(1, 2, &clone),
+            Err(LindError::Other(Errno::EINVAL))
+        ));
+    }
+}
+
+#[test]
+fn duplicate_rejects_unsupported_and_inconsistent_requests() {
+    let duplicate = |mode| LindThreadDuplicateArgs {
+        mode,
+        clone_args: UserPtr {
+            address: 0,
+            cage_id: 1,
+        },
+        set_parent_tid: None,
+        set_child_tid: None,
+    };
+    let einval = |result: LindResult<()>| {
+        assert!(
+            matches!(result, Err(LindError::Other(Errno::EINVAL))),
+            "expected EINVAL, got {result:?}"
+        )
+    };
+
+    for runtime in runtimes() {
+        einval(runtime.duplicate_cage(1, 1));
+        assert_unimplemented(runtime.duplicate_thread(
+            1,
+            1,
+            2,
+            1,
+            &duplicate(ThreadDuplicateMode::RawInterrupted),
+        ));
+        einval(runtime.duplicate_thread(1, 1, 1, 1, &duplicate(ThreadDuplicateMode::SyscallFork)));
+        einval(runtime.duplicate_thread(1, 1, 2, 0, &duplicate(ThreadDuplicateMode::PthreadClone)));
+    }
+}
+
+#[test]
 fn runtime_mappings_apply_host_operations_and_report_errors() {
-    for runtime in [&WasmRuntime as &dyn LindRuntime, &MpkRuntime] {
+    for runtime in runtimes() {
         let mut args = LindMmapArgs {
             address: 0,
             length: 4096,
@@ -145,7 +205,7 @@ fn check_unavailable_accessors(
 
 #[test]
 fn unmigrated_conversions_reject_untrusted_pointers_without_touching_memory() {
-    check_unavailable_accessors(&WasmRuntime, &WasmRuntime, AbiDescriptor::Wasm32);
+    check_unavailable_accessors(&WASM, &WASM, AbiDescriptor::Wasm32);
     check_unavailable_accessors(&MpkRuntime, &MpkRuntime, AbiDescriptor::LinuxX86_64);
 }
 
@@ -157,7 +217,7 @@ fn runtime_mmap_uses_host_fd_offset_and_shared_backing() {
     assert!(fd >= 0);
     let fd = unsafe { OwnedFd::from_raw_fd(fd) };
     assert_eq!(unsafe { libc::ftruncate(fd.as_raw_fd(), 8192) }, 0);
-    for runtime in [&WasmRuntime as &dyn LindRuntime, &MpkRuntime] {
+    for runtime in runtimes() {
         let value = 0x42u8;
         assert_eq!(
             unsafe { libc::pwrite(fd.as_raw_fd(), (&value as *const u8).cast(), 1, 4096) },

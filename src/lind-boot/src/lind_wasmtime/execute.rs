@@ -114,18 +114,11 @@ pub fn exec_wasm(
             Ok(exit_code)
         }
         Err(e) => {
-            // Cage crashed.  Do the same cleanup as the
-            // fork-crash and signal-handler error paths so child
-            // cages see proper termination and resources are freed.
-            cage::cage_record_exit_status(cage_id, cage::ExitStatus::Exited(1));
-            if let Some(c) = cage::get_cage(cage_id) {
-                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+            // Cage crashed. Same exit as the fork-crash and exec-crash paths,
+            // so child cages see proper termination and resources are freed.
+            if wasmtime_lind_multi_process::crashed_thread_exit(cage_id, THREAD_START_ID as u64) {
+                lind_manager.decrement();
             }
-            threei::EXITING_TABLE.insert(cage_id);
-            threei::handler_table::_rm_grate_from_handler(cage_id);
-            cage::signal::lind_thread_exit(cage_id, THREAD_START_ID as u64);
-            cage::cage_finalize(cage_id);
-            lind_manager.decrement();
             lind_manager.wait();
             return Err(e);
         }

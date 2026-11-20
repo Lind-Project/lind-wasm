@@ -40,7 +40,7 @@ pub fn signal_handler<
         if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
             return Ok(0);
         }
-        // Don't call lind_thread_exit here — it's deferred to exit_call's
+        // Don't retire the thread with Core here — it's deferred to exit_call's
         // OnCalledAction so the epoch_handler entry stays until asyncify
         // unwind completes and any grate dispatch has fully returned.
         //
@@ -56,7 +56,7 @@ pub fn signal_handler<
                 cage::ExitStatus::Signaled(_, _) => 1,
             })
             .unwrap_or(0);
-        ctx.exit_call(caller, exit_code, 0);
+        ctx.exit_call(caller, exit_code);
         return Ok(0);
     }
 
@@ -90,7 +90,7 @@ pub fn signal_handler<
             threei::EXITING_TABLE.insert(cageid);
             cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
             threei::handler_table::_rm_grate_from_handler(cageid);
-            ctx.exit_call(caller, 1, 0);
+            ctx.exit_call(caller, 1);
         }
         return Ok(0);
     }
@@ -130,7 +130,7 @@ pub fn signal_handler<
                     threei::handler_table::_rm_grate_from_handler(cageid);
                     // Asyncify unwind; OnCalledAction handles cage_finalize
                     // when the actual last thread finishes.
-                    ctx.exit_call(caller, 128 + signo, 0);
+                    ctx.exit_call(caller, 128 + signo);
                     return Ok(0);
                 }
                 sysdefs::constants::SignalDefaultHandler::Ignore => {
@@ -187,7 +187,7 @@ pub fn signal_handler<
                 threei::EXITING_TABLE.insert(cageid);
                 cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
                 threei::handler_table::_rm_grate_from_handler(cageid);
-                ctx.exit_call(caller, 1, 0);
+                ctx.exit_call(caller, 1);
                 return Ok(0);
             }
 

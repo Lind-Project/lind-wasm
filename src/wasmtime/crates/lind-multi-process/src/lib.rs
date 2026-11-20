@@ -29,11 +29,11 @@ use wasmtime::{
 };
 
 use cage::{VmmapBitWidth, alloc_cage_id};
-use cage::signal::{lind_signal_init, lind_thread_exit};
+use cage::signal::lind_signal_init;
 use wasmtime_environ::MemoryIndex;
 
 use crate::shebang::{build_shebang_argv, parse_shebang};
-use crate::utils::{parse_argv, parse_env, parse_path};
+use crate::utils::{parse_argv, parse_env};
 
 pub mod signal;
 
@@ -184,6 +184,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let get_cx = Arc::new(get_cx);
         let fork_host = Arc::new(fork_host);
         let exec_host = Arc::new(exec);
+
+        if let Some((_, _, module)) = modules.first() {
+            EXEC_ENGINE.get_or_init(|| module.engine().clone());
+        }
 
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
@@ -785,24 +789,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
                             eprintln!("Child Error: {:?}", err);
-                            cage::cage_record_exit_status(
-                                child_cageid,
-                                cage::ExitStatus::Exited(1),
-                            );
-                            if let Some(c) = cage::get_cage(child_cageid) {
-                                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                            if crashed_thread_exit(child_cageid, THREAD_START_ID as u64) {
+                                lind_manager.decrement();
                             }
-                            threei::EXITING_TABLE.insert(child_cageid);
-                            threei::handler_table::_rm_grate_from_handler(child_cageid);
-                            cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
-                            cage::cage_finalize(child_cageid);
-                            if !rm_vmctx_thread(child_cageid, 0) {
-                                eprintln!(
-                                    "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
-                                    child_cageid
-                                );
-                            }
-                            lind_manager.decrement();
                             return 0;
                         }
 
@@ -824,6 +813,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
             // wait until child has fully copied the memory
             barrier.wait();
+
+            // CLONE_VFORK: hold the parent until the child execs or exits
+            // (no-op unless Core registered the child with `vfork_hold`).
+            cage::vfork_wait(child_cageid);
 
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
@@ -1376,68 +1369,21 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         return Ok(0);
     }
 
-    // execve syscall
-    // Function Argument:
-    // * path: the address of the path string in wasm memory
-    // * argv: the address of the argument list in wasm memory
-    // * envs: the address of the environment variable list in wasm memory
-    pub fn execve_call(
-        &self,
-        mut caller: &mut Caller<'_, T>,
-        path: String,
-        argv: Vec<String>,
-        environs: Option<Vec<(String, Option<String>)>>,
-        recursion_depth: i32,
-    ) -> Result<i32> {
-        // linux limits the maximum recursion depth of shebang
-        // it's typical value is 4, so let's use the same value
-        if recursion_depth > MAX_SHEBANG_DEPTH {
-            return Ok(-(Errno::ELOOP as i32));
-        }
-
-        // if the file to exec does not exist
-        if !std::path::Path::new(&path).exists() {
-            // return ENOENT
-            return Ok(-(Errno::ENOENT as i32));
-        }
-
-        // parse the wasm module as soon as possible to catch the error before unwinding, which is hard to unwind back if exec file has some problems
-        let mut main_module = &self.modules.get(0).unwrap().2;
+    // Second half of exec: replace this cage's image with `prepared`. This is
+    // the point of no return: the old image is unwound and, once the unwind
+    // finished, the new module runs on this host thread. Returns 0, which
+    // tells RawPOSIX that the exec succeeded.
+    pub fn apply_exec(&self, mut caller: &mut Caller<'_, T>, prepared: PreparedExec) -> Result<i32> {
+        let PreparedExec {
+            path,
+            argv,
+            environs,
+            module: exec_module,
+        } = prepared;
 
         // detect if dynamic loading is enabled
-        let dylink_enabled = main_module.dylink_meminfo().is_some();
-
-        let engine = main_module.engine().clone();
-        let exec_file_path = Path::new(&path);
-        let exec_module = match Engine::detect_precompiled_file(exec_file_path) {
-            Ok(_) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
-            Err(_) => Module::from_file(&engine, exec_file_path),
-        };
-        if exec_module.is_err() {
-            let shebang_res = parse_shebang(exec_file_path);
-
-            if shebang_res.is_err() {
-                return Ok(-(Errno::ENOEXEC as i32));
-            }
-
-            let shebang_opt = shebang_res.unwrap();
-            if shebang_opt.is_none() {
-                return Ok(-(Errno::ENOEXEC as i32));
-            }
-
-            // if shebang is present, we reconstruct the argv and path and call execve again with the interpreter specified by shebang
-            let shebang = shebang_opt.unwrap();
-
-            let new_argv = match build_shebang_argv(&shebang, &argv) {
-                Ok(args) => args,
-                Err(_) => return Ok(-(Errno::ENOEXEC as i32)),
-            };
-            // it's safe to unwrap here since above build_shebang_argv already checks if the interpreter path is valid
-            let new_path = shebang.interpreter.to_str().unwrap().to_string();
-
-            return self.execve_call(caller, new_path, new_argv, environs, recursion_depth + 1);
-        }
-        let exec_module = exec_module.unwrap();
+        let dylink_enabled = self.modules.get(0).unwrap().2.dylink_meminfo().is_some();
+        let engine = exec_module.engine().clone();
 
         // get the base address of the memory
         let address = get_memory_base(&mut caller);
@@ -1519,20 +1465,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
             // If the exec'd module crashed (wasm trap, unreachable, etc.) rather
             // than exiting cleanly, we must still finalize the cage so the parent's
-            // waitpid() unblocks.  Without this, the parent hangs forever because
-            // cage_finalize (which records the zombie and sends SIGCHLD) is never
-            // called.  Mirror the fork-crash cleanup path (see fork_call error
-            // handling) exactly.
+            // waitpid() unblocks.  crashed_thread_exit reports it to Core's
+            // ThreadExited (Lind-IF TerminateCage + cage_finalize),
+            // mirroring the fork-crash cleanup path in fork_call.
             if let Err(ref _e) = ret {
-                cage::cage_record_exit_status(cloned_cageid as u64, cage::ExitStatus::Exited(1));
-                if let Some(c) = cage::get_cage(cloned_cageid as u64) {
-                    c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                if crashed_thread_exit(cloned_cageid as u64, THREAD_START_ID as u64) {
+                    cloned_lind_manager.decrement();
                 }
-                threei::EXITING_TABLE.insert(cloned_cageid as u64);
-                threei::handler_table::_rm_grate_from_handler(cloned_cageid as u64);
-                cage::signal::lind_thread_exit(cloned_cageid as u64, THREAD_START_ID as u64);
-                cage::cage_finalize(cloned_cageid as u64);
-                cloned_lind_manager.decrement();
                 return Ok(OnCalledAction::Finish(vec![Val::I32(1)]));
             }
 
@@ -1551,12 +1490,12 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // exit syscall
     // actual exit syscall that would kill other threads is not supported yet
     // TODO: exit_call should be switched to epoch interrupt method later
-    pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, _is_last_thread: u64) {
+    pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32) {
         // Capture values for the deferred OnCalledAction closure.
-        // Every thread defers lind_thread_exit to OnCalledAction so that
-        // the epoch_handler entry stays alive until the asyncify unwind
-        // fully completes.  The actual last thread to finish handles
-        // cage_finalize (zombie, SIGCHLD, rm_vmctx, cage removal).
+        // Every thread defers Core's ThreadExited to OnCalledAction so that
+        // the epoch_handler entry stays alive until the asyncify unwind fully
+        // completes.  The last thread to finish runs Lind-IF
+        // TerminateCage and cage_finalize (zombie, SIGCHLD, cage removal).
         let deferred_cageid = self.cageid as u64;
         let deferred_tid = self.tid as u64;
         let deferred_lind_manager = self.lind_manager.clone();
@@ -1598,23 +1537,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
-            // Remove this thread from epoch_handler.  If this was the
-            // actual last thread in the cage, lind_thread_exit returns
-            // true and we handle full cage teardown.
-            let is_last = cage::signal::lind_thread_exit(deferred_cageid, deferred_tid);
-            if is_last {
-                // cage_finalize waits for grate_inflight to drain,
-                // records zombie/SIGCHLD, removes fdtable + cage.
-                cage::cage_finalize(deferred_cageid);
-
-                // Remove the VMContext pool
-                if !rm_vmctx_thread(deferred_cageid, 0) {
-                    eprintln!(
-                        "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
-                        deferred_cageid
-                    );
-                }
-
+            // Scheduling point: the thread runs no more guest code, so it is
+            // retired with Core. For the last thread, Core has the runtime
+            // release the cage's VMContexts (Lind-IF TerminateCage) and
+            // finalizes the cage (zombie, SIGCHLD).
+            if lind_if::core().thread_exited(deferred_cageid, deferred_tid as lind_if::ThreadId) {
                 // Decrement the global cage count.
                 deferred_lind_manager.decrement();
             }
@@ -2087,71 +2014,95 @@ where
     }
 }
 
-/// Entry point for `execve` after RawPOSIX-side processing.
+/// An exec image staged by [`prepare_exec`] for [`exec_apply`].
+pub struct PreparedExec {
+    path: String,
+    argv: Vec<String>,
+    environs: Option<Vec<(String, Option<String>)>>,
+    module: Module,
+}
+
+/// The engine of the running modules; exec loads new modules into it.
+static EXEC_ENGINE: std::sync::OnceLock<Engine> = std::sync::OnceLock::new();
+
+/// Fallible first half of exec, which leaves the calling image untouched.
 ///
-/// This function represents the *return-to-Wasmtime* boundary after RawPOSIX
-/// has finished its syscall-level work for `execve`.
-///
-/// Conceptually, the execution flow is:
-///   Wasm
-///     -> Wasmtime lind-common trampoline
-///     -> 3i dispatch with grateid=RAWPOSIX
-///     -> RawPOSIX syscall handling
-///     -> 3i dispatch with grateid=WASMTIME
-///     -> **back to Wasmtime**
-///
-/// `exec_syscall` is the point where we re-enter Wasmtime execution and
-/// continue with Wasmtime-specific logic (e.g., instantiating the new module,
-/// updating the caller context, and transferring control).
-///
-/// The function pointer of `exec_syscall` is registered into the 3i handler
-/// table during lind-boot initialization (see `lind-boot/execute.rs` for the
-/// detailed registration logic).
-///
-/// From that point on, 3i may invoke this function as a callback when an
-/// `execve` syscall requires Wasmtime-side continuation.
-///
-/// ---
-///
-/// Cage ID semantics:
-///
-/// Due to the presence of *grates*, the cage that *issues* the syscall is not
-/// necessarily the cage whose Wasmtime instance must be resumed.
-///
-/// In particular, path-related arguments may originate from a different cage
-/// than `cageid`. Therefore, we explicitly use `path_cageid` as the *source
-/// cage ID* when retrieving the `VMContext`.
-///
-/// This reflects the logical ownership of the address space that contains
-/// the `path` argument. For the conceptual model behind this separation,
-/// see the Grate/API documentation.
-pub fn exec_syscall<T, U>(
-    cageid: u64,
-    path: u64,
-    path_cageid: u64,
+/// `argv` and `envs` are host addresses of NULL-terminated arrays of host
+/// string addresses. Checks that `path` exists and loads its module, following
+/// shebang interpreters. Errors are positive errnos.
+pub fn prepare_exec(
+    path: String,
     argv: u64,
-    argv_cageid: u64,
     envs: u64,
-    envs_cageid: u64,
-    _arg4: u64,
-    _arg4_cageid: u64,
-    _arg5: u64,
-    _arg5_cageid: u64,
-    _arg6: u64,
-    _arg6_cageid: u64,
-) -> i32
+) -> std::result::Result<PreparedExec, i32> {
+    let argv = parse_argv(argv).map_err(|_| Errno::EFAULT as i32)?;
+    let environs = parse_env(envs).map_err(|_| Errno::EFAULT as i32)?;
+    // exec depth starts from 1
+    load_exec_image(path, argv, environs, 1)
+}
+
+fn load_exec_image(
+    path: String,
+    argv: Vec<String>,
+    environs: Option<Vec<(String, Option<String>)>>,
+    recursion_depth: i32,
+) -> std::result::Result<PreparedExec, i32> {
+    // linux limits the maximum recursion depth of shebang
+    // it's typical value is 4, so let's use the same value
+    if recursion_depth > MAX_SHEBANG_DEPTH {
+        return Err(Errno::ELOOP as i32);
+    }
+
+    if !std::path::Path::new(&path).exists() {
+        return Err(Errno::ENOENT as i32);
+    }
+
+    let Some(engine) = EXEC_ENGINE.get() else {
+        return Err(Errno::ENOEXEC as i32);
+    };
+
+    // parse the wasm module before unwinding, which is hard to undo if the
+    // exec file has some problems
+    let exec_file_path = Path::new(&path);
+    let exec_module = match Engine::detect_precompiled_file(exec_file_path) {
+        Ok(_) => unsafe { Module::deserialize_file(engine, exec_file_path) },
+        Err(_) => Module::from_file(engine, exec_file_path),
+    };
+    if let Ok(module) = exec_module {
+        return Ok(PreparedExec {
+            path,
+            argv,
+            environs,
+            module,
+        });
+    }
+
+    // if shebang is present, we reconstruct the argv and path and exec the
+    // interpreter specified by shebang
+    let shebang = match parse_shebang(exec_file_path) {
+        Ok(Some(shebang)) => shebang,
+        _ => return Err(Errno::ENOEXEC as i32),
+    };
+    let new_argv = build_shebang_argv(&shebang, &argv).map_err(|_| Errno::ENOEXEC as i32)?;
+    // it's safe to unwrap here since above build_shebang_argv already checks if the interpreter path is valid
+    let new_path = shebang.interpreter.to_str().unwrap().to_string();
+    load_exec_image(new_path, new_argv, environs, recursion_depth + 1)
+}
+
+/// Re-enters Wasmtime through the main thread VMContext of `cageid` and
+/// replaces its image with `prepared` (see [`LindCtx::apply_exec`]).
+pub fn exec_apply<T, U>(cageid: u64, prepared: PreparedExec) -> i32
 where
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 {
     unsafe {
-        let vmctx_wrapper: VmCtxWrapper =
-            match get_vmctx_thread(path_cageid, THREAD_START_ID as u64) {
-                Some(v) => v,
-                None => {
-                    panic!("no VMContext found for cage_id {}", path_cageid);
-                }
-            };
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx_thread(cageid, THREAD_START_ID as u64) {
+            Some(v) => v,
+            None => {
+                panic!("no VMContext found for cage_id {}", cageid);
+            }
+        };
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
@@ -2162,24 +2113,7 @@ where
             let host = caller.data().clone();
             let ctx = host.get_ctx();
 
-            // parse the arguments from the caller's memory space
-            let path = match parse_path(path) {
-                Ok(path) => path,
-                Err(_) => return -(Errno::EFAULT as i32),
-            };
-
-            let argv = match parse_argv(argv) {
-                Ok(argv) => argv,
-                Err(_) => return -(Errno::EFAULT as i32),
-            };
-
-            let envs = match parse_env(envs) {
-                Ok(envs) => envs,
-                Err(_) => return -(Errno::EFAULT as i32),
-            };
-
-            // exec depth starts from 1
-            match ctx.execve_call(&mut caller, path, argv, envs, 1) {
+            match ctx.apply_exec(&mut caller, prepared) {
                 Ok(ret) => ret,
                 Err(e) => {
                     log::error!("failed to exec: {}", e);
@@ -2190,73 +2124,21 @@ where
     }
 }
 
-/// Re-entering Wasmtime trampoline for the `exit` syscall.
+/// Terminates the calling thread `tid` of `cageid` with `exit_code`.
 ///
-/// This function serves as the **Wasmtime re-entry trampoline** for `exit`,
-/// bridging execution back from the Lind / RawPOSIX world into Wasmtime.
-///
-/// Conceptually, the execution flow is:
-///   Wasm
-///     -> Wasmtime lind-common trampoline
-///     -> 3i dispatch with grateid=RAWPOSIX
-///     -> RawPOSIX syscall handling
-///     -> 3i dispatch with grateid=WASMTIME
-///     -> **back to Wasmtime**
-///
-/// During `lind-boot` initialization, this function is extracted as a raw
-/// `u64` function pointer and registered into the **3i handler table**.
-/// All subsequent `exit` syscalls are routed through this trampoline.
-///
-/// ## Thread exit vs. Cage (process) exit
-///
-/// The `exit` syscall must distinguish between **Thread exit** (non-last thread)
-/// and **Cage / process exit** (or last thread exit) This distinction is resolved
-/// in RawPOSIX, which determines whether the exiting thread is the last live
-/// thread in the cage. The result is passed back through the `is_last_thread`
-/// flag:
-///
-/// - `0`: not the last thread
-/// - `1`: last thread (entire cage must be torn down)
-///
-/// Resource cleanup for the entire cage is triggered only when
-/// `is_last_thread == 1` in exit_call implementation.
-///
-/// ## VMContext resolution
-///
-/// Since each thread owns a distinct `VMContext`, we must use `tid` to
-/// resolve the correct context:
-/// - `tid == 1`: main thread VMContext
-/// - otherwise: per-thread VMContext
-///
-/// This VMContext is then used to re-enter Wasmtime and invoke
-/// `ctx.exit_call`, completing the control transfer.
-pub fn exit_syscall<T, U>(
-    cageid: u64,
-    exit_code: u64,
-    exit_code_cageid: u64,
-    tid: u64,
-    is_last_thread: u64,
-    _arg3: u64,
-    _arg3_cageid: u64,
-    _arg4: u64,
-    _arg4_cageid: u64,
-    _arg5: u64,
-    _arg5_cageid: u64,
-    _arg6: u64,
-    _arg6_cageid: u64,
-) -> i32
+/// Re-enters Wasmtime through the thread's own VMContext and starts an
+/// Asyncify unwind; once it finished, the thread completes its exit with Core
+/// (see [`LindCtx::exit_call`]) and its host thread returns `exit_code`.
+pub fn exit_thread<T, U>(cageid: u64, tid: u64, exit_code: i32) -> i32
 where
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 {
     unsafe {
-        // Resolve the correct VMContext wrapper based on thread id.
-        // Since `exit` is thread-specific, we always use `tid` to resolve the context,
-        // even for the main thread (`tid == 1`).
-        let vmctx_wrapper: VmCtxWrapper = match get_vmctx_thread(exit_code_cageid, tid) {
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx_thread(cageid, tid) {
             Some(v) => v,
             None => {
-                panic!("no VMContext found for cage_id {}", exit_code_cageid);
+                panic!("no VMContext found for cage_id {} tid {}", cageid, tid);
             }
         };
 
@@ -2266,20 +2148,39 @@ where
         let vmctx_raw: *mut VMContext =
             unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
-        // Re-enter Wasmtime with the recovered VMContext.
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             let host = caller.data().clone();
             let ctx = host.get_ctx();
-
-            // Delegate exit handling back to Wasmtime.
-            // `is_last_thread` determines whether this is a thread exit
-            // or a full cage (process) exit.
-            ctx.exit_call(&mut caller, exit_code as i32, is_last_thread);
-
-            // `exit` syscall is not expected to fail.
+            ctx.exit_call(&mut caller, exit_code);
             0
         })
     }
+}
+
+/// Exit of a thread whose Wasm code trapped (crashed instance), as an
+/// exit_group with status 1.
+///
+/// Marks the cage as exiting the way RawPOSIX's exit_group and the fatal
+/// signal path do, stops its other threads, and retires this thread with
+/// Core's `ThreadExited`, which for the last thread releases the cage through
+/// Lind-IF `TerminateCage` and finalizes it.
+/// Must be called once the thread runs no more guest code. Returns whether
+/// this was the cage's last thread.
+pub fn crashed_thread_exit(cageid: u64, tid: u64) -> bool {
+    cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
+    if let Some(c) = cage::get_cage(cageid) {
+        c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+    }
+    threei::EXITING_TABLE.insert(cageid);
+    cage::signal::epoch_kill_all(cageid, tid as i32);
+    threei::handler_table::_rm_grate_from_handler(cageid);
+    lind_if::core().thread_exited(cageid, tid as lind_if::ThreadId)
+}
+
+/// Releases all VMContexts registered for `cageid`. Returns whether any
+/// existed.
+pub fn release_cage_contexts(cageid: u64) -> bool {
+    rm_vmctx_thread(cageid, 0)
 }
 
 pub fn setjmp_call<

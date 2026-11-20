@@ -674,7 +674,7 @@ extern "C" fn lind_syscall_handler(
 
     let a1_cid = cage_id;
     let a2_cid = cage_id;
-    crate::lind_mpk::syscalls::with_guest_fork_return(|| {
+    let retval = crate::lind_mpk::syscalls::with_guest_fork_return(|| {
         let retval = threei::make_syscall(
             cage_id as u64, // self_cageid
             number as u64,
@@ -694,9 +694,15 @@ extern "C" fn lind_syscall_handler(
             cage_id as u64,
         );
 
-        crate::lind_mpk::signals::handle_signal(cage_id, None);
+        // A thread committed to exit receives no further signals.
+        if !crate::lind_mpk::syscalls::exit_pending(cage_id) {
+            crate::lind_mpk::signals::handle_signal(cage_id, None);
+        }
         retval
-    })
+    });
+    // Scheduling point: the syscall returned through 3i to this cage.
+    crate::lind_mpk::syscalls::retire_pending_exit(Some(cage_id));
+    retval
 }
 
 
@@ -740,7 +746,7 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
         0,
     );
 
-    // Frees MpkThreadInfos queued by mpk_exit_syscall_entry once their OS
+    // Frees MpkThreadInfos queued by mpk_exit_syscall_entry_inner once their OS
     // thread has actually exited (see RuntimeInfo::queue_thread_info_for_reap).
     std::thread::Builder::new()
         .name("mpk-thread-reaper".to_string())
@@ -751,13 +757,6 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
 }
 
 
-/// Internal helper for MPK exec: tears down the old namespace and loads a new program.
-///
-/// This is called by `MpkRuntime::handle_exec` when the guest issues an exec syscall.
-/// It performs the following steps:
-/// 1. Retrieves and tears down the existing MPKRuntimeInfo (closes dlmopen handles)
-/// 2. Parses the path, argv, and envp from the native pointers
-/// 3. Loads and executes the new .so using the same logic as execute_mpk
 /// A NULL-terminated array of guest string pointers (argv/envp). `ptr` is
 /// already converted to a host address; its entries are guest addresses of
 /// cage `cageid`.
@@ -773,25 +772,23 @@ impl GuestPtrArray {
     }
 }
 
-pub(crate) fn exec_mpk_internal(
-    cage_id: u64,
-    path_ptr: *const c_char,
+/// An exec image staged by [`prepare_mpk_exec`].
+pub(crate) struct PreparedMpkExec {
+    so_path: String,
+    args: Vec<String>,
+    vars: Vec<(String, Option<String>)>,
+}
+
+/// Fallible first half of MPK exec, which leaves the calling image untouched:
+/// resolves the program and copies argv and envp out of the old image.
+pub(crate) fn prepare_mpk_exec(
+    path: &str,
     argv: GuestPtrArray,
     envp: GuestPtrArray,
-) -> anyhow::Result<i32> {
-    mpk_debug(format!("exec_mpk_internal for cage {}", cage_id));
-
-    // Step 1: Parse all arguments into owned Rust values BEFORE any teardown.
-    // The pointers live in the old namespace's memory; dlclose would invalidate them.
-
-    let so_path = unsafe { CStr::from_ptr(path_ptr) }
-        .to_str()
-        .context("invalid UTF-8 in path")?
-        .to_string();
-
-    // step 1.1: locate the .so file and canonicalize it.
-    let canonical_so_path = std::fs::canonicalize(&so_path)
-        .with_context(|| format!("failed to canonicalize .so path {so_path:?}"))?;
+) -> anyhow::Result<PreparedMpkExec> {
+    // locate the .so file and canonicalize it.
+    let canonical_so_path = std::fs::canonicalize(path)
+        .with_context(|| format!("failed to canonicalize .so path {path:?}"))?;
     let so_path = canonical_so_path
         .to_str()
         .context("invalid UTF-8 in .so path")?
@@ -839,6 +836,15 @@ pub(crate) fn exec_mpk_internal(
     ensure_ld_library_path_contains_lib_elf(&mut vars);
 
     mpk_debug(format!("parsed {} args, {} env vars", args.len(), vars.len()));
+
+    Ok(PreparedMpkExec { so_path, args, vars })
+}
+
+/// Second half of MPK exec: tears down the cage's old namespace and memory
+/// and jumps into the prepared program. Does not return on success.
+pub(crate) fn exec_mpk_internal(cage_id: u64, prepared: PreparedMpkExec) -> anyhow::Result<i32> {
+    mpk_debug(format!("exec_mpk_internal for cage {}", cage_id));
+    let PreparedMpkExec { so_path, args, vars } = prepared;
 
     // Step 2: Tear down the existing namespace context now that arguments are safely copied.
     let cage = get_cage(cage_id)

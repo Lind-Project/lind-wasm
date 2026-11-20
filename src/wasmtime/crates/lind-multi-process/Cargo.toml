@@ -23,6 +23,7 @@ typemap = { path = "../typemap" }
 sysdefs = { path = "../sysdefs" }
 threei = { path = "../threei" }
 cage = { path = "../cage" }
+lind-if = { path = "../lind-if" }
 cfg-if = { workspace = true }
 
 [features]
