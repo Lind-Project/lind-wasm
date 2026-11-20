@@ -49,14 +49,12 @@ use threei::threei_const;
 use lind_if::{
     CageId, Errno, LindArgVec, LindCloneArgs, LindError, LindInitArgs, LindMmapArgs,
     LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime, LindThreadDuplicateArgs,
-    ThreadDuplicateMode, ThreadId, UserPtr,
+    SyscallResult, ThreadDuplicateMode, ThreadId, UserPtr,
 };
 use typemap::datatype_conversion::sc_convert_ptr_to_host;
 
-use lind_runtimes::lifecycle::{begin_clone, begin_thread_exit, take_clone_result};
 use lind_runtimes::lind_mpk::lind_if::MpkRuntime;
 use lind_runtimes::lind_wasm::lind_if::WasmRuntime;
-use wasmtime_lind_multi_process::THREAD_START_ID;
 
 use crate::cli::CliOptions;
 use crate::lind_wasmtime::host::HostCtx;
@@ -144,18 +142,21 @@ extern "C" fn shim_clone_handler(
             // table created by RawPOSIX.
             return lind_errno(error);
         }
-        begin_clone();
+        // The parent's result is the child PID; the child's initial thread
+        // is its main thread.
         let duplicate = LindThreadDuplicateArgs {
             mode: ThreadDuplicateMode::SyscallFork,
             clone_args,
             set_parent_tid,
             set_child_tid,
+            parent_result: child_cageid as SyscallResult,
+            child_result: 0,
         };
         if let Err(error) = runtime.duplicate_thread(
             parent_cageid,
             source_thread_id,
             child_cageid,
-            THREAD_START_ID as ThreadId,
+            cage::MAIN_THREAD_ID as ThreadId,
             &duplicate,
         ) {
             // Neither runtime implements terminate_cage yet; Core's rollback
@@ -164,27 +165,33 @@ extern "C" fn shim_clone_handler(
             let _ = runtime.terminate_cage(child_cageid);
             return lind_errno(error);
         }
-        // The parent's result is the child PID.
-        take_clone_result().unwrap_or(child_cageid as i32)
+        // Wasm delivers the result on the Asyncify rewind, so this return
+        // value is only observed by MPK.
+        duplicate.parent_result as i32
     } else if flags & CLONE_THREAD != 0 {
-        begin_clone();
+        // A thread ID is not released when its thread exits (or when
+        // duplicate_thread fails); IDs are only reused after exec.
+        let Some(new_thread_id) = cage::alloc_thread_id(parent_cageid) else {
+            return -(Errno::EAGAIN as i32);
+        };
         let duplicate = LindThreadDuplicateArgs {
             mode: ThreadDuplicateMode::PthreadClone,
             clone_args,
             set_parent_tid,
             set_child_tid,
+            parent_result: new_thread_id as SyscallResult,
+            child_result: 0,
         };
-        // TODO: Core should allocate the thread ID; both runtimes still assign
-        // it themselves, so 0 is passed.
-        if let Err(error) =
-            runtime.duplicate_thread(parent_cageid, source_thread_id, parent_cageid, 0, &duplicate)
-        {
+        if let Err(error) = runtime.duplicate_thread(
+            parent_cageid,
+            source_thread_id,
+            parent_cageid,
+            new_thread_id,
+            &duplicate,
+        ) {
             return lind_errno(error);
         }
-        // MPK records the TID it assigned. Wasm injects the parent's result
-        // on the Asyncify rewind, so this handler's return value is not
-        // observed there.
-        take_clone_result().unwrap_or(0)
+        duplicate.parent_result as i32
     } else {
         // CLONE_VM without CLONE_THREAD: a new process sharing the parent's
         // memory (e.g. native glibc's posix_spawn, CLONE_VM | CLONE_VFORK).
@@ -284,7 +291,7 @@ extern "C" fn shim_exec_handler(
         stack: None,
         tls: None,
     };
-    if let Err(error) = runtime.create_thread(staging_id, THREAD_START_ID as ThreadId, &main_thread)
+    if let Err(error) = runtime.create_thread(staging_id, cage::MAIN_THREAD_ID as ThreadId, &main_thread)
     {
         let _ = runtime.terminate_cage(staging_id);
         return lind_errno(error);
@@ -330,14 +337,13 @@ extern "C" fn shim_exit_handler(
 
     // The status becomes the thread's (and for the last thread the host's)
     // exit value; exit_group recorded the process-level status in Core.
-    begin_thread_exit(arg1 as i32);
     // Commits the calling thread to exit and returns; the result is
     // discarded. The runtime retires the thread at its next scheduling point,
     // once this handler returned through 3i (Wasm: after the Asyncify unwind;
     // MPK: on return to the supervisor's syscall entry), and reports it with
     // Core's ThreadExited, which for the last thread calls terminate_cage and
     // finalizes the cage (zombie, SIGCHLD).
-    match runtime.terminate_thread(exiting_cageid, tid as ThreadId) {
+    match runtime.terminate_thread(exiting_cageid, tid as ThreadId, arg1 as i32) {
         Ok(()) => 0,
         Err(error) => lind_errno(error),
     }

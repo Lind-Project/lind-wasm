@@ -192,6 +192,7 @@ pub extern "C" fn fork_syscall(
             vmmap: RwLock::new(new_vmmap),
             final_exit_status: RwLock::new(None),
             exit_group_initiated: AtomicBool::new(false),
+            last_thread_id: std::sync::atomic::AtomicI32::new(cage::MAIN_THREAD_ID),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
             runtime_info: RwLock::new(Box::new(cage::NullRuntimeInfo)),
@@ -339,6 +340,8 @@ pub extern "C" fn exec_syscall(
         selfcage.signalhandler.clear();
         // the sigset will be reset after exec
         selfcage.sigset.store(0, Relaxed);
+        // The new image starts with only its initial thread.
+        cage::reset_thread_ids(cageid);
         // Do NOT clear epoch_handler or main_threadid here.
         // If exec-ed module crashes, the thread is still running and needs its
         // epoch_handler entry for proper exit tracking.  On success,

@@ -5,7 +5,7 @@
 //! (`terminate_thread`, `terminate_cage`) through this interface. The initial
 //! cage is still booted by lind-boot (`exec_wasm`).
 
-use crate::lifecycle::{errno_error, take_thread_exit_status, StagingTable};
+use crate::staging::StagingTable;
 use crate::{memory, signal, unsupported};
 use lind_if::{
     AbiDescriptor, CageId, ConstLocalBuffer, Errno, GuestAddress, HandlerReturn, HostAddress,
@@ -14,7 +14,6 @@ use lind_if::{
     LindThreadDuplicateArgs, LocalBuffer, ThreadDuplicateMode, ThreadId,
 };
 use std::marker::PhantomData;
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID};
 use typemap::datatype_conversion::sc_convert_ptr_to_host;
 use wasmtime_lind_multi_process::{
     clone_syscall, exec_apply, exit_thread, prepare_exec, release_cage_contexts, LindHost,
@@ -104,7 +103,7 @@ where
             sc_convert_ptr_to_host(argv.address, argv.cage_id),
             sc_convert_ptr_to_host(envp.address, envp.cage_id),
         )
-        .map_err(|errno| errno_error(-errno))?;
+        .map_err(|errno| LindError::from_errno_return(-errno))?;
         STAGED_EXECS.insert(cage_id, image)
     }
 
@@ -122,7 +121,7 @@ where
         // on exec is not supported (see lind-boot's exec shim).
         let ret = exec_apply::<T, U>(target_cage_id, staged.image);
         if ret < 0 {
-            return Err(errno_error(ret));
+            return Err(LindError::from_errno_return(ret));
         }
         Ok(())
     }
@@ -183,7 +182,7 @@ where
         source_cage_id: CageId,
         source_thread_id: ThreadId,
         destination_cage_id: CageId,
-        _new_thread_id: ThreadId,
+        new_thread_id: ThreadId,
         args: &LindThreadDuplicateArgs,
     ) -> LindResult<()> {
         // `clone_syscall` derives fork vs. thread from the clone flags again and
@@ -210,41 +209,41 @@ where
                 return unsupported();
             }
         };
-        // Deviations until Core owns the IDs and TID stores:
-        // - `new_thread_id` is unused: `pthread_create_call` allocates the TID
-        //   and the forked child's main thread is always thread 1.
+        // A forked Wasm cage always starts as its initial thread.
+        if child_cageid != 0 && new_thread_id != THREAD_START_ID as ThreadId {
+            return Err(LindError::Other(Errno::EINVAL));
+        }
+        let (Ok(parent_result), Ok(child_result)) = (
+            i32::try_from(args.parent_result),
+            i32::try_from(args.child_result),
+        ) else {
+            return Err(LindError::Other(Errno::EINVAL));
+        };
+        // Both continuations get their result on the Asyncify rewind.
+        // Deviations:
         // - `set_parent_tid`/`set_child_tid` are unused: the thread path
         //   stores the new TID at `clone_args.child_tid` itself (glibc's
         //   CLONE_CHILD_CLEARTID address) and CLONE_PARENT_SETTID is not yet
         //   implemented.
-        // - Both continuations get their result on the Asyncify rewind (child
-        //   0, parent the child cage ID or new TID), so no clone result is
-        //   recorded here.
         // - The fork itself runs after this returns, in the parent's deferred
         //   unwind callback (`fork_call`), so a CLONE_VFORK parent is held
         //   there via `cage::vfork_wait` rather than here.
         let ret = clone_syscall::<T, U>(
-            WASMTIME_CAGEID,
             args.clone_args.address,
-            args.clone_args.cage_id,
             source_cage_id,
             source_thread_id as u64,
             child_cageid,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
+            new_thread_id,
+            parent_result,
+            child_result,
         );
         if ret < 0 {
-            return Err(errno_error(ret));
+            return Err(LindError::from_errno_return(ret));
         }
         Ok(())
     }
 
-    fn terminate_thread(&self, cage_id: CageId, thread_id: ThreadId) -> LindResult<()> {
+    fn terminate_thread(&self, cage_id: CageId, thread_id: ThreadId, status: i32) -> LindResult<()> {
         // `thread_id` must be the calling thread. `exit_thread` commits it
         // to exit by starting an Asyncify unwind and returns. The scheduling
         // point is the end of the unwind: there the thread is retired with
@@ -255,7 +254,7 @@ where
         //    epoch (as exit_group's epoch_kill_all does).
         // 2. The interrupted thread unwinds and completes its exit as above.
         // 3. Wait until Core no longer lists the thread.
-        exit_thread::<T, U>(cage_id, thread_id as u64, take_thread_exit_status());
+        exit_thread::<T, U>(cage_id, thread_id as u64, status);
         Ok(())
     }
 

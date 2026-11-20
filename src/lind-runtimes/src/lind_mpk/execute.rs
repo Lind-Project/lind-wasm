@@ -1018,7 +1018,6 @@ pub(crate) fn exec_mpk_internal(cage_id: u64, prepared: PreparedMpkExec) -> anyh
         0,
         memory_base,
         MPK_MEMORY_SIZE,
-        THREAD_START_ID + 1,
         Some((new_os_tid, MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
             grate_cage_id: cage_id,
@@ -1165,7 +1164,6 @@ pub fn execute_mpk(launch: MpkLaunch, cage_id: u64) -> anyhow::Result<i32> {
         0,
         memory_base,
         MPK_MEMORY_SIZE,
-        THREAD_START_ID + 1,
         Some((tid, MpkCageThreadInfo {
             thread_info: Arc::new(thread_info),
             grate_cage_id: cage_id,

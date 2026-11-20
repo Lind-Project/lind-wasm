@@ -18,7 +18,6 @@ use crate::lind_mpk::RuntimeInfo::{
 use std::ffi::c_void;
 use crate::lind_mpk::execute::{setup_supervisor_stack, current_tid, CAGE_STACK_GUARD};
 use threei::threei_const;
-use wasmtime_lind_multi_process::THREAD_START_ID;
 use wasmtime_lind_utils::LindCageManager;
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL, MMAP_SYSCALL, SIGACTION_SYSCALL};
 use sysdefs::constants::lind_platform_const::{INIT_CAGEID, RAWPOSIX_CAGEID, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID};
@@ -128,6 +127,24 @@ pub(super) fn guest_fork_return(context: usize) -> Option<*mut MpkJumpBuffer> {
     })
 }
 
+thread_local! {
+    /// Result a fork or thread child returns from its resumed guest entry.
+    static GUEST_FORK_RESULT: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
+}
+
+/// Record the result the calling child host thread returns from the guest
+/// entry it resumes with `longjmp`.
+#[inline(never)]
+pub(super) fn set_guest_fork_result(result: i64) {
+    GUEST_FORK_RESULT.with(|slot| slot.set(result));
+}
+
+/// Not inlined for the same reason as `clear_guest_fork_return`.
+#[inline(never)]
+fn take_guest_fork_result() -> i64 {
+    GUEST_FORK_RESULT.with(|slot| slot.replace(0))
+}
+
 /// Keep the original guest entry alive while grates dispatch its syscall.
 /// A forked child can return here without resuming the parent's grate frames.
 #[inline(never)]
@@ -143,7 +160,7 @@ pub(super) fn with_guest_fork_return(dispatch: impl FnOnce() -> i64) -> i64 {
     });
     let _entry = GuestForkReturn(context);
     if unsafe { setjmp((&mut buffer as *mut MpkJumpBuffer).cast()) } != 0 {
-        return 0;
+        return take_guest_fork_result();
     }
     dispatch()
 }
@@ -551,6 +568,7 @@ struct CloneThreadLaunch {
     thread_info: Arc<MpkThreadInfo>,
     guest_stack: (usize, usize),
     gs_base: usize,
+    child_result: i64,
 }
 
 fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
@@ -566,6 +584,7 @@ fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
         thread_info,
         guest_stack,
         gs_base,
+        child_result,
     } = launch;
     thread_info
         .exit_stack
@@ -685,6 +704,7 @@ fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
             parent_pointer_guard,
             child_pointer_guard,
         );
+        set_guest_fork_result(child_result);
         gs_fork::set_gs_base(gs_base);
         longjmp(copied_jump_buffer as *mut libc::c_long, 1);
     }
@@ -1327,23 +1347,20 @@ extern "C" fn child_make_threei_call_handler(
 
 }
 
-pub extern "C" fn mpk_clone_syscall_entry(
-    cageid: u64, //This is rawposix' cage id as it performs make_syscall
-    _clone_arg: u64,
-    _clone_arg_cageid: u64,
-    _parent_cageid: u64,
-    _arg2_cageid: u64,
-    _child_cageid_hint: u64,
-    _arg3_cageid: u64,
-    _arg4: u64,
-    _arg4_cageid: u64,
-    _arg5: u64,
-    _arg5_cageid: u64,
-    _arg6: u64,
-    _arg6_cageid: u64,
+/// Clone entry of Lind-IF `DuplicateThread`: forks the calling cage into
+/// `child_cageid` (a GS fork), or creates thread `new_tid` when the clone
+/// arguments request CLONE_VM. The new continuation returns `child_result`
+/// to the guest. Returns the child cage ID or thread ID, or a negative errno.
+pub(super) fn mpk_clone(
+    clone_arg: u64,
+    clone_arg_cageid: u64,
+    parent_cageid: u64,
+    child_cageid: u64,
+    new_tid: u32,
+    child_result: i64,
 ) -> i32 {
     // Children resume at the guest syscall entry (`with_guest_fork_return`)
-    // of the current context and return 0 to the guest from there. They must
+    // of the current context and return `child_result` to the guest from there. They must
     // not return through the frames between that entry and this handler: the
     // child runs on a copy of the parent's supervisor stack, so those frames
     // (3i, RawPOSIX, the boot shim, and `LindRuntime::duplicate_thread`) may
@@ -1355,19 +1372,13 @@ pub extern "C" fn mpk_clone_syscall_entry(
     };
 
     let result = inner_mpk_clone_syscall_entry(
-        cageid,
-        _clone_arg,
-        _clone_arg_cageid,
-        _parent_cageid,
-        _arg2_cageid,
-        _child_cageid_hint,
-        _arg3_cageid,
+        clone_arg,
+        clone_arg_cageid,
+        parent_cageid,
+        child_cageid,
         jump_buffer,
-        _arg4_cageid,
-        _arg5,
-        _arg5_cageid,
-        _arg6,
-        _arg6_cageid,
+        new_tid,
+        child_result,
     );
     result
 }
@@ -1382,20 +1393,14 @@ pub extern "C" fn mpk_clone_syscall_entry(
 ///   behalf of the child cage, then sends the `SyscallResp` back.
 /// - **Child**: the context-stack handlers are replaced with
 ///   `child_syscall_handler`, which forwards every syscall over the socket.
-pub extern "C" fn inner_mpk_clone_syscall_entry(
-    cageid: u64, //This is rawposix' cage id as it performs make_syscall
+fn inner_mpk_clone_syscall_entry(
     _clone_arg: u64,
     _clone_arg_cageid: u64,
     _parent_cageid: u64,
-    _arg2_cageid: u64,
     _child_cageid_hint: u64,
-    _arg3_cageid: u64,
     jump_buffer: *mut MpkJumpBuffer,
-    _arg4_cageid: u64,
-    _arg5: u64,
-    _arg5_cageid: u64,
-    _arg6: u64,
-    _arg6_cageid: u64,
+    new_tid: u32,
+    child_result: i64,
 ) -> i32 {
     // The clone arguments live in the calling cage's memory; in a gs-forked
     // cage its pointers are shifted by the cage's logical offset.
@@ -1478,12 +1483,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                     return -libc::EAGAIN;
                 }
             };
-            let next_tid = {
-                let mut tid_lock = mpk_info.next_thread_id.write();
-                let tid = *tid_lock;
-                *tid_lock += 1;
-                tid
-            };
+            let next_tid = new_tid;
 
             let parent_tid = current_tid();
             let parent_thread_info = mpk_info
@@ -1599,6 +1599,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 thread_info,
                 guest_stack,
                 gs_base: parent_gs_base,
+                child_result,
             };
             if launch_sender.send(launch).is_err() {
                 eprintln!("[lind-mpk] mpk_clone: host thread exited before launch");
@@ -1647,7 +1648,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
         //fork like semantics
         #[cfg(not(feature = "mpk-process-fork"))]
         {
-            return gs_fork::gs_fork(_parent_cageid, _child_cageid_hint, jump_buffer);
+            return gs_fork::gs_fork(_parent_cageid, _child_cageid_hint, jump_buffer, new_tid, child_result);
         }
         #[cfg(feature = "mpk-process-fork")]
         {
@@ -1748,7 +1749,6 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                         pid,
                         parent_mpk.memory_base,
                         parent_mpk.memory_size,
-                        THREAD_START_ID + 1,
                         None,
                     );
                     // duplicate the child cage's vmmap so the parent can translate
@@ -1800,13 +1800,13 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 lind_signal_init(
                     child_cageid,
                     epoch_pointer,
-                    THREAD_START_ID, //this is the first thread of the new cage
+                    new_tid as i32, //this is the first thread of the new cage
                     true, /* this is the main thread */
                 );                
                 // For forked cages, the logical main thread runs in the child
-                // process, so map THREAD_START_ID to the child's PID/TID.
+                // process, so map its initial thread to the child's PID/TID.
                 if let Some(cage) = get_cage(child_cageid) {
-                    cage.os_tid_map.insert(THREAD_START_ID, pid as i64);
+                    cage.os_tid_map.insert(new_tid as i32, pid as i64);
                 }
 
 
@@ -2004,11 +2004,11 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             // Update the active context to reflect the new child cage id.
             update_active_cage_context(child_cageid, _parent_cageid);
 
-            // The forked process returns through the clone handler frames,
-            // which keep their addresses in the new process; Core reads the
-            // child result recorded here.
-            crate::lifecycle::set_clone_result(0);
-            0 as i32
+            // Resume the guest syscall entry like the GS-fork child instead
+            // of returning through the clone handler frames, which would
+            // return the parent's result.
+            set_guest_fork_result(child_result);
+            unsafe { longjmp(jump_buffer.cast(), 1) }
         }
         }
     }

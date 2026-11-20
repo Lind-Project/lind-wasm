@@ -19,7 +19,7 @@ use wasmtime_lind_utils::{LindCageManager, LindGOT};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use wasmtime::{
@@ -82,7 +82,6 @@ pub struct LindCtx<T, U> {
     pub tid: i32,
 
     // next thread id
-    next_threadid: Arc<AtomicU32>,
 
     // used to keep track of how many active cages are running
     lind_manager: Arc<LindCageManager>,
@@ -190,7 +189,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         }
 
         let tid = THREAD_START_ID;
-        let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
             linker: Some(linker),
             got_table,
@@ -198,7 +196,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             dlopen_modules: vec![],
             cageid,
             tid,
-            next_threadid,
             lind_manager: lind_manager.clone(),
             lindboot_cli,
             pending_clone_visible_retval: Arc::new(Mutex::new(None)),
@@ -309,7 +306,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // 4. create a new wasm instance from same module
     // 5. fork the memory region to child (including saved unwind context)
     // 6. start the rewind for both parent and child
-    pub fn fork_call(&self, mut caller: &mut Caller<'_, T>, child_cageid: u64) -> Result<i32> {
+    pub fn fork_call(
+        &self,
+        mut caller: &mut Caller<'_, T>,
+        child_cageid: u64,
+        parent_result: i32,
+        child_result: i32,
+    ) -> Result<i32> {
         // get the base address of the memory
         let address = get_memory_base(&mut caller) as *mut u8;
 
@@ -757,7 +760,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     // set up rewind state and fork return value for child
                     store
                         .as_context_mut()
-                        .set_asyncify_state(AsyncifyState::Rewind(0));
+                        .set_asyncify_state(AsyncifyState::Rewind(child_result));
 
                     if store.is_thread() {
                         // fork inside a thread is currently not supported
@@ -822,7 +825,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
 
             // set up asyncify state and fork return value for parent
-            store.set_asyncify_state(AsyncifyState::Rewind(child_cageid as i32));
+            store.set_asyncify_state(AsyncifyState::Rewind(parent_result));
 
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
@@ -845,12 +848,17 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // * stack_addr: child's base stack address
     // * stack_size: child's stack size
     // * child_tid: the address of the child's thread id. This should be set by wasmtime
+    // * next_tid: the thread id allocated by Core for the new thread
+    // * parent_result/child_result: the clone results of the two continuations
     pub fn pthread_create_call(
         &self,
         mut caller: &mut Caller<'_, T>,
         mut stack_addr: u32,
         stack_size: u32,
         child_tid: u64,
+        next_tid: u32,
+        parent_result: i32,
+        child_result: i32,
     ) -> Result<i32> {
         // get the base address and size of the memory
         let (mem_base_u64, mem_size) = get_memory_base_and_size(&mut caller);
@@ -882,14 +890,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             *((parent_unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
-        // set up child_tid
-        let next_tid = match self.next_thread_id() {
-            Some(val) => val,
-            None => {
-                eprintln!("running out of thread id!");
-                0
-            }
-        };
         // Validate the child thread stack region. stack_addr is the high address
         // (stack grows down), so the region is [stack_addr - stack_size, stack_addr).
         // Both values are WASM linear-memory offsets (u32), so we check:
@@ -1307,7 +1307,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     // set up asyncify state and thread return value for child
                     store
                         .as_context_mut()
-                        .set_asyncify_state(AsyncifyState::Rewind(0));
+                        .set_asyncify_state(AsyncifyState::Rewind(child_result));
 
                     // store stack low and stack high for child
                     store.as_context_mut().set_stack_top(child_stack_low_usr);
@@ -1356,7 +1356,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 asyncify_start_rewind_func.call(&mut store, parent_unwind_data_start_usr as i32);
 
             // set up asyncify state and thread return value for parent
-            store.set_asyncify_state(AsyncifyState::Rewind(next_tid as i32));
+            store.set_asyncify_state(AsyncifyState::Rewind(parent_result));
 
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
@@ -1729,28 +1729,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         self.cageid
     }
 
-    // get the next thread id
-    fn next_thread_id(&self) -> Option<u32> {
-        match self
-            .next_threadid
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| match v {
-                ..=0x1ffffffe => Some(v + 1),
-                _ => None,
-            }) {
-            Ok(v) => Some(v + 1),
-            Err(_) => None,
-        }
-    }
-
-    // return true if the lind process had thread before
+    // return true if the lind process had thread before (Core allocates
+    // thread IDs)
     pub fn had_threads(&self) -> bool {
-        // if next_threadid had incremented, that means the process
-        // created some threads before
-        if self.next_threadid.load(Ordering::Relaxed) != 1 {
-            true
-        } else {
-            false
-        }
+        cage::cage_had_threads(self.cageid as u64)
     }
 
     // fork the state for new process
@@ -1769,7 +1751,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
             tid: 1,                                     // thread id starts from 1
-            next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
             pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
@@ -1798,7 +1779,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: self.cageid,
             tid: self.tid,
-            next_threadid: self.next_threadid.clone(),
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
             pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
@@ -1866,10 +1846,12 @@ pub fn lind_fork<
 >(
     caller: &mut Caller<'_, T>,
     child_cageid: u64,
+    parent_result: i32,
+    child_result: i32,
 ) -> Result<i32> {
     let host = caller.data().clone();
     let ctx = host.get_ctx();
-    ctx.fork_call(caller, child_cageid)
+    ctx.fork_call(caller, child_cageid, parent_result, child_result)
 }
 
 // entry point of pthread_create syscall
@@ -1881,10 +1863,21 @@ pub fn lind_pthread_create<
     stack_addr: u32,
     stack_size: u32,
     child_tid: u64,
+    next_tid: u32,
+    parent_result: i32,
+    child_result: i32,
 ) -> Result<i32> {
     let host = caller.data().clone();
     let ctx = host.get_ctx();
-    ctx.pthread_create_call(caller, stack_addr, stack_size, child_tid)
+    ctx.pthread_create_call(
+        caller,
+        stack_addr,
+        stack_size,
+        child_tid,
+        next_tid,
+        parent_result,
+        child_result,
+    )
 }
 
 // entry point of catch_rewind
@@ -1899,31 +1892,19 @@ pub fn catch_rewind<
     ctx.catch_rewind(caller)
 }
 
-/// Re-entering Wasmtime trampoline for `clone` semantics (fork / pthread_create).
+/// Clone (fork / pthread_create) for Lind-IF `DuplicateThread`.
 ///
-/// This function is the **Wasmtime re-entry trampoline** used by the Lind to
-/// complete cloning semantics that must be implemented inside the runtime.
-///
-/// Conceptually, the execution flow is:
-///   Wasm
-///     -> Wasmtime lind-common trampoline
-///     -> 3i dispatch with grateid=RAWPOSIX
-///     -> RawPOSIX syscall handling (decides fork vs thread)
-///     -> 3i dispatch with grateid=WASMTIME
-///     -> **back to Wasmtime (this function)**
-///         -> lind_fork / lind_pthread_create
-///
-/// During `lind-boot` initialization, this function is extracted as a raw `u64`
-/// function pointer and registered into the **3i handler table**, so RawPOSIX
-/// can dispatch back into Wasmtime when it needs runtime support.
+/// Re-enters the Wasmtime instance of `parent_tid` (Core blocked it in the
+/// clone syscall) and starts the fork or thread creation; both continuations
+/// resume on the Asyncify rewind with `parent_result` and `child_result`.
 ///
 /// ## fork vs pthread_create
 ///
 /// The decision is encoded in the `CloneArgStruct.flags`:
 /// - If `CLONE_VM` is **not** set： treat as **cage(process) clone** (fork-like)
-///     and call `lind_fork`.
+///     and call `lind_fork`. The child's initial thread is `THREAD_START_ID`.
 /// - If `CLONE_VM` **is** set： treat as **thread clone** (pthread_create-like)
-///     and call `lind_pthread_create`.
+///     and call `lind_pthread_create` with the Core-allocated `new_tid`.
 ///
 /// ## VMContext resolution
 ///
@@ -1931,19 +1912,13 @@ pub fn catch_rewind<
 /// appropriate `VMContext` using the parent cage and the parent tid from the active
 /// per-thread VMContext table. See more details on [lind-3i/src/lib.rs].
 pub fn clone_syscall<T, U>(
-    cageid: u64,
     clone_arg: u64,
-    clone_arg_cageid: u64,
     parent_cageid: u64,
     parent_tid: u64,
     child_cageid: u64,
-    _arg3_cageid: u64,
-    _arg4: u64,
-    _arg4_cageid: u64,
-    _arg5: u64,
-    _arg5_cageid: u64,
-    _arg6: u64,
-    _arg6_cageid: u64,
+    new_tid: u32,
+    parent_result: i32,
+    child_result: i32,
 ) -> i32
 where
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
@@ -1991,7 +1966,7 @@ where
 
             if isthread == 0 {
                 // fork
-                match lind_fork(&mut caller, child_cageid) {
+                match lind_fork(&mut caller, child_cageid, parent_result, child_result) {
                     Ok(res) => res,
                     Err(_e) => -1,
                 }
@@ -2002,6 +1977,9 @@ where
                     args.stack as u32,
                     args.stack_size as u32,
                     args.child_tid,
+                    new_tid,
+                    parent_result,
+                    child_result,
                 ) {
                     Ok(res) => res,
                     Err(_e) => -1,

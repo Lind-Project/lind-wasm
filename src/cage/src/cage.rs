@@ -201,6 +201,9 @@ pub struct Cage {
     // The kernel thread id of the main thread of current cage, used because when we want to send signals,
     // we want to send to the main thread
     pub main_threadid: RwLock<i32>,
+    // The highest Lind thread ID allocated in this cage; see
+    // `alloc_thread_id`. The main thread is `MAIN_THREAD_ID`.
+    pub last_thread_id: AtomicI32,
     // The interval_timer can serve as a source for triggering signals and works together with signalhandler
     // and sigset to manage and handle signals. The design of the interval_timer supports periodic triggering,
     // simulating operations in Linux that need to run at regular intervals. It assists in implementing setitimer()
@@ -428,6 +431,38 @@ pub fn alloc_cage_id() -> Option<u64> {
     }
 }
 
+/// Lind thread ID of a cage's initial thread.
+pub const MAIN_THREAD_ID: i32 = 1;
+
+/// Allocate a Lind thread ID for a new thread of `cageid`.
+///
+/// IDs are unique per cage and never reused within a cage's image; the initial
+/// thread is always `MAIN_THREAD_ID`. Returns `None` if the cage does not
+/// exist or its ID space is exhausted.
+pub fn alloc_thread_id(cageid: u64) -> Option<u32> {
+    let cage = get_cage(cageid)?;
+    cage.last_thread_id
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+            (v < 0x1fff_ffff).then_some(v + 1)
+        })
+        .ok()
+        .map(|v| (v + 1) as u32)
+}
+
+/// Whether the current image of `cageid` ever allocated a thread besides its
+/// initial thread.
+pub fn cage_had_threads(cageid: u64) -> bool {
+    get_cage(cageid)
+        .is_some_and(|cage| cage.last_thread_id.load(Ordering::Relaxed) != MAIN_THREAD_ID)
+}
+
+/// Restart thread ID allocation for a new image of `cageid` (exec).
+pub fn reset_thread_ids(cageid: u64) {
+    if let Some(cage) = get_cage(cageid) {
+        cage.last_thread_id.store(MAIN_THREAD_ID, Ordering::Relaxed);
+    }
+}
+
 /// Final cage teardown.  Called from exit_call's OnCalledAction when
 /// the actual last thread finishes its asyncify unwind.
 ///
@@ -549,6 +584,7 @@ mod tests {
             vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
             final_exit_status: RwLock::new(None),
             exit_group_initiated: AtomicBool::new(false),
+            last_thread_id: AtomicI32::new(MAIN_THREAD_ID),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
             runtime_info: RwLock::new(Box::new(NullRuntimeInfo)),
@@ -563,5 +599,15 @@ mod tests {
             2,
             "Retrieved cage should have correct ID"
         );
+
+        // Thread IDs (kept in this test: cagetable_init is not thread-safe).
+        assert!(!cage_had_threads(2));
+        assert_eq!(alloc_thread_id(2), Some(MAIN_THREAD_ID as u32 + 1));
+        assert_eq!(alloc_thread_id(2), Some(MAIN_THREAD_ID as u32 + 2));
+        assert!(cage_had_threads(2));
+        reset_thread_ids(2);
+        assert!(!cage_had_threads(2));
+        assert_eq!(alloc_thread_id(2), Some(MAIN_THREAD_ID as u32 + 1));
+        assert_eq!(alloc_thread_id(9999), None);
     }
 }

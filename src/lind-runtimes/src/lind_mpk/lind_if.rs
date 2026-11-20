@@ -7,8 +7,8 @@
 
 use super::execute::{exec_mpk_internal, prepare_mpk_exec, GuestPtrArray, PreparedMpkExec};
 use super::pkeys;
-use super::syscalls::{defer_thread_exit, mpk_clone_syscall_entry, release_cage_runtime};
-use crate::lifecycle::{errno_error, set_clone_result, take_thread_exit_status, StagingTable};
+use super::syscalls::{defer_thread_exit, mpk_clone, release_cage_runtime};
+use crate::staging::StagingTable;
 use crate::{memory, signal, unsupported};
 use lind_if::{
     AbiDescriptor, CageId, ConstLocalBuffer, Errno, GuestAddress, HandlerReturn, HostAddress,
@@ -16,7 +16,6 @@ use lind_if::{
     LindIovecAccess, LindMmapArgs, LindMprotectArgs, LindMunmapArgs, LindResult, LindRuntime,
     LindThreadDuplicateArgs, LocalBuffer, ThreadDuplicateMode, ThreadId, UserPtr,
 };
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID};
 use typemap::datatype_conversion::sc_convert_ptr_to_host;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 
@@ -182,9 +181,9 @@ impl LindRuntime for MpkRuntime {
     fn duplicate_thread(
         &self,
         source_cage_id: CageId,
-        source_thread_id: ThreadId,
+        _source_thread_id: ThreadId,
         destination_cage_id: CageId,
-        _new_thread_id: ThreadId,
+        new_thread_id: ThreadId,
         args: &LindThreadDuplicateArgs,
     ) -> LindResult<()> {
         // The clone entry derives fork vs. thread from the clone flags again
@@ -210,40 +209,29 @@ impl LindRuntime for MpkRuntime {
                 return unsupported();
             }
         };
-        // Deviations until Core owns the IDs and TID stores:
-        // - `new_thread_id` is unused: MPK allocates TIDs from
-        //   `MPKRuntimeInfo::next_thread_id`.
-        // - `set_parent_tid`/`set_child_tid` are unused: the thread path
-        //   performs the CLONE_PARENT_SETTID/CLONE_CHILD_SETTID stores from
-        //   `clone_args` itself.
-        // Children resume at the guest syscall entry and do not return here,
-        // except a child of the optional `mpk-process-fork` OS fork, which
-        // records its own result.
-        let ret = mpk_clone_syscall_entry(
-            WASMTIME_CAGEID,
+        // Deviation: `set_parent_tid`/`set_child_tid` are unused; the thread
+        // path performs the CLONE_PARENT_SETTID/CLONE_CHILD_SETTID stores
+        // from `clone_args` itself.
+        // The parent continuation returns through the calling handlers, where
+        // Core returns `parent_result`. Children resume at the guest syscall
+        // entry with `child_result` and do not return here.
+        let ret = mpk_clone(
             args.clone_args.address,
             args.clone_args.cage_id,
             source_cage_id,
-            source_thread_id as u64,
             child_cageid,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
+            new_thread_id,
+            args.child_result,
         );
         if ret < 0 {
-            return Err(errno_error(ret));
+            return Err(LindError::from_errno_return(ret));
         }
         match args.mode {
-            ThreadDuplicateMode::PthreadClone => set_clone_result(ret),
             // The GS-fork child already runs on its own host thread. Hold the
             // parent while Core has it registered as a CLONE_VFORK child.
-            // (An `mpk-process-fork` child returns 0 here and must not wait;
-            // its parent cannot observe the child's exec/exit in this table.)
-            ThreadDuplicateMode::SyscallFork if ret > 0 && !cfg!(feature = "mpk-process-fork") => {
+            // (Not with `mpk-process-fork`: the parent cannot observe that
+            // child's exec/exit in this table.)
+            ThreadDuplicateMode::SyscallFork if !cfg!(feature = "mpk-process-fork") => {
                 cage::vfork_wait(destination_cage_id)
             }
             _ => {}
@@ -251,7 +239,7 @@ impl LindRuntime for MpkRuntime {
         Ok(())
     }
 
-    fn terminate_thread(&self, cage_id: CageId, _thread_id: ThreadId) -> LindResult<()> {
+    fn terminate_thread(&self, cage_id: CageId, _thread_id: ThreadId, status: i32) -> LindResult<()> {
         // `thread_id` must be the calling thread, which is identified by its
         // OS thread instead. This only commits the thread to exit; it is
         // retired at its next scheduling point, once the syscall handler
@@ -262,7 +250,7 @@ impl LindRuntime for MpkRuntime {
         //    epoch (as exit_group's epoch_kill_all does).
         // 2. The interrupted thread enters the supervisor and is retired at
         //    that scheduling point as above.
-        defer_thread_exit(cage_id, take_thread_exit_status());
+        defer_thread_exit(cage_id, status);
         Ok(())
     }
 

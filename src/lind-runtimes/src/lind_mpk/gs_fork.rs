@@ -34,7 +34,6 @@ use libc::{c_void, pid_t};
 use sysdefs::constants::fs_const::{MAP_SHARED, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
 use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
-use wasmtime_lind_multi_process::THREAD_START_ID;
 
 use crate::lind_mpk::pkeys;
 use crate::lind_mpk::execute::{
@@ -725,13 +724,21 @@ struct ChildLaunch {
     jump_buffer_addr: usize,
     old_supervisor_stack_base: usize,
     parent_pointer_guard: u64,
+    child_thread_id: u32,
+    child_result: i64,
 }
 
 /// Fork for MPK cages without an OS fork. Called on the parent's host thread
 /// from the clone entry; `jump_buffer` is where the child resumes (returning
-/// 0 from the clone entry). Returns the child cage id or a negative errno.
-pub(super) fn gs_fork(parent_cageid: u64, child_cageid: u64, jump_buffer: *mut MpkJumpBuffer) -> i32 {
-    match gs_fork_inner(parent_cageid, child_cageid, jump_buffer) {
+/// `child_result` from the guest entry). Returns the child cage id or a negative errno.
+pub(super) fn gs_fork(
+    parent_cageid: u64,
+    child_cageid: u64,
+    jump_buffer: *mut MpkJumpBuffer,
+    child_thread_id: u32,
+    child_result: i64,
+) -> i32 {
+    match gs_fork_inner(parent_cageid, child_cageid, jump_buffer, child_thread_id, child_result) {
         Ok(child) => child as i32,
         Err(error) => {
             eprintln!("[lind-mpk] gs-fork of cage {parent_cageid} failed: {error:#}");
@@ -744,6 +751,8 @@ fn gs_fork_inner(
     parent_cageid: u64,
     child_cageid: u64,
     jump_buffer: *mut MpkJumpBuffer,
+    child_thread_id: u32,
+    child_result: i64,
 ) -> anyhow::Result<u64> {
     let tcb_size = guest_tcb_size()?;
     let sandbox_offset_field = guest_sandbox_offset()?;
@@ -934,7 +943,6 @@ fn gs_fork_inner(
         0,
         child_base as *mut c_void,
         MPK_MEMORY_SIZE,
-        THREAD_START_ID + 1,
         None,
     );
     child_info.pkru.store(child_pkru, Ordering::Relaxed);
@@ -980,6 +988,8 @@ fn gs_fork_inner(
         jump_buffer_addr: jump_buffer as usize,
         old_supervisor_stack_base: parent_thread.supervisor_stack_base,
         parent_pointer_guard: current_pointer_guard(),
+        child_thread_id,
+        child_result,
     };
     launch_sender
         .send(launch)
@@ -1039,7 +1049,8 @@ extern "C" fn gs_fork_prepare_child(launch: *mut c_void, exit_stack: usize) -> C
     let gs_data = thread_info.gs_data;
     unsafe { (*gs_data).os_tid = tid as u64 };
     current_ctx_stack.set(gs_data);
-    lind_signal_init(launch.child_cageid, MPK_EPOCH.as_ptr(), THREAD_START_ID, true);
+    lind_signal_init(launch.child_cageid, MPK_EPOCH.as_ptr(), launch.child_thread_id as i32, true);
+    super::syscalls::set_guest_fork_result(launch.child_result);
     record_guest_stack(tid, launch.stack_lo, launch.stack_size);
     let _ = launch.tid_sender.send(tid);
 

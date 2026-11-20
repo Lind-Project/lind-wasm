@@ -23,6 +23,13 @@ pub enum LindError {
     Other(Errno),
 }
 
+impl LindError {
+    /// Convert a negative errno return value (unknown values become EAGAIN).
+    pub fn from_errno_return(ret: i32) -> Self {
+        LindError::Other(Errno::from_discriminant(-ret).unwrap_or(Errno::EAGAIN))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemoryFaultInfo {
     pub address: GuestAddress,
@@ -143,6 +150,12 @@ pub struct LindThreadDuplicateArgs {
     pub set_parent_tid: Option<GuestAddress>,
     /// CLONE_CHILD_SETTID address in the destination cage.
     pub set_child_tid: Option<GuestAddress>,
+    /// Result of the source continuation's syscall (fork: the child cage ID;
+    /// thread clone: the new thread ID). Ignored for `RawInterrupted`.
+    pub parent_result: SyscallResult,
+    /// Result of the new thread's syscall continuation (0 for fork and
+    /// thread clone). Ignored for `RawInterrupted`.
+    pub child_result: SyscallResult,
 }
 
 /// The existing 3i argument convention pairs each value with an owner cage ID.
@@ -238,6 +251,8 @@ pub trait LindRuntime: Send + Sync {
 
     /// Hold guest continuations through handler unwind and attempt requested
     /// TID stores at the prescribed scheduling point; store faults are ignored.
+    /// `new_thread_id` is allocated by Core. The source continuation resumes
+    /// with `args.parent_result` and the new one with `args.child_result`.
     fn duplicate_thread(
         &self,
         source_cage_id: CageId,
@@ -247,7 +262,9 @@ pub trait LindRuntime: Send + Sync {
         args: &LindThreadDuplicateArgs,
     ) -> LindResult<()>;
 
-    fn terminate_thread(&self, cage_id: CageId, thread_id: ThreadId) -> LindResult<()>;
+    /// Commit `thread_id` to exit with `status`, the thread's exit value (the
+    /// host exit code when it is the cage's last thread).
+    fn terminate_thread(&self, cage_id: CageId, thread_id: ThreadId, status: i32) -> LindResult<()>;
 
     /// Core queued a signal for `cage_id`, or a queued signal may have become
     /// deliverable after an unblock, and selected `thread_id` to observe it.

@@ -1260,8 +1260,6 @@ pub struct MPKRuntimeInfo {
     pub memory_base: *mut c_void,
     /// Size (in bytes) of the memory region at memory_base.
     pub memory_size: usize,
-    /// Next thread ID to assign for threads created in this cage.
-    pub next_thread_id: RwLock<i32>,
     /// Per-thread supervisor stack state, keyed by OS thread ID (gettid()).
     /// Each in-process thread that runs guest code registers its MpkThreadInfo here
     /// so its supervisor stack and GS context data are tracked and freed on exit.
@@ -1290,7 +1288,6 @@ impl MPKRuntimeInfo {
         pid: libc::pid_t,
         memory_base: *mut c_void,
         memory_size: usize,
-        next_thread_id: i32,
         initial_thread: Option<(pid_t, MpkCageThreadInfo)>,
     ) -> Self {
         let mut thread_map = HashMap::new();
@@ -1304,7 +1301,6 @@ impl MPKRuntimeInfo {
             pid,
             memory_base,
             memory_size,
-            next_thread_id: RwLock::new(next_thread_id),
             threads: RwLock::new(thread_map),
             stopped: AtomicBool::new(false),
             killed: AtomicBool::new(false),

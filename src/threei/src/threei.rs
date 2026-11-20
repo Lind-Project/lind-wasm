@@ -1043,6 +1043,7 @@ mod grate_dispatch_tests {
             vmmap: RwLock::new(Vmmap::new()),
             final_exit_status: RwLock::new(None),
             exit_group_initiated: AtomicBool::new(false),
+            last_thread_id: std::sync::atomic::AtomicI32::new(cage::MAIN_THREAD_ID),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(inflight),
             runtime_info: RwLock::new(Box::new(NullRuntimeInfo)),

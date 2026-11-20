@@ -95,6 +95,8 @@ fn duplicate_rejects_unsupported_and_inconsistent_requests() {
         },
         set_parent_tid: None,
         set_child_tid: None,
+        parent_result: 0,
+        child_result: 0,
     };
     let einval = |result: LindResult<()>| {
         assert!(
