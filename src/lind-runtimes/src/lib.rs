@@ -6,6 +6,7 @@
 //! active for the MPK runtime (`lind_mpk`) and the Wasm runtime built on
 //! Wasmtime's multi-process support (`lind_wasm`).
 
+mod cage_table;
 mod staging;
 pub mod lind_mpk;
 pub mod lind_wasm;

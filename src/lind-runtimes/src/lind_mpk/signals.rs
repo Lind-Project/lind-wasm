@@ -4,7 +4,7 @@
 /// - check ordering of context stack increment: Are there any races with signal handling?
 /// - prevent deadlocks by managing the signal mask carefully
 use crate::lind_mpk::RuntimeInfo::{
-    context_stack_page_for_fs, guest_tcb_size, scratch_offset, MPKRuntimeInfo,
+    context_stack_page_for_fs, guest_tcb_size, mpk_runtime_info, scratch_offset, MPKRuntimeInfo,
     MPKSupervisorCtxStack, GUEST_TCB_SIZE, LIND_MPK_MAX_CONTEXTS,
 };
 use cage::memory::vmmap::VmmapOps;
@@ -76,9 +76,7 @@ fn cage_from_address(addr: usize) -> Option<u64> {
     };
 
     // Re-validate with the current runtime info to avoid stale index hits.
-    let cage = get_cage(cageid)?;
-    let runtime = cage.runtime_info.read();
-    let info = runtime.as_any().downcast_ref::<MPKRuntimeInfo>()?;
+    let info = mpk_runtime_info(cageid)?;
     let info_base = info.memory_base as usize;
     let info_end = info_base.saturating_add(info.memory_size);
     if addr >= info_base && addr < info_end {
@@ -127,10 +125,8 @@ fn cage_from_supervisor_ctx_top() -> Option<u64> {
 }
 
 fn with_mpk_info<R>(cageid: u64, f: impl FnOnce(&MPKRuntimeInfo) -> R) -> Option<R> {
-    let cage = get_cage(cageid)?;
-    let runtime = cage.runtime_info.read();
-    let info = runtime.as_any().downcast_ref::<MPKRuntimeInfo>()?;
-    Some(f(info))
+    let info = mpk_runtime_info(cageid)?;
+    Some(f(&info))
 }
 
 fn addr_in_cage_vmmap(cageid: u64, addr: usize) -> bool {
@@ -531,9 +527,10 @@ pub fn send_signal(signo: i32, cageid: u64, _threadid: i32) -> bool {
 
 /// Block an MPK entry point while a cage is stopped.
 pub fn wait_if_stopped(cageid: u64) -> bool {
-    let Some(cage) = get_cage(cageid) else { return true };
-    let runtime = cage.runtime_info.read();
-    let Some(info) = runtime.as_any().downcast_ref::<MPKRuntimeInfo>() else { return false };
+    if get_cage(cageid).is_none() {
+        return true;
+    }
+    let Some(info) = mpk_runtime_info(cageid) else { return false };
     let mut guard = info.state_lock.lock().unwrap();
     while info.stopped.load(Ordering::Acquire) && !info.killed.load(Ordering::Acquire) {
         guard = info.state_cv.wait(guard).unwrap();
@@ -557,11 +554,7 @@ fn invoke_handler_on_cage_stack(
     #[cfg(target_arch = "x86_64")]
     {
         let os_tid = current_tid();
-        let Some(cage) = get_cage(cageid) else {
-            return false;
-        };
-        let runtime = cage.runtime_info.read();
-        let Some(info) = runtime.as_any().downcast_ref::<MPKRuntimeInfo>() else {
+        let Some(info) = mpk_runtime_info(cageid) else {
             return false;
         };
 

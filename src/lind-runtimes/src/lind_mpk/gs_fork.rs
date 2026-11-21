@@ -45,7 +45,7 @@ use crate::lind_mpk::syscalls::{
 };
 use crate::lind_mpk::RuntimeInfo::{
     allocate_context_pages, current_context_stack, current_ctx_stack, guest_sandbox_offset,
-    guest_tcb_size, parent_stack_offset, MPKRuntimeInfo, MPKSupervisorCtxStack,
+    guest_tcb_size, mpk_runtime_info, parent_stack_offset, set_mpk_runtime_info, MPKRuntimeInfo, MPKSupervisorCtxStack,
     MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
 };
 
@@ -763,10 +763,7 @@ fn gs_fork_inner(
         .ok_or_else(|| anyhow::anyhow!("child cage {child_cageid} not found"))?;
 
     let (parent_base, dl_allocate_tls, parent_thread) = {
-        let runtime_info = parent_cage.runtime_info.read();
-        let mpk = runtime_info
-            .as_any()
-            .downcast_ref::<MPKRuntimeInfo>()
+        let mpk = mpk_runtime_info(parent_cageid)
             .ok_or_else(|| anyhow::anyhow!("parent cage has no MPKRuntimeInfo"))?;
         if mpk.pid != 0 || mpk.memory_base.is_null() {
             anyhow::bail!("parent cage does not run in the lind process");
@@ -946,7 +943,7 @@ fn gs_fork_inner(
         None,
     );
     child_info.pkru.store(child_pkru, Ordering::Relaxed);
-    *child_cage.runtime_info.write() = Box::new(child_info);
+    set_mpk_runtime_info(child_cageid, child_info);
     crate::lind_mpk::signals::register_mpk_memory_region(child_cageid, child_base, MPK_MEMORY_SIZE);
     child_cage
         .runtime_type
@@ -1056,9 +1053,9 @@ extern "C" fn gs_fork_prepare_child(launch: *mut c_void, exit_stack: usize) -> C
 
     let mut cage_fs_bases = HashMap::new();
     for cage_id in launch.registered_cage_ids {
-        let Some(cage) = get_cage(cage_id) else {
+        if get_cage(cage_id).is_none() {
             lind_debug_panic(&format!("gs-fork: cage {cage_id} not found"));
-        };
+        }
         let mut cage_info = MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
             grate_cage_id: cage_id,
@@ -1073,15 +1070,14 @@ extern "C" fn gs_fork_prepare_child(launch: *mut c_void, exit_stack: usize) -> C
         if let Err(error) = cage_info.allocate_grate_stack() {
             lind_debug_panic(&format!("gs-fork: stack allocation in cage {cage_id} failed: {error}"));
         }
-        let runtime_info = cage.runtime_info.read();
-        let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() else {
+        let Some(mpk_info) = mpk_runtime_info(cage_id) else {
             lind_debug_panic(&format!("gs-fork: cage {cage_id} has no MPKRuntimeInfo"));
         };
         let result = if cage_id == launch.child_cageid {
             cage_info.fs_base = launch.child_fs;
             thread_info.alias_context_stack(cage_id, launch.child_fs, launch.child_base, MPK_MEMORY_SIZE)
         } else {
-            cage_info.initialize_grate_tls(mpk_info)
+            cage_info.initialize_grate_tls(&mpk_info)
         };
         if let Err(error) = result {
             lind_debug_panic(&format!("gs-fork: TLS setup in cage {cage_id} failed: {error}"));

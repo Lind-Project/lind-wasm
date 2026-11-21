@@ -11,7 +11,7 @@ use libc::{
 use cage::{get_cage, init_vmmap, lind_signal_init};
 use crate::lind_mpk::RuntimeInfo::{
     InterposeHandlers, set_interpose_handlers,
-    MPKRuntimeInfo, MPKSupervisorCtxStack, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
+    mpk_runtime_info, remove_mpk_runtime_info, MPKSupervisorCtxStack, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
     current_ctx_stack, current_context_stack, allocate_context_pages,
     alias_context_stack, context_stack_aliases, privatize_context_stack_after_fork,
 };
@@ -205,9 +205,7 @@ fn cage_memory_region(cageid: u64) -> Option<(usize, usize)> {
         let (base, size) = *CHILD_MEMORY_REGION.get()?;
         return Some((base, size));
     }
-    let cage = get_cage(cageid)?;
-    let runtime_info = cage.runtime_info.read();
-    let mpk_info = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>()?;
+    let mpk_info = mpk_runtime_info(cageid)?;
     if mpk_info.memory_base.is_null() {
         return None;
     }
@@ -237,12 +235,9 @@ fn set_guest_fs_base(cageid: u64, fs: usize) -> anyhow::Result<()> {
             }
         }
     }
-    if let Some(cage) = get_cage(cageid) {
-        let runtime_info = cage.runtime_info.read();
-        if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-            if let Some(thread) = mpk_info.threads.write().get_mut(&current_tid()) {
-                thread.fs_base = fs;
-            }
+    if let Some(mpk_info) = mpk_runtime_info(cageid) {
+        if let Some(thread) = mpk_info.threads.write().get_mut(&current_tid()) {
+            thread.fs_base = fs;
         }
     }
     Ok(())
@@ -365,11 +360,10 @@ pub extern "C" fn mpk_set_tid_address_syscall_entry(
     let os_tid = current_tid();
     // Cleared and futex-woken at thread exit, so store the host address.
     let tidptr_arg = sc_convert_ptr_to_host(tidptr_arg, _tidptr_arg_cageid);
-    let Some(cage) = get_cage(cageid) else {
+    if get_cage(cageid).is_none() {
         return -(libc::ESRCH as i64);
-    };
-    let runtime_info = cage.runtime_info.read();
-    let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() else {
+    }
+    let Some(mpk_info) = mpk_runtime_info(cageid) else {
         return -(libc::EINVAL as i64);
     };
 
@@ -610,10 +604,10 @@ fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
     };
     let mut cage_fs_bases = std::collections::HashMap::new();
     for cage_id in registered_cage_ids {
-        let Some(cage) = get_cage(cage_id) else {
+        if get_cage(cage_id).is_none() {
             lind_debug_panic(&format!("mpk_clone: cage {} not found", cage_id));
             return -EINVAL;
-        };
+        }
         let mut cage_info = MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
             grate_cage_id: cage_id,
@@ -632,8 +626,7 @@ fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
             ));
             return -EINVAL;
         }
-        let runtime_info = cage.runtime_info.read();
-        let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() else {
+        let Some(mpk_info) = mpk_runtime_info(cage_id) else {
             lind_debug_panic("mpk_clone: cage runtime changed while creating thread");
             return -EINVAL;
         };
@@ -654,7 +647,7 @@ fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
                 return -EINVAL;
             }
         } else {
-            if let Err(error) = cage_info.initialize_grate_tls(mpk_info) {
+            if let Err(error) = cage_info.initialize_grate_tls(&mpk_info) {
                 lind_debug_panic(&format!(
                     "mpk_clone: TLS initialization failed for cage {} and tid={}: {}",
                     cage_id, tid, error
@@ -1470,8 +1463,7 @@ fn inner_mpk_clone_syscall_entry(
 
         //do signal initialization for the new thread
         let cage = get_cage(_parent_cageid).expect("mpk_clone: cage not found");
-        let rtInfo = cage.runtime_info.read();
-        if let Some(mpk_info) = rtInfo.as_any().downcast_ref::<MPKRuntimeInfo>() {
+        if let Some(mpk_info) = mpk_runtime_info(_parent_cageid) {
             let launch_sender = match crate::lind_mpk::host_rseq::prepare_thread(
                 |launch: CloneThreadLaunch| {
                     let _ = mpk_clone_thread_entry(launch);
@@ -1684,12 +1676,7 @@ fn inner_mpk_clone_syscall_entry(
         }
 
         let parent_memory_region = {
-            let parent_cage =
-                get_cage(_parent_cageid).expect("mpk_clone: parent cage not found");
-            let runtime_info = parent_cage.runtime_info.read();
-            let parent_mpk = runtime_info
-                .as_any()
-                .downcast_ref::<MPKRuntimeInfo>()
+            let parent_mpk = mpk_runtime_info(_parent_cageid)
                 .expect("mpk_clone: parent cage has no MPKRuntimeInfo");
             (parent_mpk.memory_base as usize, parent_mpk.memory_size)
         };
@@ -1729,20 +1716,16 @@ fn inner_mpk_clone_syscall_entry(
             // Parent does not need the child-side fd.
             unsafe { libc::close(child_fd) };
 
-            // Update the child cage's RuntimeInfo with the child process PID.
-            // The child cage was created earlier (before this fork handler was called),
-            // so we need to update its runtime_info with the forked child's PID.
+            // Install the child cage's MPKRuntimeInfo with the child process PID.
+            // The child cage was created earlier (before this fork handler was called).
             if let Some(child_cage) = get_cage(child_cageid) {
                 let parent_cage = get_cage(_parent_cageid).expect("parent cage not found");
-                let parent_info = parent_cage.runtime_info.read();
-
-                // Downcast to MPKRuntimeInfo to access the handles
-                if let Some(parent_mpk) = parent_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                if let Some(parent_mpk) = mpk_runtime_info(_parent_cageid) {
                     // Create new MPKRuntimeInfo for child with the child's PID.
                     // No initial_thread: per-thread resources (GS context, supervisor
                     // stack) live in the child's address space via fork's copy-on-write
                     // duplication and are not tracked by the parent.
-                    let child_mpk_info = MPKRuntimeInfo::new(
+                    let child_mpk_info = crate::lind_mpk::RuntimeInfo::MPKRuntimeInfo::new(
                         parent_mpk.loader_cage_handle, //this is shared with the parent and needs to be treated carefully
                         parent_mpk.loader_libc_handle,
                         parent_mpk.dl_allocate_tls,
@@ -1758,7 +1741,7 @@ fn inner_mpk_clone_syscall_entry(
                         *child_cage.vmmap.write() = child_vmmap;
                     }
 
-                    *child_cage.runtime_info.write() = Box::new(child_mpk_info);
+                    crate::lind_mpk::RuntimeInfo::set_mpk_runtime_info(child_cageid, child_mpk_info);
                     child_cage
                         .runtime_type
                         .store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
@@ -1772,11 +1755,7 @@ fn inner_mpk_clone_syscall_entry(
             // and dispatches every syscall from the child cage through threei.
             let parent_tid = current_tid();
             let parent_registered_cages = {
-                let parent_cage = get_cage(_parent_cageid).expect("mpk_clone: parent cage not found");
-                let runtime_info = parent_cage.runtime_info.read();
-                runtime_info
-                    .as_any()
-                    .downcast_ref::<MPKRuntimeInfo>()
+                mpk_runtime_info(_parent_cageid)
                     .and_then(|mpk_info| {
                         mpk_info
                             .threads
@@ -1834,9 +1813,8 @@ fn inner_mpk_clone_syscall_entry(
                     };
                     cage_info.thread_info.register_cage(*cage_id);
 
-                    if let Some(cage) = get_cage(*cage_id) {
-                        let runtime_info = cage.runtime_info.read();
-                        if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                    if get_cage(*cage_id).is_some() {
+                        if let Some(mpk_info) = mpk_runtime_info(*cage_id) {
                             if *cage_id != child_cageid {
                                 // The helper thread can enter parent-side cages while proxying
                                 // syscalls, so prepare stack/TLS for those contexts.
@@ -1848,7 +1826,7 @@ fn inner_mpk_clone_syscall_entry(
                                     return;
                                 }
                                 if let Err(error) =
-                                    cage_info.initialize_grate_tls(mpk_info)
+                                    cage_info.initialize_grate_tls(&mpk_info)
                                 {
                                     eprintln!(
                                         "[lind-mpk] parent worker thread: TLS initialization failed for cage {}: {}",
@@ -2023,28 +2001,25 @@ fn inner_mpk_clone_syscall_entry(
 fn mpk_exit_thread(exiting_cageid: u64, exit_status: u64) -> i32 {
     #[cfg(target_arch = "x86_64")]
     {
-        if let Some(cage) = get_cage(exiting_cageid) {
-            let runtime_info = cage.runtime_info.read();
-            if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-                let mut cage_tid = 0;
-                let cage_pid = mpk_info.pid;
-                if cage_pid != 0 {
-                    cage_tid = unsafe { (*current_context_stack()).os_tid as libc::pid_t };
-                } else {
-                    cage_tid = current_tid();
-                }
+        if let Some(mpk_info) = mpk_runtime_info(exiting_cageid) {
+            let mut cage_tid = 0;
+            let cage_pid = mpk_info.pid;
+            if cage_pid != 0 {
+                cage_tid = unsafe { (*current_context_stack()).os_tid as libc::pid_t };
+            } else {
+                cage_tid = current_tid();
+            }
 
-                let exit_stack = mpk_info
-                    .threads
-                    .read()
-                    .get(&cage_tid)
-                    .map(|entry| entry.thread_info.exit_stack.load(Ordering::Acquire))
-                    .unwrap_or(0);
+            let exit_stack = mpk_info
+                .threads
+                .read()
+                .get(&cage_tid)
+                .map(|entry| entry.thread_info.exit_stack.load(Ordering::Acquire))
+                .unwrap_or(0);
 
-                if exit_stack != 0 {
-                    drop(runtime_info);
-                    return unsafe { call_mpk_exit_on_stack(exit_stack, exit_status, exiting_cageid) };
-                }
+            if exit_stack != 0 {
+                drop(mpk_info);
+                return unsafe { call_mpk_exit_on_stack(exit_stack, exit_status, exiting_cageid) };
             }
         }
     }
@@ -2084,11 +2059,7 @@ unsafe fn call_mpk_exit_on_stack(
 /// (Lind-IF TerminateCage): kills the host process of a forked cage, or closes
 /// the cage's dlmopen namespace and unmaps its memory.
 pub(crate) fn release_cage_runtime(cage_id: u64) {
-    let Some(cage) = get_cage(cage_id) else {
-        return;
-    };
-    let runtime_info = cage.runtime_info.read();
-    let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() else {
+    let Some(mpk_info) = remove_mpk_runtime_info(cage_id) else {
         return;
     };
     let cage_pid = mpk_info.pid;
@@ -2123,8 +2094,8 @@ pub(crate) fn release_cage_runtime(cage_id: u64) {
             mpk_debug("mpk_terminate_cage: unmapping cage memory region");
             gs_fork::release_cage_memory(cage_id, mpk_info.memory_base as usize);
         }
-        // Remaining MpkThreadInfos in the threads map are freed when
-        // MPKRuntimeInfo is dropped with the cage.
+        // Remaining MpkThreadInfos in the threads map are freed when the
+        // last reference to MPKRuntimeInfo is dropped.
     }
 }
 
@@ -2134,14 +2105,13 @@ extern "C" fn mpk_exit_syscall_entry_inner(
 ) -> i32 {
     mpk_debug(format!("mpk_exit: cage {} exiting with status {}", exiting_cageid, exit_status));
 
-    // `cage` stays alive until this thread exits below: its MPKRuntimeInfo
-    // owns the stack this may run on.
+    // `mpk_info` stays alive until this thread exits below: it owns the stack
+    // this may run on, and TerminateCage removes it from the table.
+    let mpk_info = mpk_runtime_info(exiting_cageid);
     if let Some(cage) = get_cage(exiting_cageid) {
         let thread = {
-            let runtime_info = cage.runtime_info.read();
-            runtime_info
-                .as_any()
-                .downcast_ref::<MPKRuntimeInfo>()
+            mpk_info
+                .as_ref()
                 .map(|mpk_info| {
                     if mpk_info.pid != 0 {
                         // Retrieve the thread ID from MPKSupervisorCtxStack, we cant use gettid() directly.
@@ -2179,8 +2149,7 @@ extern "C" fn mpk_exit_syscall_entry_inner(
                     }
                 }
             } else {
-                let runtime_info = cage.runtime_info.read();
-                if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                if let Some(mpk_info) = mpk_info.as_ref() {
                     let thread_info = mpk_info.threads.write().remove(&cage_tid).map(|cage_thread_info| {
                         Arc::clone(&cage_thread_info.thread_info)
                     });
@@ -2209,13 +2178,10 @@ extern "C" fn mpk_exit_syscall_entry_inner(
                             if cage_id == exiting_cageid {
                                 continue;
                             }
-                            if let Some(cage) = get_cage(cage_id) {
-                                let runtime_info = cage.runtime_info.read();
-                                if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-                                    mpk_info.threads.write().remove(&cage_tid);
-                                    //log the removal of the thread info for this cage
-                                    mpk_debug(format!("mpk_exit: removed thread info for tid={} from cage {}", cage_tid, cage_id));
-                                }
+                            if let Some(mpk_info) = mpk_runtime_info(cage_id) {
+                                mpk_info.threads.write().remove(&cage_tid);
+                                //log the removal of the thread info for this cage
+                                mpk_debug(format!("mpk_exit: removed thread info for tid={} from cage {}", cage_tid, cage_id));
                             }
                         }
     

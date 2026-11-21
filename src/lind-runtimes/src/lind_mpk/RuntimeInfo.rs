@@ -1,9 +1,9 @@
 use libc::{c_void, pid_t};
-use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering, AtomicU32};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
-use cage::{get_cage, MemoryBackingType, RuntimeInfo, RwLock, VmmapOps};
+use cage::{get_cage, MemoryBackingType, RwLock, VmmapOps};
+use crate::cage_table::CageTable;
 use sysdefs::constants::fs_const::{PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
 use crate::lind_mpk::gs_fork::{cage_gs_offset, with_gs_base};
 
@@ -1243,7 +1243,8 @@ impl Drop for MpkCageThreadInfo {
 /// This structure stores the dlmopen handles and function pointers needed
 /// to manage isolated native .so execution. Fields are set once during
 /// execute_mpk initialization and then only read (e.g., during fork/clone).
-/// The Cage's RwLock<Box<dyn RuntimeInfo>> provides synchronization.
+/// Each cage's instance lives in the MPK runtime's own cage table (see
+/// [`mpk_runtime_info`]), not in Core's `Cage`; exec replaces it as a whole.
 #[derive(Debug)]
 pub struct MPKRuntimeInfo {
     /// Handle to the guest .so loaded via dlmopen
@@ -1311,16 +1312,30 @@ impl MPKRuntimeInfo {
     }
 }
 
-impl RuntimeInfo for MPKRuntimeInfo {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
 // Safety: Raw pointers in MPKRuntimeInfo point to dlmopen handles and mmap'd regions
-// that remain valid for the cage's lifetime. Access is synchronized through the Cage's
-// RwLock<Box<dyn RuntimeInfo>>, ensuring no data races. The handles are opaque library
+// that remain valid for the cage's lifetime. They are written only before the
+// instance is installed in the cage table and are read-only afterwards. The handles are opaque library
 // objects and the function pointer is extern "C" and statically determined, making them
 // safe to share. The threads map is protected by its own RwLock.
 unsafe impl Send for MPKRuntimeInfo {}
 unsafe impl Sync for MPKRuntimeInfo {}
+
+/// MPK runtime state of each cage running under this runtime.
+static MPK_CAGES: CageTable<MPKRuntimeInfo> = CageTable::new();
+
+/// Returns the MPK runtime state of `cage_id`, or `None` if the cage does not
+/// run under MPK.
+pub(crate) fn mpk_runtime_info(cage_id: u64) -> Option<Arc<MPKRuntimeInfo>> {
+    MPK_CAGES.get(cage_id)
+}
+
+/// Installs the state of `cage_id`'s new image (initial load, fork, exec) and
+/// returns the replaced state.
+pub(crate) fn set_mpk_runtime_info(cage_id: u64, info: MPKRuntimeInfo) -> Option<Arc<MPKRuntimeInfo>> {
+    MPK_CAGES.insert(cage_id, info)
+}
+
+/// Removes the state of `cage_id` (Lind-IF TerminateCage).
+pub(crate) fn remove_mpk_runtime_info(cage_id: u64) -> Option<Arc<MPKRuntimeInfo>> {
+    MPK_CAGES.remove(cage_id)
+}

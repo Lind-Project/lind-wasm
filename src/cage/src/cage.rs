@@ -17,28 +17,6 @@ use sysdefs::constants::SIGCHLD;
 use sysdefs::data::fs_struct::SigactionStruct;
 #[cfg(feature = "lind_debug")]
 use sysdefs::logging::lind_debug_panic;
-use std::any::Any;
-use std::fmt::Debug;
-
-/// Base trait for runtime-specific information stored in a Cage.
-///
-/// Each runtime backend (Wasmtime, MPK, etc.) can define its own
-/// RuntimeInfo implementation to store runtime-specific state.
-/// The `as_any` method allows downcasting to concrete types when needed.
-pub trait RuntimeInfo: Any + Send + Sync + Debug {
-    fn as_any(&self) -> &dyn Any;
-}
-
-/// Default no-op RuntimeInfo used when no specific runtime information
-/// is needed (e.g., init cage before runtime type is determined).
-#[derive(Debug)]
-pub struct NullRuntimeInfo;
-
-impl RuntimeInfo for NullRuntimeInfo {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 /// Represents how a cage terminated, mirroring the two primary POSIX
 /// process termination modes.
@@ -281,10 +259,6 @@ pub struct Cage {
     /// Could also be moved to wasmtime/crate/lind-3i if grate_inflight
     /// tracking is considered a VMContext-level concern.
     pub grate_inflight: AtomicU64,
-
-    /// runtime specific information about the cage.
-    /// Wrapped in RwLock to allow late initialization after cage creation.
-    pub runtime_info: RwLock<Box<dyn RuntimeInfo>>,
 
     /// Identifies the cage's execution backend, using the `RUNTIME_TYPE_*` values
     /// from `sysdefs::constants::lind_platform_const` (shared with `threei_const`).
@@ -587,7 +561,6 @@ mod tests {
             last_thread_id: AtomicI32::new(MAIN_THREAD_ID),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
-            runtime_info: RwLock::new(Box::new(NullRuntimeInfo)),
             runtime_type: AtomicU64::new(RUNTIME_TYPE_WASMTIME),
         };
 

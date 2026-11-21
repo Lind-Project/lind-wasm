@@ -1,6 +1,6 @@
 use cage::memory::vmmap::Vmmap;
 use cage::timer::IntervalTimer;
-use cage::{add_cage, cagetable_init, get_cage, remove_cage, Cage, NullRuntimeInfo};
+use cage::{add_cage, cagetable_init, get_cage, remove_cage, Cage};
 use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
 use rawposix::sys_calls::prlimit64_syscall;
@@ -72,7 +72,6 @@ fn prlimit64_uses_calling_cage_runtime_layout() {
             last_thread_id: std::sync::atomic::AtomicI32::new(cage::MAIN_THREAD_ID),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
-            runtime_info: RwLock::new(Box::new(NullRuntimeInfo)),
             runtime_type: AtomicU64::new(RUNTIME_TYPE_WASMTIME),
         },
     );

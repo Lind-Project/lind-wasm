@@ -195,7 +195,6 @@ pub extern "C" fn fork_syscall(
             last_thread_id: std::sync::atomic::AtomicI32::new(cage::MAIN_THREAD_ID),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
-            runtime_info: RwLock::new(Box::new(cage::NullRuntimeInfo)),
             runtime_type: AtomicU64::new(selfcage.runtime_type.load(Acquire)),
         };
 

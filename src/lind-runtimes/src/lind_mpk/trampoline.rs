@@ -1,10 +1,9 @@
 use crate::lind_mpk::RuntimeInfo::{
-    MPKRuntimeInfo, MPKSupervisorContext, MPKSupervisorCtxStack, MpkCageThreadInfo,
+    mpk_runtime_info, MPKSupervisorContext, MPKSupervisorCtxStack, MpkCageThreadInfo,
     LIND_MPK_MAX_CONTEXTS, CONTEXT_PAGE_SIZE, GUEST_TCB_SIZE,
     current_ctx_stack, current_context_stack,
 };
 use crate::lind_mpk::gs_fork;
-use cage::get_cage;
 use std::arch::naked_asm;
 use std::mem::{offset_of, size_of};
 use std::sync::Arc;
@@ -75,22 +74,12 @@ extern "C" fn mpk_register_handler(
         target_cageid, target_call_num, handle_func_cage, runtime_id, handler_ptr
     ));
     let result = (|| -> anyhow::Result<i32> {
-        let cage = get_cage(target_cageid)
-            .ok_or_else(|| anyhow::anyhow!("cage {} not found", target_cageid))?;
-        let cage_runtime_info = cage.runtime_info.read();
-        let cage_mpk_info = cage_runtime_info
-            .as_any()
-            .downcast_ref::<MPKRuntimeInfo>()
-            .ok_or_else(|| anyhow::anyhow!("cage {} is not using MPK", target_cageid))?;
+        let cage_mpk_info = mpk_runtime_info(target_cageid)
+            .ok_or_else(|| anyhow::anyhow!("cage {} not found or not using MPK", target_cageid))?;
         let mut cage_threads = cage_mpk_info.threads.write();
         
-        let grate = get_cage(handle_func_cage)
-            .ok_or_else(|| anyhow::anyhow!("cage {} not found", handle_func_cage))?;
-        let grate_runtime_info = grate.runtime_info.read();
-        let grate_mpk_info = grate_runtime_info
-            .as_any()
-            .downcast_ref::<MPKRuntimeInfo>()
-            .ok_or_else(|| anyhow::anyhow!("cage {} is not using MPK", handle_func_cage))?;
+        let grate_mpk_info = mpk_runtime_info(handle_func_cage)
+            .ok_or_else(|| anyhow::anyhow!("cage {} not found or not using MPK", handle_func_cage))?;
         let mut grate_threads = grate_mpk_info.threads.write();
 
         mpk_debug(format!(
@@ -120,7 +109,7 @@ extern "C" fn mpk_register_handler(
                 dtv_size: 0,
             };
             new_thread.allocate_grate_stack()?;
-            new_thread.initialize_grate_tls(grate_mpk_info)?;
+            new_thread.initialize_grate_tls(&grate_mpk_info)?;
             new_thread.thread_info.register_cage(handle_func_cage);
             grate_threads.insert(*tid, new_thread);
             added += 1;
@@ -190,12 +179,8 @@ pub extern "C" fn grate_callback_trampoline(
     let switch_to_context_index = current_context_index + 1;
     let os_tid = unsafe { (*gs_data).os_tid as libc::pid_t };
     let (grate_stack, grate_fs_base, thread_gs_data, grate_pkru) = {
-        let cage = get_cage(cageid).expect("inner_grate_callback_trampoline: cage not found");
-        let runtime_info = cage.runtime_info.read();
-        let mpk_info = runtime_info
-            .as_any()
-            .downcast_ref::<MPKRuntimeInfo>()
-            .expect("inner_grate_callback_trampoline: cage is not using MPK");
+        let mpk_info = mpk_runtime_info(cageid)
+            .expect("inner_grate_callback_trampoline: cage not found or not using MPK");
         let threads = mpk_info.threads.read();
         let cage_thread = threads
             .get(&os_tid)

@@ -18,7 +18,7 @@ use crate::lind_mpk::syscalls::{
 };
 use crate::lind_mpk::RuntimeInfo::{
     MPKSupervisorContext, MPKSupervisorCtxStack,
-    MPKRuntimeInfo, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
+    mpk_runtime_info, set_mpk_runtime_info, MPKRuntimeInfo, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
     allocate_stack_in_vmmap,
     allocate_context_pages, prepare_bootstrap_tcb,
     current_ctx_stack, current_context_stack,
@@ -854,10 +854,7 @@ pub(crate) fn exec_mpk_internal(cage_id: u64, prepared: PreparedMpkExec) -> anyh
     // Exec runs on this thread's supervisor stack, so the thread's
     // MpkThreadInfo must survive replacing the cage's runtime info below.
     let old_thread_info: Option<Arc<MpkThreadInfo>> = {
-        let runtime_info = cage.runtime_info.read();
-        let mpk_info = runtime_info
-            .as_any()
-            .downcast_ref::<MPKRuntimeInfo>()
+        let mpk_info = mpk_runtime_info(cage_id)
             .ok_or_else(|| anyhow::anyhow!("cage {} does not have MPKRuntimeInfo; cannot exec", cage_id))?;
         mpk_info
             .threads
@@ -874,8 +871,7 @@ pub(crate) fn exec_mpk_internal(cage_id: u64, prepared: PreparedMpkExec) -> anyh
         current_os_tid, old_grate_cage_ids, new_os_tid
     ));
     {
-        let runtime_info = cage.runtime_info.read();
-        if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+        if let Some(mpk_info) = mpk_runtime_info(cage_id) {
             if mpk_info.pid == 0 {
                 mpk_debug("tearing down old namespace context");
                 unsafe {
@@ -948,13 +944,8 @@ pub(crate) fn exec_mpk_internal(cage_id: u64, prepared: PreparedMpkExec) -> anyh
         if *grate_cage_id == cage_id {
             continue;
         }
-        let grate = get_cage(*grate_cage_id)
-            .ok_or_else(|| anyhow::anyhow!("grate cage {} not found during exec", grate_cage_id))?;
-        let grate_runtime_info = grate.runtime_info.read();
-        let grate_mpk_info = grate_runtime_info
-            .as_any()
-            .downcast_ref::<MPKRuntimeInfo>()
-            .ok_or_else(|| anyhow::anyhow!("cage {} is not using MPK", grate_cage_id))?;
+        let grate_mpk_info = mpk_runtime_info(*grate_cage_id)
+            .ok_or_else(|| anyhow::anyhow!("grate cage {} not found or not using MPK during exec", grate_cage_id))?;
         let mut grate_threads = grate_mpk_info.threads.write();
         let mut grate_thread: MpkCageThreadInfo = MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
@@ -967,7 +958,7 @@ pub(crate) fn exec_mpk_internal(cage_id: u64, prepared: PreparedMpkExec) -> anyh
             dtv_size: 0,
         };
         grate_thread.allocate_grate_stack()?;
-        grate_thread.initialize_grate_tls(grate_mpk_info)?;
+        grate_thread.initialize_grate_tls(&grate_mpk_info)?;
         grate_threads.insert(new_os_tid, grate_thread);
         mpk_debug(format!(
             "exec: restored grate stack for cage {} and tid {}",
@@ -1031,7 +1022,7 @@ pub(crate) fn exec_mpk_internal(cage_id: u64, prepared: PreparedMpkExec) -> anyh
     );
     let (pkey, pkru) = cage_pkru(memory_base);
     mpk_info.pkru.store(pkru, Ordering::Relaxed);
-    *cage.runtime_info.write() = Box::new(mpk_info);
+    set_mpk_runtime_info(cage_id, mpk_info);
     crate::lind_mpk::signals::register_mpk_memory_region(
         cage_id,
         memory_base as usize,
@@ -1177,7 +1168,7 @@ pub fn execute_mpk(launch: MpkLaunch, cage_id: u64) -> anyhow::Result<i32> {
     );
     let (pkey, pkru) = cage_pkru(memory_base);
     mpk_info.pkru.store(pkru, Ordering::Relaxed);
-    *cage.runtime_info.write() = Box::new(mpk_info);
+    set_mpk_runtime_info(cage_id, mpk_info);
     crate::lind_mpk::signals::register_mpk_memory_region(
         cage_id,
         memory_base as usize,
@@ -1231,10 +1222,7 @@ pub fn execute_mpk(launch: MpkLaunch, cage_id: u64) -> anyhow::Result<i32> {
     ));
 
     let gs_data = {
-        let runtime_info = cage.runtime_info.read();
-        let mpk_info = runtime_info
-            .as_any()
-            .downcast_ref::<MPKRuntimeInfo>()
+        let mpk_info = mpk_runtime_info(cage_id)
             .ok_or_else(|| anyhow::anyhow!("cage {} runtime is not MPK", cage_id))?;
         let threads = mpk_info.threads.read();
         let thread = threads
