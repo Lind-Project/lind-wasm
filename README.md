@@ -17,6 +17,23 @@ Check out the [Getting started](https://lind-project.github.io/lind-wasm/getting
 guide for a Hello World! example and [our docs](https://lind-project.github.io/lind-wasm/)
 to learn more about Lind!
 
+**Supported platforms:** `lind-wasm` targets **linux/amd64**. A native build
+requires x86-64 Linux (tested on Ubuntu 22.04) and roughly 20 GB of free disk
+space.
+
+| Host | How to run |
+| --- | --- |
+| x86-64 Linux | native build, or the development image |
+| Windows | Ubuntu 22.04 under WSL2, covered in the [Native Linux setup](https://lind-project.github.io/lind-wasm/contribute/running-on-native-linux/) guide; or Docker Desktop with `--platform=linux/amd64` |
+| macOS (Intel or Apple Silicon) | the development image with `--platform=linux/amd64`; on Apple Silicon this runs under emulation and is slower |
+
+On Windows and macOS, clone into a case-sensitive filesystem — the WSL2 ext4
+filesystem rather than `/mnt/c`, for example. The glibc sources contain
+case-colliding filenames (see
+[#1246](https://github.com/Lind-Project/lind-wasm/issues/1246)).
+
+Run `make checkenv` to verify a machine.
+
 
 
 ## Repository Structure and Components
@@ -39,7 +56,7 @@ This monorepo combines various subprojects and dependencies that work together t
 
 | Project       | Location          | Description                                                                 |
 |---------------|-------------------|-----------------------------------------------------------------------------|
-| `glibc`       | `third_party/glibc` | Modified version of glibc to support WebAssembly and Lind interfaces       |
+| `glibc`       | `src/glibc`      | Modified version of glibc to support WebAssembly and Lind interfaces       |
 | `wasmtime`    | `src/wasmtime`    | Embedded Wasmtime runtime for running and debugging Lind-Wasm modules      |
 
 ### Third-Party Binaries
@@ -48,5 +65,21 @@ This monorepo combines various subprojects and dependencies that work together t
 |---------------|--------------------|----------------------------------------------------------------------------|
 | `binaryen`    | `tools/binaryen`   | Provides `wasm-opt` and other utilities used for optimizing wasm binaries |
 
----
+## Contributing and Community
 
+Contributions are welcome. See the repository-specific
+[contribution guide](CONTRIBUTING.md) for development setup, testing, and code
+style. Project-wide policies and community information are maintained in the
+[Lind community repository](https://github.com/Lind-Project/community):
+
+- [Governance](https://github.com/Lind-Project/community/blob/main/GOVERNANCE.md)
+- [Maintainers](https://github.com/Lind-Project/community/blob/main/MAINTAINER.md)
+- [Community channels and meetings](https://github.com/Lind-Project/community/blob/main/COMMUNITY.md)
+- [Code of Conduct](https://github.com/Lind-Project/community/blob/main/CODE_OF_CONDUCT.md)
+
+Please report vulnerabilities privately according to our
+[Security Policy](SECURITY.md).
+
+## License
+
+Lind-Wasm is licensed under the [Apache License 2.0](LICENSE).

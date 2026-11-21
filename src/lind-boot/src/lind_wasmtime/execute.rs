@@ -14,10 +14,12 @@ use std::sync::Arc;
 use std::{ffi::c_void, sync::Mutex};
 use sysdefs::constants::lind_platform_const::{
     INSTANCE_NUMBER, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
+    unmark_grate_handler_registered,
 };
 use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_START_INDEX};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
+use sysdefs::lind_log;
 use threei::threei_const;
 use wasmtime::{
     AsContext, AsContextMut, Cache, Engine, Export, Func, InstantiateType, Linker, Module,
@@ -81,13 +83,15 @@ pub fn exec_wasm(
     cage_id: u64,
 ) -> anyhow::Result<i32> {
     // -- Initialize the Wasmtime execution environment --
-    let wasm_file_path = Path::new(lindboot_cli.wasm_file());
-    let wt_config =
-        make_wasmtime_config(lindboot_cli.wasmtime_backtrace, lindboot_cli.enable_fpcast);
+    let wt_config = make_wasmtime_config(
+        lindboot_cli.wasmtime_backtrace,
+        lindboot_cli.enable_fpcast,
+        lindboot_cli.lind_internal_memory_reservation,
+    );
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create execution engine")?;
-    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
+    let module = read_main_wasm_or_cwasm(&engine, &lindboot_cli)?;
 
     // -- Run the module in the specified cage --
     let result = execute_with_lind(
@@ -96,6 +100,7 @@ pub fn exec_wasm(
         engine,
         module,
         cage_id,
+        None, // the first cage has no memory to inherit
     );
 
     match result {
@@ -155,12 +160,18 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
 /// does not require mutating it. The goal here is to perform the minimal work needed
 /// to re-create a Wasmtime engine/store, attach host APIs, instantiate the module
 /// inside the provided `cageid`, and transfer control to the new guest entrypoint.
+///
+/// `reuse_memory` carries the linear memory the target cage already owns. On the exec
+/// path it is `Some`, so the new image is instantiated on the cage's existing 4 GiB
+/// reservation instead of mapping a second one; the initial boot passes `None` and a
+/// fresh reservation is created.
 pub fn execute_with_lind(
     lind_boot: CliOptions,
     lind_manager: Arc<LindCageManager>,
     engine: Engine,
     module: Module,
     cageid: u64,
+    reuse_memory: Option<SharedMemory>,
 ) -> Result<Vec<Val>> {
     // Instantiation and reactor initialization may issue memory syscalls.
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
@@ -197,12 +208,17 @@ pub fn execute_with_lind(
         let memory_base = stack_high + GUARD_SIZE as i32; // memory base starts after the stack space (plus guard)
         let table_base = TABLE_START_INDEX as i32;
 
-        #[cfg(feature = "debug-dylink")]
         {
-            println!("[debug] main module table size: {}", main_module_table_size);
-            println!(
-                "[debug] main module stack pointer starts from {} to {}",
-                stack_low, stack_high
+            lind_log!(
+                DYLINK,
+                "[debug] main module table size: {}",
+                main_module_table_size
+            );
+            lind_log!(
+                DYLINK,
+                "main module stack pointer starts from {} to {}",
+                stack_low,
+                stack_high
             );
         }
 
@@ -238,7 +254,6 @@ pub fn execute_with_lind(
     let mut modules = Vec::new();
     modules.push((String::new(), String::new(), module.clone()));
     for (name, path) in lind_boot.preloads.iter() {
-        // Read the wasm module binary either as `*.wat` or a raw binary
         let module = read_wasm_or_cwasm(&engine, path)?;
         modules.push((
             name.clone(),
@@ -256,6 +271,7 @@ pub fn execute_with_lind(
         lind_boot.clone(),
         cageid as i32,
         &dylink_metadata,
+        reuse_memory,
     )?;
 
     if dylink_metadata.dylink_enabled {
@@ -286,8 +302,7 @@ pub fn execute_with_lind(
 
         // Add the module's functions to the linker.
         for (name, path, module) in modules.iter().skip(1) {
-            #[cfg(feature = "debug-dylink")]
-            println!("[debug] link module {}.{}", name, path);
+            lind_log!(DYLINK, "link module {}.{}", name, path);
             let mut lib_linker = linker.lock().unwrap();
             let mut table_inner = dylink_metadata.table.as_mut().unwrap();
 
@@ -302,10 +317,11 @@ pub fn execute_with_lind(
             // within the global indirect function table.
             let table_start = table_inner.size(&mut wstore) as i32;
 
-            #[cfg(feature = "debug-dylink")]
-            println!(
+            lind_log!(
+                DYLINK,
                 "[debug] library table_start: {}, grow: {}",
-                table_start, dylink_info.table_size
+                table_start,
+                dylink_info.table_size
             );
             // Grow the shared indirect function table by the amount requested by the
             // library (as recorded in its dylink section). New slots are initialized
@@ -320,8 +336,7 @@ pub fn execute_with_lind(
             // The linker records the module under `name` and uses `table_start`
             // to relocate/interpret the library's function references into the
             // shared table. GOT entries are patched through the shared LindGOT.
-            #[cfg(feature = "debug-dylink")]
-            println!("[debug] library {} instantiate", name);
+            lind_log!(DYLINK, "library {} instantiate", name);
             let mut got_guard = lind_got.lock().unwrap();
             lib_linker
                 .module_with_preload(
@@ -364,6 +379,17 @@ pub fn execute_with_lind(
         .with_context(|| format!("failed to run main module"))
     });
 
+    // The grate worker pool `load_main_module` registered for this cage owns one
+    // `Store` (and instance) per worker, all attached to this cage's linear memory.
+    // The registry is a process-wide table, so as long as the entry is there the
+    // cage's 4 GiB reservation stays mapped -- for every cage that ever ran a
+    // program image, for the rest of the host process's lifetime. The program has
+    // now finished, so drop the registry's reference; a grate call still in flight
+    // holds its own `Arc` (see `submit_grate_request`) and finishes normally.
+    //
+    // No handler is registered on the dylink path, so a missing entry is expected.
+    let _ = unregister_grate_handler(cageid);
+
     result
 }
 
@@ -390,6 +416,7 @@ fn attach_api(
     lindboot_cli: CliOptions,
     cageid: i32,
     dylink_metadata: &DylinkMetadata,
+    reuse_memory: Option<SharedMemory>,
 ) -> Result<()> {
     // Initialize argv/environ data and attach all Lind host functions
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
@@ -410,7 +437,7 @@ fn attach_api(
                     let got_table = lind_ctx.got_table.clone().unwrap();
 
                     if lind_ctx.had_threads() {
-                        lind_debug_panic("dlopen within threads is currently not supported!");
+                        lind_debug_panic!("dlopen within threads is currently not supported!");
                     }
 
                     load_library_module(caller, linker, got_table, cageid, library_name, mode)
@@ -436,7 +463,14 @@ fn attach_api(
     // Pass all modules so the memory is created with limits that satisfy every
     // module's import declaration (union: max of mins, min of maxes).
     let all_modules: Vec<Module> = modules.iter().map(|(_, _, m)| m.clone()).collect();
-    attach_shared_memory(&mut *wstore, &mut linker_guard, &all_modules, true, cageid)?;
+    attach_shared_memory(
+        &mut *wstore,
+        &mut linker_guard,
+        &all_modules,
+        true,
+        cageid,
+        reuse_memory,
+    )?;
 
     // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp.
     // libc.so (wasm_eh_setjmp.o) and user programs both import "env"."__c_longjmp";
@@ -467,7 +501,7 @@ fn attach_api(
                 host.fork()
             }
         },
-        |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs| {
+        |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs, cage_memory| {
             let mut new_lindboot_cli = lindboot_cli.clone();
             new_lindboot_cli.args = vec![String::from(path)];
             // new_lindboot_cli.wasm_file = path.to_string();
@@ -484,6 +518,7 @@ fn attach_api(
                 engine,
                 module,
                 cageid as u64,
+                cage_memory,
             )
         },
     )?);
@@ -618,9 +653,21 @@ fn load_main_module(
     // This function will be called at either the first cage or exec-ed cages.
     set_vmctx_thread(cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-    // Grate calls only supports static linking for now, so we only initialize the grate pool and register
-    // grate workers when dylink is not enabled.
-    if !dylink_metadata.dylink_enabled {
+    // Cheap and idempotent, so unconditional; building the actual worker
+    // pool below is the expensive part and stays gated.
+    init_grate_pool();
+
+    // Grate calls only support static linking, and only modules built with
+    // --compile-grate (exporting pass_fptr_to_wt) ever use a worker pool.
+    // Building it eagerly for every static cage made fork very expensive
+    // (fork_vmmap copies every worker's stack slot), so gate on actual need.
+    // Drop any handler from the cage's previous image unconditionally -- exec
+    // can transition a cage from grate-using to non-grate-using, and a stale
+    // handler would otherwise keep 32 Stores tied to the replaced module and
+    // linear memory alive, with grate calls dispatching into invalid state.
+    unregister_grate_handler(cageid);
+
+    if !dylink_metadata.dylink_enabled && module.get_export("pass_fptr_to_wt").is_some() {
         // 4) register grate workers for this cage
         let grate_template = GrateTemplate {
             engine: module.engine().clone(),
@@ -629,13 +676,10 @@ fn load_main_module(
         };
         let host = store.data().clone();
 
-        // initialize the grate pool for later use in grate calls and
-        // other syscalls that require re-entry into wasmtime runtime.
-        init_grate_pool();
-        unregister_grate_handler(cageid);
-
         register_grate_handler_for_cage(&grate_template, host, cageid)
             .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
+    } else {
+        unmark_grate_handler_registered(cageid as usize);
     }
 
     let mut linker = linker_guard.clone();
@@ -736,8 +780,10 @@ fn load_library_module(
                 }
             }
             None => {
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] no __indirect_function_table in linker; cannot load library");
+                lind_log!(
+                    DYLINK,
+                    "[debug] no __indirect_function_table in linker; cannot load library"
+                );
                 return -(DylinkErrorCode::EINTERNAL as i32);
             }
         }
@@ -771,8 +817,12 @@ fn load_library_module(
     ) {
         Ok(handle) => handle as i32,
         Err(e) => {
-            #[cfg(feature = "debug-dylink")]
-            println!("failed to process library `{}`: {:?}", library_name, e);
+            lind_log!(
+                DYLINK,
+                "failed to process library `{}`: {:?}",
+                library_name,
+                e
+            );
             -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
         }
     };
@@ -792,7 +842,11 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
     let wasm_path = Path::new(cli.wasm_file());
     let cwasm_path = wasm_path.with_extension("cwasm");
 
-    let wt_config = make_wasmtime_config(cli.wasmtime_backtrace, false);
+    let wt_config = make_wasmtime_config(
+        cli.wasmtime_backtrace,
+        false,
+        cli.lind_internal_memory_reservation,
+    );
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create engine")?;
@@ -809,6 +863,37 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
     Ok(())
 }
 
+/// Load the main Wasm module using the source selected by `CliOptions`.
+///
+/// The default is path-based loading from `WASM_FILE`. If `cli.wasm_bytes` is
+/// present, those in-memory bytes take precedence while `WASM_FILE` remains the
+/// guest-visible argv[0].
+fn read_main_wasm_or_cwasm(engine: &Engine, cli: &CliOptions) -> Result<Module> {
+    match cli.wasm_bytes.as_ref() {
+        Some(bytes) => read_wasm_or_cwasm_bytes(engine, bytes, cli.wasm_file()),
+        None => read_wasm_or_cwasm(engine, Path::new(cli.wasm_file())),
+    }
+}
+
+/// Load a Wasm module from raw bytes, supporting both `.wasm` and precompiled `.cwasm` bytes.
+pub(crate) fn read_wasm_or_cwasm_bytes(
+    engine: &Engine,
+    bytes: &[u8],
+    source_name: &str,
+) -> Result<Module> {
+    match Engine::detect_precompiled(bytes) {
+        Some(Precompiled::Module) => unsafe { Module::deserialize(engine, bytes) }
+            .map_err(anyhow::Error::from)
+            .with_context(|| format!("failed to deserialize precompiled module {source_name}")),
+        Some(Precompiled::Component) => bail!(
+            "failed to load {source_name}: precompiled components are not supported as Lind modules"
+        ),
+        None => Module::from_binary(engine, bytes)
+            .map_err(anyhow::Error::from)
+            .with_context(|| format!("failed to compile module {source_name}")),
+    }
+}
+
 /// Load a Wasm module from disk, supporting both `.wasm` and precompiled `.cwasm` files.
 ///
 /// The function probes the file header via `Engine::detect_precompiled_file`.
@@ -821,14 +906,21 @@ fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
     // When passing in a .wasm file, the ELF parsing unwinds early. (`ElfFile64::parse(&read_cache)?;`)
     // We can therefore not call .context()? on this function since that would unwind and not run the Module::from_file()
     match Engine::detect_precompiled_file(path) {
-        Ok(_) => unsafe { Module::deserialize_file(engine, path) }
-            .map_err(anyhow::Error::from)
-            .with_context(|| {
+        Ok(_) => match unsafe { Module::deserialize_file(engine, path) } {
+            Ok(module) => Ok(module),
+            // SGX enclaves refuse file-backed mmap with ENOTSUP.
+            Err(e) if e.downcast_ref::<rustix::io::Errno>() == Some(&rustix::io::Errno::NOTSUP) => {
+                let bytes = std::fs::read(path)
+                    .with_context(|| format!("failed to read module {}", path.display()))?;
+                read_wasm_or_cwasm_bytes(engine, &bytes, &path.display().to_string())
+            }
+            Err(e) => Err(anyhow::Error::from(e)).with_context(|| {
                 format!(
                     "failed to deserialize precompiled module {}",
                     path.display()
                 )
             }),
+        },
         Err(_) => Module::from_file(engine, path)
             .map_err(anyhow::Error::from)
             .with_context(|| format!("failed to compile module {}", path.display())),
@@ -876,12 +968,17 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
 
 /// Generates a wasmtime config based on the whether or not the --wasmtime-backtrace flag was
 /// provided to lind-boot.
-fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Config {
+fn make_wasmtime_config(
+    backtrace: bool,
+    enable_fpcast: bool,
+    lind_internal_memory_reservation: u64,
+) -> wasmtime::Config {
     let mut wt_config = wasmtime::Config::new();
     wt_config.wasm_backtrace(backtrace);
     wt_config.fpcast_enabled(enable_fpcast);
     wt_config.wasm_threads(true);
     wt_config.shared_memory(true);
+    wt_config.lind_internal_memory_reservation(lind_internal_memory_reservation);
     // wasm-opt --translate-to-exnref converts clang 18's legacy EH to the standard proposal.
     // The standard EXCEPTIONS proposal is supported by Cranelift; the legacy proposal is not.
     #[cfg(not(feature = "asyncify-setjmp"))]

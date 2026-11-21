@@ -17,7 +17,7 @@
 
 int main(void)
 {
-    void *h = dlopen("longjmp_lib.cwasm", RTLD_LAZY);
+    void *h = dlopen("longjmp_lib.so", RTLD_LAZY);
     if (h == NULL) {
         fprintf(stderr, "dlopen failed: %s\n", dlerror());
         return 1;

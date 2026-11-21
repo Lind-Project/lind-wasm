@@ -39,6 +39,14 @@ pub struct CliOptions {
     #[arg(long = "enable-fpcast")]
     pub enable_fpcast: bool,
 
+    /// Optional in-memory Wasm module bytes.
+    ///
+    /// This is not parsed from the command line. When present, lind-boot loads
+    /// the main module from these bytes instead of reading `WASM_FILE` from disk.
+    /// `WASM_FILE` is still used as guest argv[0].
+    #[arg(skip)]
+    pub wasm_bytes: Option<Vec<u8>>,
+
     /// First item is WASM file (argv[0]), rest are program args (argv[1..])
     ///
     /// Example:
@@ -74,6 +82,10 @@ pub struct CliOptions {
     /// (context stacks are created without handlers).
     #[arg(long = "no-interpose")]
     pub no_interpose: bool,
+
+    /// Internal memory reservation for Lind's own use (e.g., GC Heap) in bytes.
+    #[arg(long = "lind-internal-memory-reservation", default_value_t = 10 * 1024 * 1024)]
+    pub lind_internal_memory_reservation: u64,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {

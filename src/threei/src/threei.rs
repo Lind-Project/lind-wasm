@@ -8,19 +8,20 @@ use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use std::sync::RwLock;
 use sysdefs::constants::err_const::Errno;
+use sysdefs::constants::fs_const::PAGESIZE;
 use sysdefs::constants::lind_platform_const;
-use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
-use typemap::datatype_conversion::sc_convert_uaddr_to_host;
+use sysdefs::lind_log;
 
 use crate::handler_table::{
-    _check_cage_handler_exists, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
-    copy_handler_table_to_cage_impl, print_handler_table, register_handler_impl,
+    _get_handler, _rm_cage_from_handler, _rm_grate_from_handler, copy_handler_table_to_cage_impl,
+    register_handler_impl,
 };
 use crate::threei_const;
 
 pub use sysdefs::constants::sys_const::{EXIT_GROUP_SYSCALL, EXIT_SYSCALL};
 
-/// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
+/// Function pointer type for rawposix syscall functions registered in the
+/// handler table (under `RAWPOSIX_CAGEID` / `WASMTIME_CAGEID`).
 pub type RawCallFunc = extern "C" fn(
     target_cageid: u64,
     arg1: u64,
@@ -57,6 +58,30 @@ pub type GrateTrampolineFn = extern "C" fn(
     arg6: u64,
     arg6cageid: u64,
 ) -> i64;
+
+/// Function pointer type for threei's own interposable calls (e.g.
+/// `register_handler`, `copy_handler_table_to_cage`) registered in the handler
+/// table under `THREEI_CAGEID`.
+///
+/// This has the same shape as `GrateTrampolineFn` (fourteen `u64` arguments),
+/// but the first two arguments carry the calling cage and the target cage
+/// instead of a grate function pointer and a grate ID.
+pub type ThreeiCallFunc = extern "C" fn(
+    self_cageid: u64,
+    target_cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32;
 
 #[derive(Clone, Copy, Debug)]
 pub struct TrampolineEntry {
@@ -176,7 +201,7 @@ pub fn remove_cage_runtime(cageid: u64) -> Option<u64> {
 
 /// This function is the core grate-call dispatch entry point in the 3i library.
 ///
-/// · does not execute grate code itself. Instead, it performs runtime resolution and delegates
+/// It does not execute grate code itself. Instead, it performs runtime resolution and delegates
 /// the actual execution of the grate function to the runtime associated with the target grate.
 ///
 /// Given a `grateid`, this function first determines which runtime is responsible for executing
@@ -214,7 +239,7 @@ fn _call_grate_func(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> Option<i64> {
+) -> i64 {
     let runtimeid = match get_cage_runtime(grateid) {
         Some(r) => r,
         None => panic!(
@@ -231,7 +256,7 @@ fn _call_grate_func(
         ),
     };
 
-    let rc = (trampoline)(
+    (trampoline)(
         in_grate_fn_ptr_u64,
         grateid,
         arg1,
@@ -246,16 +271,14 @@ fn _call_grate_func(
         arg5_cageid,
         arg6,
         arg6_cageid,
-    );
-
-    Some(rc)
+    )
 }
 
 /// EXITING_TABLE:
 ///
 /// A grate/cage does not need to know the upper-level grate/cage information, but only needs
-/// to manage where the call goes. I use a global variable table to represent the cage/grate
-/// that is exiting. This table will be removed after the corresponding grate/cage performs
+/// to manage where the call goes. This global table records the cages/grates that are
+/// exiting. An entry is removed after the corresponding grate/cage performs
 /// `exit_syscall`. During the execution of the corresponding operation, all other 3i calls
 /// that want to operate the corresponding syscall will be blocked (additional check).
 ///
@@ -266,31 +289,34 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// a handler function in a destination grate or cage. Used for creating per-syscall routing rules
 /// that enable one cage to interpose or handle syscalls on behalf of another.
 ///
-/// For example:
-/// I want cage 7 to have system call 34 call into my cage's function foo
+/// For example, to make cage 7's system call 34 call into function `foo`
+/// (at address `foo_addr`) inside grate `mygrateid`:
 ///
-/// Example:
 /// register_handler(
-///     foo_addr, 7,  34, SOME_ENTRY_PTR,
-///    1, mycagenum,
-///    ...)
+///     0, 0,       // _self_cageid, _target_cageid (unused)
+///     7,          // targetcage
+///     34,         // targetcallnum
+///     0,          // _runtime_id (unused)
+///     mygrateid,  // handlefunccage
+///     foo_addr,   // in_grate_fn_ptr_u64
+///     0, 0, 0, 0, 0, 0, 0,
+/// )
 ///
-///
-/// If a conflicting mapping exists, the function panics to prevent accidental overwrite.
-///
-/// If a handler is already registered for this (syscall number, in grate function address) pair with the same
-/// destination cage, the call is treated as a no-op.
+/// Each (targetcage, targetcallnum) pair keeps exactly one handler entry. If a
+/// handler is already registered for the pair, it is replaced (see
+/// `register_handler_impl` for the rationale). Passing `THREEI_DEREGISTER` as
+/// `handlefunccage` removes the entry instead.
 ///
 /// ## Arguments:
 /// - in_grate_fn_ptr_u64: Pointer to the function inside the grate that will handle this syscall.
 /// - targetcage: The ID of the cage whose syscall table is being modified (i.e., the source of the syscall).
 /// - targetcallnum: The syscall number to interpose on (can be treated as a match-all in some configurations).
-/// - handlefunccage: The cage (typically a grate) that owns the destination function to be called.
+/// - handlefunccage: The cage (typically a grate) that owns the destination function to be called,
+/// or `THREEI_DEREGISTER` to remove the existing entry.
 ///
 /// ## Returns:
 /// 0 on success.
 /// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
-/// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub fn register_handler(
     _self_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
     _target_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
@@ -321,7 +347,7 @@ pub fn register_handler(
     )
 }
 
-/// This copies the handler table used by a cage to another cage.  
+/// This copies the handler table used by a cage to another cage.
 /// This is often useful for calls like fork, so that a grate can later
 /// add or remove entries.
 ///
@@ -401,27 +427,31 @@ pub fn abandon_grate_dispatches() {
 /// could be changed, but it doesn't seem useful to do so.
 ///
 /// This is the main entry point used by cages or grates to invoke system calls through the
-/// 3i layer. The function inspects the caller’s interposition configuration (if any) and
-/// either routes the syscall to a grate for handling or directly invokes the corresponding
-/// function in the RawPOSIX layer.
+/// 3i layer. The function looks up the handler registered for (self_cageid, syscall_num)
+/// in the handler table and dispatches to it. RawPOSIX is not a separate fallback path:
+/// direct RawPOSIX syscalls are themselves handler-table entries registered under
+/// `RAWPOSIX_CAGEID`.
 ///
 /// ## Behavior:
-/// If the target_cageid is in the process of exiting and the syscall is not `EXIT_SYSCALL`,
-/// the call is aborted early with `ELINDESRCH`
+/// If the target_cageid is dead or in the process of exiting, the syscall is not
+/// `EXIT_SYSCALL` / `EXIT_GROUP_SYSCALL`, and the caller is not the target itself,
+/// the call is aborted early with `-ESRCH`.
 ///
-/// If the calling self_cageid has any handlers registered, the call is redirected to the
-/// corresponding grate closure
+/// If the registered handler is a RawPOSIX or Wasmtime entry (`RAWPOSIX_CAGEID` /
+/// `WASMTIME_CAGEID`), the stored function pointer is invoked directly.
 ///
-/// If the syscall is EXIT_SYSCALL, performs global cleanup
+/// If the registered handler is a threei entry (`THREEI_CAGEID`), the stored function
+/// pointer is invoked directly with (self_cageid, target_cageid) as the first two arguments.
 ///
-/// If direct RawPOSIX call, falls back to invoking the syscall from SYSCALL_TABLE directly by number.
+/// Otherwise, the call is dispatched to the registered grate through the runtime
+/// trampoline (see `_call_grate_func`).
 ///
 /// ## Arguments:
 /// - self_cageid: The ID of the cage issuing the syscall (used to look up interposition rules
 /// and access memory).
 /// - syscall_num: Numeric syscall identifier, used to determine routing and rawposix function.
 /// - syscall_name: A pointer (in Wasm memory) to the UTF-8 encoded string representing the
-/// syscall name. Only relevant for grate calls.
+/// syscall name. Currently unused.
 /// - target_cageid: The target of the syscall (typically same as self_cageid, but may differ
 /// in inter-cage calls).
 /// - arg1..arg6: The six argument values passed to the syscall.
@@ -429,12 +459,11 @@ pub fn abandon_grate_dispatches() {
 /// each argument.
 ///
 /// Returns:
-/// - `i32` syscall result.
-/// - Returns `ELINDESRCH` if the target cage is in `EXITING_TABLE` and the syscall is not an exit.
-/// - Returns `ELINDAPIABORTED` if the syscall number does not exist in the known syscall table.
-/// - Returns the result of the interposed or rawposix syscall if executed successfully.
-/// - Panics if the syscall was routed to a grate, but the corresponding exported function could
-/// not be resolved.
+/// - `i64` syscall result of the dispatched handler.
+/// - Returns `-ESRCH` if the target cage is dead or in `EXITING_TABLE` (unless the syscall
+/// is an exit variant or the caller is the target itself), or if the destination grate is
+/// already dead.
+/// - Panics if no handler is registered for (self_cageid, syscall_num).
 pub fn make_syscall(
     self_cageid: u64, // is required to get the cage instance
     syscall_num: u64,
@@ -460,10 +489,10 @@ pub fn make_syscall(
     // would misinterpret the error as a valid address.
     // EXITING_TABLE persists after remove_cage, catching calls to fully
     // removed cages that is_cage_dead misses (it returns false for None).
-    if (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
+    if self_cageid != target_cageid
         && syscall_num != EXIT_SYSCALL
         && syscall_num != EXIT_GROUP_SYSCALL
-        && self_cageid != target_cageid
+        && (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
     {
         return -(Errno::ESRCH as i64);
     }
@@ -481,10 +510,10 @@ pub fn make_syscall(
             // Second check: catch in-flight grate-forwarded calls that
             // passed the initial check before is_dead was set or the cage
             // was removed.
-            if (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
+            if self_cageid != target_cageid
                 && syscall_num != EXIT_SYSCALL
                 && syscall_num != EXIT_GROUP_SYSCALL
-                && self_cageid != target_cageid
+                && (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
             {
                 return -(Errno::ESRCH as i64);
             }
@@ -506,11 +535,11 @@ pub fn make_syscall(
                 arg6_cageid,
             );
         }
-        // Threei special case: if the call is an interposed 3i call
+        // Threei special case: if the call is an interposed 3i call,
+        // directly call the function pointer
         if grateid == lind_platform_const::THREEI_CAGEID {
-            // threei special case: directly call the function pointer
-            let func: GrateTrampolineFn =
-                unsafe { std::mem::transmute::<u64, GrateTrampolineFn>(in_grate_fn_ptr_u64) };
+            let func: ThreeiCallFunc =
+                unsafe { std::mem::transmute::<u64, ThreeiCallFunc>(in_grate_fn_ptr_u64) };
             return func(
                 self_cageid,
                 target_cageid,
@@ -526,7 +555,7 @@ pub fn make_syscall(
                 arg5_cageid,
                 arg6,
                 arg6_cageid,
-            );
+            ) as i64;
         }
 
         // Grate case: call into the corresponding grate function
@@ -580,22 +609,13 @@ pub fn make_syscall(
         GRATE_DISPATCHES.with(|dispatches| dispatches.borrow_mut().pop());
         release_grate_dispatch(grateid);
 
-        if let Some(ret) = grate_result {
-            return ret;
-        } else {
-            // syscall has been registered to register_handler but grate's entry function
-            // doesn't provide
-            // Panic here because this indicates error happens in wasmtime side when attaching
-            // the module closure, which is a system-level error
-            panic!(
-                "[3i|make_syscall] grate call not found! grateid: {}",
-                grateid
-            );
-        }
+        return grate_result;
     }
 
     // _get_handler returned None — the target_map for this
     // (self_cageid, syscall_num) exists but has no dest_grateid entry.
+    // (Only reachable with the hashmap backend; the dashmap backend panics
+    // inside _get_handler in this case.)
     panic!(
         "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={}",
         self_cageid, syscall_num
@@ -618,7 +638,7 @@ pub fn make_syscall(
 /// it would not be cleaned up by threei.  This call gives threei a chance
 /// to know that the cage is exiting and perform some cleanup.
 ///
-/// This call is non-interposable, unlike harsh_cage_exit, which it calls.  
+/// This call is non-interposable, unlike harsh_cage_exit, which it calls.
 /// This is because this call is not a system call and cannot be triggered
 /// by userspace (except performing some sort of action which causes the
 /// system to be exited uncleanly by the caging software or similar).
@@ -766,9 +786,12 @@ fn _validate_range_read(cage: u64, addr: u64, len: usize, what: &str) -> Result<
     match check_addr_read(cage, addr, len) {
         Ok(_) => Ok(()),
         Err(_) => {
-            eprintln!(
+            lind_log!(
+                THREEI,
                 "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
-                addr, len, what
+                addr,
+                len,
+                what
             );
             Err(threei_const::ELINDAPIABORTED)
         }
@@ -784,9 +807,12 @@ fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<()
     match check_addr_rw(cage, addr, len) {
         Ok(_) => Ok(()),
         Err(_) => {
-            eprintln!(
+            lind_log!(
+                THREEI,
                 "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
-                addr, len, what
+                addr,
+                len,
+                what
             );
             Err(threei_const::ELINDAPIABORTED)
         }
@@ -801,27 +827,38 @@ fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<()
 /// C-style strings across cage boundaries.
 ///
 /// ## Arguments:
-/// - src: A raw pointer to the beginning of the string in the source cage's memory.
+/// - cageid: The ID of the cage whose memory is scanned.
+/// - srcaddr: The address of the beginning of the string in the source cage's memory.
 /// - max_len: The maximum number of bytes to scan, acting as a bound to prevent
 /// overflow.
+///
+/// The scan proceeds one page at a time: each page is validated once with
+/// `check_addr_read`, then searched with `memchr`. Pages after the one holding
+/// the terminator are never validated or read.
 ///
 /// ## Returns:
 /// - Some(length) if a null terminator is found within max_len.
 /// - None if no null byte is found, indicating a malformed or unterminated string.
 fn _strlen_in_cage(cageid: u64, srcaddr: u64, max_len: usize) -> Option<usize> {
-    for i in 0..max_len {
-        let addr = srcaddr.checked_add(i as u64)?;
+    let page_size = PAGESIZE as usize;
+    let mut scanned = 0;
 
-        // validate this byte before dereference
-        if check_addr_read(cageid, addr, 1).is_err() {
+    while scanned < max_len {
+        let addr = srcaddr.checked_add(scanned as u64)?;
+        // Stop the chunk at the end of the current page or at max_len.
+        let chunk = (page_size - (addr as usize & (page_size - 1))).min(max_len - scanned);
+
+        // validate this chunk before dereference
+        if check_addr_read(cageid, addr, chunk).is_err() {
             return None;
         }
 
-        let byte = unsafe { *(addr as *const u8) };
-
-        if byte == 0 {
-            return Some(i);
+        let bytes = unsafe { std::slice::from_raw_parts(addr as *const u8, chunk) };
+        if let Some(pos) = memchr::memchr(0, bytes) {
+            return Some(scanned + pos);
         }
+
+        scanned += chunk;
     }
 
     None // null terminator not found within max_len
@@ -901,7 +938,8 @@ pub fn copy_data_between_cages(
 ) -> u64 {
     // Disallow same-cage copies. This API is for cross-cage transfer only.
     if srccage == destcage {
-        eprintln!(
+        lind_log!(
+            THREEI,
             "[3i|copy] src and dest cage cannot be the same: {}",
             srccage
         );
@@ -909,9 +947,9 @@ pub fn copy_data_between_cages(
     }
 
     // Reject requests where `len` exceeds the maximum allowed linear memory size
-    // (`MAX_LIND_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
+    // (`MAX_LINEAR_MEMORY_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
     if let Err(code) = _validate_len(len, lind_platform_const::MAX_LINEAR_MEMORY_SIZE) {
-        eprintln!("[3i|copy] length too large or zero: {}", len);
+        lind_log!(THREEI, "[3i|copy] length too large: {}", len);
         return code;
     }
     // destaddr must be provided (no dynamic allocation support)
@@ -945,7 +983,7 @@ pub fn copy_data_between_cages(
         // strncpy: copy until '\0'
         Ok(CopyType::Strncpy) => {
             if srcaddr == 0 {
-                eprintln!("[3i|copy] src null");
+                lind_log!(THREEI, "[3i|copy] src null");
                 return threei_const::ELINDAPIABORTED;
             }
 
@@ -953,7 +991,7 @@ pub fn copy_data_between_cages(
             let actual_len = match _strlen_in_cage(srccage, srcaddr, len as usize) {
                 Some(n) => n + 1, // include '\0'
                 None => {
-                    eprintln!(
+                    lind_log!(THREEI,
                         "[3i|copy] null terminator not found within max length: cage={}, addr={:x}, max_len={}",
                         srccage, srcaddr, len
                     );
@@ -965,7 +1003,7 @@ pub fn copy_data_between_cages(
         }
         // Reject invalid copytype values
         Err(other) => {
-            eprintln!("[3i|copy] invalid copy type: {}", other);
+            lind_log!(THREEI, "[3i|copy] invalid copy type: {}", other);
             return threei_const::ELINDAPIABORTED;
         }
     };
@@ -978,12 +1016,13 @@ pub fn copy_data_between_cages(
         return code;
     }
 
-    // Translate user virtual addrs to host pointers
+    // The addresses are used directly as host pointers (no translation is
+    // performed here); just guard against NULL before the copy.
     let host_src_addr = srcaddr;
     let host_dest_addr = destaddr;
     if host_src_addr == 0 || host_dest_addr == 0 {
         // src addr or dest addr is null
-        eprintln!("[3i|copy] host addr translate failed");
+        lind_log!(THREEI, "[3i|copy] src or dest addr is null");
         return threei_const::ELINDAPIABORTED;
     }
 
@@ -991,9 +1030,12 @@ pub fn copy_data_between_cages(
     if host_src_addr.checked_add(copy_len as u64).is_none()
         || host_dest_addr.checked_add(copy_len as u64).is_none()
     {
-        eprintln!(
+        lind_log!(
+            THREEI,
             "[3i|copy] address overflow: src={:#x} len={} dest={:#x}",
-            srcaddr, copy_len, destaddr
+            srcaddr,
+            copy_len,
+            destaddr
         );
         return threei_const::ELINDAPIABORTED;
     }
@@ -1038,7 +1080,8 @@ mod grate_dispatch_tests {
             os_tid_map: Default::default(),
             main_threadid: RwLock::new(0),
             interval_timer: IntervalTimer::new(GRATE),
-            zombies: RwLock::new(vec![]),
+            zombies: Mutex::new(vec![]),
+            wait_cond: parking_lot::Condvar::new(),
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(Vmmap::new()),
             final_exit_status: RwLock::new(None),

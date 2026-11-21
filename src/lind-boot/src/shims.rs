@@ -74,10 +74,10 @@ fn lind_runtime(cage_id: u64) -> &'static dyn LindRuntime {
     }
 }
 
-fn lind_errno(error: LindError) -> i32 {
+fn lind_errno(error: LindError) -> i64 {
     match error {
-        LindError::Other(errno) => -(errno as i32),
-        LindError::MemoryFault(_) => -(Errno::EFAULT as i32),
+        LindError::Other(errno) => -(errno as i64),
+        LindError::MemoryFault(_) => -(Errno::EFAULT as i64),
     }
 }
 
@@ -104,7 +104,7 @@ extern "C" fn shim_clone_handler(
     _arg5_cageid: u64,
     child_tid_addr: u64,
     _arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let runtime = lind_runtime(parent_cageid);
     let source_thread_id = parent_tid as ThreadId;
     let clone_args = UserPtr {
@@ -167,12 +167,12 @@ extern "C" fn shim_clone_handler(
         }
         // Wasm delivers the result on the Asyncify rewind, so this return
         // value is only observed by MPK.
-        duplicate.parent_result as i32
+        duplicate.parent_result as i64
     } else if flags & CLONE_THREAD != 0 {
         // A thread ID is not released when its thread exits (or when
         // duplicate_thread fails); IDs are only reused after exec.
         let Some(new_thread_id) = cage::alloc_thread_id(parent_cageid) else {
-            return -(Errno::EAGAIN as i32);
+            return -(Errno::EAGAIN as i64);
         };
         let duplicate = LindThreadDuplicateArgs {
             mode: ThreadDuplicateMode::PthreadClone,
@@ -191,7 +191,7 @@ extern "C" fn shim_clone_handler(
         ) {
             return lind_errno(error);
         }
-        duplicate.parent_result as i32
+        duplicate.parent_result as i64
     } else {
         // CLONE_VM without CLONE_THREAD: a new process sharing the parent's
         // memory (e.g. native glibc's posix_spawn, CLONE_VM | CLONE_VFORK).
@@ -225,7 +225,7 @@ extern "C" fn shim_clone_handler(
 ///    injecting fork return values into source or child.
 /// 4. Restore the prior stop state of the source (SIGCONT unless it was
 ///    stopped before) and return the child ID to the requester only.
-fn clone_on_behalf_of_running_cage() -> i32 {
+fn clone_on_behalf_of_running_cage() -> i64 {
     // TODO: roll back the child cage record created by RawPOSIX.
     lind_errno(lind_runtimes::unsupported::<()>().unwrap_err())
 }
@@ -244,7 +244,7 @@ extern "C" fn shim_exec_handler(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let _ = (cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
     let execing_cageid = arg1_cageid;
     let runtime = lind_runtime(execing_cageid);
@@ -259,7 +259,7 @@ extern "C" fn shim_exec_handler(
     // offset in a gs-forked MPK cage).
     let path = match typemap::get_cstr_lossy(sc_convert_ptr_to_host(arg1, arg1_cageid)) {
         Ok(path) => path,
-        Err(_) => return -(Errno::EFAULT as i32),
+        Err(_) => return -(Errno::EFAULT as i64),
     };
     let init_args = LindInitArgs {
         argv: LindArgVec::Guest(UserPtr {
@@ -329,7 +329,7 @@ extern "C" fn shim_exit_handler(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let _ = (cageid, arg2_cageid, arg3, arg3_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
     let exiting_cageid = arg1_cageid;
     let tid = arg2;

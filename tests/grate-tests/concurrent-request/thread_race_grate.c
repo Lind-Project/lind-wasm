@@ -27,7 +27,7 @@ long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
         assert(0);
     }
 
-    int (*fn)(uint64_t) = (int (*)(uint64_t))(uintptr_t)fn_ptr_uint;
+    int64_t (*fn)(uint64_t) = (int64_t (*)(uint64_t))(uintptr_t)fn_ptr_uint;
     return fn(cageid);
 }
 
@@ -52,7 +52,7 @@ static pthread_mutex_t grate_mu = PTHREAD_MUTEX_INITIALIZER;
  * If this version still crashes under concurrent callbacks, the issue is
  * less likely to be caused by the handler's own heap races.
  */
-int thread_race_handler(uint64_t cageid) {
+int64_t thread_race_handler(uint64_t cageid) {
     int id = (int)cageid;
     int slot;
     char *entry = NULL;

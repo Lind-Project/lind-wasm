@@ -6,7 +6,9 @@ in the [`lind-wasm/docs`](https://github.com/Lind-Project/lind-wasm/tree/main/do
 subdirectory. Please contribute to the Lind project by submitting issues or pull
 requests to these repositories.
 
-To report a security issue, please refer to the [Security Policy](security.md)!
+To report a security issue, please follow the repository's
+[Security Policy](https://github.com/Lind-Project/lind-wasm/security/policy)
+rather than opening a public issue.
 
 Continue reading the pages in this section for detailed guidelines about
 writing code, tests, documentation, and more.

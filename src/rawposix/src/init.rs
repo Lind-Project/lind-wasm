@@ -4,7 +4,7 @@ use crate::syscall_table::*;
 use cage::{add_cage, cagetable_clear, cagetable_init, timer::IntervalTimer, Cage, Vmmap};
 use dashmap::DashMap;
 use fdtables;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{Condvar, Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering::*};
@@ -15,8 +15,8 @@ use sysdefs::constants::{
 };
 use threei::{
     copy_data_between_cages, copy_handler_table_to_cage, register_handler,
-    COPY_DATA_BETWEEN_CAGES_SYSCALL, COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, REGISTER_HANDLER_SYSCALL,
-    RUNTIME_TYPE_WASMTIME,
+    COPY_DATA_BETWEEN_CAGES_SYSCALL, COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, EXITING_TABLE,
+    REGISTER_HANDLER_SYSCALL, RUNTIME_TYPE_WASMTIME,
 };
 
 /// Function signature for a RawPOSIX syscall handler.
@@ -280,7 +280,8 @@ pub fn rawposix_start(verbosity: isize) {
         signalhandler: DashMap::new(),
         pending_signals: RwLock::new(vec![]),
         sigset: AtomicU64::new(0),
-        zombies: RwLock::new(vec![]),
+        zombies: Mutex::new(vec![]),
+        wait_cond: Condvar::new(),
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()),
         final_exit_status: RwLock::new(None),
@@ -360,4 +361,10 @@ pub fn rawposix_shutdown() {
             UNUSED_ID,
         );
     }
+
+    for cage in EXITING_TABLE.iter() {
+        sysdefs::constants::lind_platform_const::unset_stack_arena_base(*cage as usize);
+    }
+
+    EXITING_TABLE.clear();
 }

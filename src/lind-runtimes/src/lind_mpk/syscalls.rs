@@ -21,7 +21,6 @@ use threei::threei_const;
 use wasmtime_lind_utils::LindCageManager;
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL, MMAP_SYSCALL, SIGACTION_SYSCALL};
 use sysdefs::constants::lind_platform_const::{INIT_CAGEID, RAWPOSIX_CAGEID, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID};
-use sysdefs::logging::lind_debug_panic;
 use sysdefs::data::sys_struct::CloneArgStruct;
 use std::arch::asm;
 use crate::lind_mpk::signals::{handle_signal};
@@ -605,7 +604,7 @@ fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
     let mut cage_fs_bases = std::collections::HashMap::new();
     for cage_id in registered_cage_ids {
         if get_cage(cage_id).is_none() {
-            lind_debug_panic(&format!("mpk_clone: cage {} not found", cage_id));
+            panic!("mpk_clone: cage {} not found", cage_id);
             return -EINVAL;
         }
         let mut cage_info = MpkCageThreadInfo {
@@ -620,14 +619,14 @@ fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
         };
         cage_info.thread_info.register_cage(cage_id);
         if let Err(error) = cage_info.allocate_grate_stack() {
-            lind_debug_panic(&format!(
+            panic!(
                 "mpk_clone: grate stack allocation failed for tid={}: {}",
                 tid, error
-            ));
+            );
             return -EINVAL;
         }
         let Some(mpk_info) = mpk_runtime_info(cage_id) else {
-            lind_debug_panic("mpk_clone: cage runtime changed while creating thread");
+            panic!("mpk_clone: cage runtime changed while creating thread");
             return -EINVAL;
         };
         if cage_id == caller_context.cage_id {
@@ -640,18 +639,18 @@ fn mpk_clone_thread_entry(launch: CloneThreadLaunch) -> i32 {
                 mpk_info.memory_base as usize,
                 mpk_info.memory_size,
             ) {
-                lind_debug_panic(&format!(
+                panic!(
                     "mpk_clone: context-stack TLS initialization failed for cage {} and tid={}: {}",
                     cage_id, tid, error
-                ));
+                );
                 return -EINVAL;
             }
         } else {
             if let Err(error) = cage_info.initialize_grate_tls(&mpk_info) {
-                lind_debug_panic(&format!(
+                panic!(
                     "mpk_clone: TLS initialization failed for cage {} and tid={}: {}",
                     cage_id, tid, error
-                ));
+                );
                 return -EINVAL;
             }
         }
@@ -1360,7 +1359,7 @@ pub(super) fn mpk_clone(
     // still refer to the parent's stack, e.g. for results returned in memory.
     let context = unsafe { (*current_context_stack()).current_context };
     let Some(jump_buffer) = guest_fork_return(context) else {
-        lind_debug_panic("mpk_clone: clone was not issued from a guest syscall entry");
+        panic!("mpk_clone: clone was not issued from a guest syscall entry");
         return -EINVAL;
     };
 
@@ -1457,7 +1456,7 @@ fn inner_mpk_clone_syscall_entry(
 
         //still unsupported flags?
         if (args.flags & !((CLONE_VM | CLONE_SETTLS | CLONE_THREAD | CLONE_FILES | CLONE_FS | CLONE_SIGHAND | CLONE_SYSVSEM | CLONE_PARENT_SETTID | CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID) as u64)) != 0 {
-            lind_debug_panic(&format!("mpk_clone: unsupported clone flags: {:#x}", args.flags));
+            panic!("mpk_clone: unsupported clone flags: {:#x}", args.flags);
             return -EINVAL;
         }
 
@@ -1496,7 +1495,7 @@ fn inner_mpk_clone_syscall_entry(
             }
 
             if stack_size == 0 || parent_thread_info.gs_data.is_null() {
-                lind_debug_panic("mpk_clone: parent thread has no supervisor context");
+                panic!("mpk_clone: parent thread has no supervisor context");
                 return -EINVAL;
             }
 
@@ -1504,7 +1503,7 @@ fn inner_mpk_clone_syscall_entry(
                 match allocate_context_pages() {
                     Ok(pages) => pages,
                     Err(error) => {
-                        lind_debug_panic(&format!("mpk_clone: {error}"));
+                        panic!("mpk_clone: {error}");
                         return -EINVAL;
                     }
                 };
@@ -1520,7 +1519,7 @@ fn inner_mpk_clone_syscall_entry(
             };
             if new_stack_base == libc::MAP_FAILED {
                 unsafe { libc::munmap(new_context_pages as *mut c_void, context_pages_size) };
-                lind_debug_panic("mpk_clone: failed to duplicate thread context");
+                panic!("mpk_clone: failed to duplicate thread context");
                 return -EINVAL;
             }
 
@@ -1962,7 +1961,7 @@ fn inner_mpk_clone_syscall_entry(
                     &context_stack_alias_pages,
                 )
             } {
-                lind_debug_panic(&format!("mpk fork: {error}"));
+                panic!("mpk fork: {error}");
             }
 
             // Re-register the syscall interposition handlers in the child so that

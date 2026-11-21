@@ -18,8 +18,17 @@ e2e_status
 reports/
 report.html
 
+**/*.so
+
 #Ignore python cache
 __pycache__/
 
-#Ignore upstream wasmtime lockfile (not ours to manage)
-src/wasmtime/Cargo.lock
+#Ignore local files
+.DS_Store
+target/
+=======
+#Ignore lockfile
+Cargo.lock
+
+#Ignore Lind runtime log file
+LIND.log

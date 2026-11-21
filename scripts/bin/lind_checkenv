@@ -1,0 +1,301 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Check that this machine can build and run lind-wasm.
+#
+# Reports one line per prerequisite and exits non-zero if any check FAILs, so it
+# can gate a build. WARN entries do not affect the exit status.
+#
+# Usage:
+#   lind_checkenv            # check everything
+#   lind_checkenv --build    # only what is needed to *build* (skip built artifacts)
+#
+# No assumption about current working directory.
+
+usage() {
+  cat >&2 <<EOF
+usage: $(basename "$0") [--build]
+
+  Verifies the toolchain and environment required by lind-wasm.
+
+  --build   only check what is needed to build from source; skip the checks for
+            artifacts that a build produces (build/lind-boot, lindfs, libc.cwasm).
+            Use this on a fresh checkout, before the first \`make build\`.
+  -h, --help
+EOF
+}
+
+BUILD_ONLY="false"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --build) BUILD_ONLY="true"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unknown option: $1" >&2; usage; exit 2 ;;
+  esac
+done
+
+# --- repo root discovery (env var -> script dir -> git), matching lind_run ---
+if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
+  REPO_ROOT="${LIND_WASM_ROOT}"
+else
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${SCRIPT_DIR}/../../Makefile" ]]; then
+    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+  elif command -v git >/dev/null 2>&1; then
+    REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  else
+    REPO_ROOT=""
+  fi
+fi
+
+if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
+  echo "error: cannot locate lind-wasm repo root; export LIND_WASM_ROOT=/path/to/lind-wasm" >&2
+  exit 2
+fi
+
+# --- reporting ---
+FAILURES=0
+WARNINGS=0
+
+# Colors only when stdout is a terminal, so piping to a file stays readable.
+if [[ -t 1 ]]; then
+  C_OK=$'\033[32m'; C_FAIL=$'\033[31m'; C_WARN=$'\033[33m'; C_OFF=$'\033[0m'
+else
+  C_OK=""; C_FAIL=""; C_WARN=""; C_OFF=""
+fi
+
+# ok <label> [detail]
+ok()   { printf '  %sOK%s    %-28s %s\n' "${C_OK}" "${C_OFF}" "$1" "${2-}"; }
+# fail <label> <what is wrong> <how to fix it>
+fail() {
+  printf '  %sFAIL%s  %-28s %s\n' "${C_FAIL}" "${C_OFF}" "$1" "$2"
+  printf '        %-28s -> %s\n' "" "$3"
+  FAILURES=$((FAILURES + 1))
+}
+# warn <label> <what is odd> <what to do about it>
+warn() {
+  printf '  %sWARN%s  %-28s %s\n' "${C_WARN}" "${C_OFF}" "$1" "$2"
+  printf '        %-28s -> %s\n' "" "$3"
+  WARNINGS=$((WARNINGS + 1))
+}
+
+section() { printf '\n%s\n' "$1"; }
+
+echo "lind-wasm environment check"
+echo "repo root: ${REPO_ROOT}"
+
+# ---------------------------------------------------------------------------
+section "Host"
+
+# Every documented build and run path targets linux/amd64. On other hosts the
+# Docker images still work under emulation, but a native build will not.
+ARCH="$(uname -m)"
+OS="$(uname -s)"
+case "${OS}/${ARCH}" in
+  Linux/x86_64)
+    ok "architecture" "${OS}/${ARCH}"
+    ;;
+  Linux/*)
+    fail "architecture" "${OS}/${ARCH}; lind-wasm builds for linux/amd64 only" \
+         "use an x86-64 machine, or the dev image with --platform=linux/amd64"
+    ;;
+  *)
+    fail "architecture" "${OS}/${ARCH}; lind-wasm builds on Linux only" \
+         "use the dev image: docker run --platform=linux/amd64 ... securesystemslab/lind-wasm-dev"
+    ;;
+esac
+
+# The toolchain (clang+llvm, glibc build tree, wasmtime target dir) is large.
+# 20 GB is the figure the native setup guide recommends.
+AVAIL_KB="$(df -Pk "${REPO_ROOT}" | awk 'NR==2 {print $4}')"
+AVAIL_GB=$((AVAIL_KB / 1024 / 1024))
+if [[ "${AVAIL_GB}" -ge 20 ]]; then
+  ok "free disk" "${AVAIL_GB} GiB available"
+else
+  fail "free disk" "${AVAIL_GB} GiB available at ${REPO_ROOT}, 20 GiB recommended" \
+       "free up space; a full build needs room for clang+llvm, glibc and cargo targets"
+fi
+
+# lind_run re-execs itself under `sudo -E` because lind-boot chroots.
+if [[ "$(id -u)" -eq 0 ]]; then
+  ok "root access" "running as root"
+elif ! command -v sudo >/dev/null 2>&1; then
+  fail "root access" "sudo not found, and not running as root" \
+       "lind_run needs root to chroot into lindfs; install sudo or run as root"
+elif sudo -n true 2>/dev/null; then
+  ok "root access" "passwordless sudo"
+else
+  warn "root access" "sudo will prompt for a password" \
+       "expect a password prompt the first time you run lind_run"
+fi
+
+# ---------------------------------------------------------------------------
+section "Toolchain"
+
+# clang must be 18.x: the sysroot ships builtins under lib/clang/18.
+if ! command -v clang >/dev/null 2>&1; then
+  fail "clang" "not on PATH" \
+       "install clang+llvm 18.1.8 and add its bin/ to PATH (see the Native Linux setup guide)"
+else
+  CLANG_VER="$(clang --version | sed -n 's/.*clang version \([0-9][0-9.]*\).*/\1/p' | head -n1)"
+  case "${CLANG_VER}" in
+    18.*) ok "clang" "${CLANG_VER}" ;;
+    "")   warn "clang" "could not parse version from \`clang --version\`" \
+               "confirm manually that clang is 18.1.x" ;;
+    *)    fail "clang" "version ${CLANG_VER}; lind-wasm expects 18.1.x" \
+               "install clang+llvm 18.1.8; the sysroot's builtins live under lib/clang/18" ;;
+  esac
+fi
+
+# wasm-ld comes from the same LLVM package and does the wasm linking.
+if command -v wasm-ld >/dev/null 2>&1; then
+  ok "wasm-ld" "$(command -v wasm-ld)"
+else
+  fail "wasm-ld" "not on PATH" \
+       "it ships with clang+llvm 18.1.8; add that package's bin/ to PATH"
+fi
+
+# Compiler builtins for the wasm32 bare-metal target must be patched into the
+# clang resource dir, otherwise linking a lind program fails on missing symbols.
+if command -v clang >/dev/null 2>&1; then
+  CLANG_RESOURCE_DIR="$(clang -print-resource-dir 2>/dev/null || true)"
+  if [[ -n "${CLANG_RESOURCE_DIR}" && -d "${CLANG_RESOURCE_DIR}/lib/wasi" ]]; then
+    ok "wasi builtins" "${CLANG_RESOURCE_DIR}/lib/wasi"
+  else
+    fail "wasi builtins" "no lib/wasi in ${CLANG_RESOURCE_DIR:-clang resource dir}" \
+         "cp -r ${REPO_ROOT}/src/glibc/wasi \"${CLANG_RESOURCE_DIR:-<clang resource dir>}/lib/\""
+  fi
+fi
+
+# rustup honours rust-toolchain.toml, so the pinned channel is what cargo uses.
+# rust-src must be installed *on that* toolchain for the -Z build-std Rust flow.
+TOOLCHAIN_FILE="${REPO_ROOT}/rust-toolchain.toml"
+PINNED_CHANNEL=""
+if [[ -f "${TOOLCHAIN_FILE}" ]]; then
+  PINNED_CHANNEL="$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "${TOOLCHAIN_FILE}" | head -n1)"
+fi
+
+if ! command -v cargo >/dev/null 2>&1; then
+  fail "cargo" "not on PATH" \
+       "install Rust via rustup: https://rustup.rs, then source \$HOME/.cargo/env"
+else
+  ok "cargo" "$(cargo --version 2>/dev/null | head -n1)"
+fi
+
+if ! command -v rustup >/dev/null 2>&1; then
+  warn "rust toolchain" "rustup not found; cannot verify the pinned channel" \
+       "install via rustup so rust-toolchain.toml (${PINNED_CHANNEL:-unknown}) is honoured"
+elif [[ -z "${PINNED_CHANNEL}" ]]; then
+  warn "rust toolchain" "no channel found in rust-toolchain.toml" \
+       "check ${TOOLCHAIN_FILE}"
+else
+  # `rustup show active-toolchain` resolves rust-toolchain.toml from the cwd.
+  ACTIVE="$(cd "${REPO_ROOT}" && rustup show active-toolchain 2>/dev/null | awk '{print $1}')"
+  if [[ "${ACTIVE}" == "${PINNED_CHANNEL}"* ]]; then
+    ok "rust toolchain" "${ACTIVE}"
+  else
+    fail "rust toolchain" "active is '${ACTIVE:-none}', rust-toolchain.toml pins '${PINNED_CHANNEL}'" \
+         "rustup toolchain install ${PINNED_CHANNEL}"
+  fi
+
+  # Checked against the *pinned* channel on purpose: installing rust-src on any
+  # other toolchain has no effect, because rust-toolchain.toml wins at build time.
+  if (cd "${REPO_ROOT}" && rustup component list --installed --toolchain "${PINNED_CHANNEL}" 2>/dev/null | grep -q '^rust-src'); then
+    ok "rust-src" "installed on ${PINNED_CHANNEL}"
+  else
+    fail "rust-src" "not installed on ${PINNED_CHANNEL}" \
+         "rustup component add rust-src --toolchain ${PINNED_CHANNEL}"
+  fi
+fi
+
+# wabt provides the wasm inspection tools the debugging docs rely on.
+WABT_MISSING=()
+for t in wasm2wat wat2wasm wasm-objdump; do
+  command -v "$t" >/dev/null 2>&1 || WABT_MISSING+=("$t")
+done
+if [[ "${#WABT_MISSING[@]}" -eq 0 ]]; then
+  ok "wabt tools" "wasm2wat, wat2wasm, wasm-objdump"
+else
+  warn "wabt tools" "missing: ${WABT_MISSING[*]}" \
+       "needed for inspecting wasm binaries, not for building; see the Native Linux setup guide"
+fi
+
+# wasm-opt is vendored, not installed: it is a lind-specific build of binaryen.
+WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
+if [[ -x "${WASM_OPT_BIN}" ]]; then
+  ok "wasm-opt (vendored)" "tools/binaryen/bin/wasm-opt"
+else
+  fail "wasm-opt (vendored)" "not executable at ${WASM_OPT_BIN}" \
+       "this is a lind-specific binaryen build tracked in the repo; re-clone or check file permissions"
+fi
+
+# ---------------------------------------------------------------------------
+section "Lind filesystem"
+
+# lind-boot chroots to a path baked in at compile time, so a checkout anywhere
+# else cannot run until it is symlinked. Read the constant from source rather
+# than hardcoding it here, so this check follows the code if it changes.
+LINDFS_CONST_FILE="${REPO_ROOT}/src/sysdefs/src/constants/lind_platform_const.rs"
+EXPECTED_LINDFS=""
+if [[ -f "${LINDFS_CONST_FILE}" ]]; then
+  EXPECTED_LINDFS="$(sed -n 's/^[[:space:]]*pub const LINDFS_ROOT[^=]*=[[:space:]]*"\([^"]*\)".*/\1/p' "${LINDFS_CONST_FILE}" | head -n1)"
+fi
+
+if [[ -z "${EXPECTED_LINDFS}" ]]; then
+  warn "lindfs path" "could not read LINDFS_ROOT from ${LINDFS_CONST_FILE}" \
+       "check that file for the compiled-in chroot path"
+elif [[ -d "${EXPECTED_LINDFS}" ]]; then
+  ok "lindfs path" "${EXPECTED_LINDFS}"
+else
+  # Derive the repo path the constant implies, i.e. strip the trailing /lindfs.
+  EXPECTED_REPO="${EXPECTED_LINDFS%/lindfs}"
+  fail "lindfs path" "lind-boot will chroot to ${EXPECTED_LINDFS}, which does not exist" \
+       "sudo mkdir -p \"$(dirname "${EXPECTED_REPO}")\" && sudo ln -sfnT \"${REPO_ROOT}\" \"${EXPECTED_REPO}\""
+fi
+
+if [[ "${BUILD_ONLY}" == "true" ]]; then
+  printf '\n(--build: skipping checks for artifacts that `make build` produces)\n'
+else
+  # `make build` runs the lindfs target, which populates these. `make lind-boot
+  # sysroot` does not -- that is the usual reason they are missing.
+  if [[ -d "${REPO_ROOT}/lindfs/etc" && -e "${REPO_ROOT}/lindfs/dev/null" ]]; then
+    ok "lindfs skeleton" "etc/ and dev/null present"
+  else
+    fail "lindfs skeleton" "lindfs/etc or lindfs/dev/null missing" \
+         "run \`make build\` (not \`make lind-boot sysroot\`, which skips the lindfs target)"
+  fi
+
+  if [[ -x "${REPO_ROOT}/build/lind-boot" ]]; then
+    ok "lind-boot" "build/lind-boot"
+  else
+    fail "lind-boot" "not built at ${REPO_ROOT}/build/lind-boot" \
+         "run \`make build\`"
+  fi
+
+  # lind_run preloads these two; without them the default (dynamic) build of a
+  # program cannot resolve libc at runtime.
+  MISSING_LIBS=()
+  for lib in libc libm; do
+    [[ -f "${REPO_ROOT}/lindfs/lib/${lib}.cwasm" ]] || MISSING_LIBS+=("${lib}.cwasm")
+  done
+  if [[ "${#MISSING_LIBS[@]}" -eq 0 ]]; then
+    ok "shared libc/libm" "lindfs/lib/libc.cwasm, libm.cwasm"
+  else
+    fail "shared libc/libm" "missing: ${MISSING_LIBS[*]}" \
+         "run \`make sysroot\`; lind_run preloads these for dynamically built programs"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+printf '\n'
+if [[ "${FAILURES}" -eq 0 ]]; then
+  if [[ "${WARNINGS}" -gt 0 ]]; then
+    printf '%sEnvironment OK%s (%d warning(s)).\n' "${C_OK}" "${C_OFF}" "${WARNINGS}"
+  else
+    printf '%sEnvironment OK.%s\n' "${C_OK}" "${C_OFF}"
+  fi
+  exit 0
+fi
+
+printf '%s%d check(s) failed.%s Fix the items above, then re-run.\n' "${C_FAIL}" "${FAILURES}" "${C_OFF}"
+exit 1

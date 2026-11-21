@@ -240,6 +240,46 @@ mod tests {
     }
 
     #[test]
+    // ISO-002 fd-lib inner test: two cages have independent fd tables, so one
+    // cage cannot reach another cage's descriptors
+    fn cross_cage_fd_isolation() {
+        let mut _thelock = TESTMUTEX.lock().unwrap_or_else(|e| {
+            refresh();
+            TESTMUTEX.clear_poison();
+            e.into_inner()
+        });
+        refresh();
+
+        let cage_a = threei::TESTING_CAGEID;
+        let cage_b = threei::TESTING_CAGEID1;
+        init_empty_cage(cage_b);
+
+        let fd_a = get_unused_virtual_fd(cage_a, 0, 111, false, 0).unwrap();
+        let fd_b = get_unused_virtual_fd(cage_b, 0, 222, false, 0).unwrap();
+
+        assert_eq!(fd_a, fd_b);
+
+        let entry_a = translate_virtual_fd(cage_a, fd_a).unwrap();
+        let entry_b = translate_virtual_fd(cage_b, fd_b).unwrap();
+
+        assert_eq!(entry_a.underfd, 111);
+        assert_eq!(entry_b.underfd, 222);
+        assert_ne!(entry_a.underfd, entry_b.underfd);
+
+        let fd_a2 = get_unused_virtual_fd(cage_a, 0, 333, false, 0).unwrap();
+        assert_eq!(translate_virtual_fd(cage_a, fd_a2).unwrap().underfd, 333);
+        assert!(translate_virtual_fd(cage_b, fd_a2).is_err());
+
+        const B_ONLY_FD: u64 = 900;
+        get_specific_virtual_fd(cage_b, B_ONLY_FD, 0, 555, false, 0).unwrap();
+
+        assert_eq!(
+            translate_virtual_fd(cage_a, B_ONLY_FD).unwrap_err(),
+            threei::Errno::EBADF as u64
+        );
+    }
+
+    #[test]
     // Do more complex things work with get and translate?
     fn more_complex_get_and_translate() {
         let mut _thelock = TESTMUTEX.lock().unwrap_or_else(|e| {

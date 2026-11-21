@@ -14,32 +14,41 @@ plugins:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  # Installation pages sit next to Getting Started rather than under Contributing:
+  # they are how a user installs Lind, not how they contribute to it. The files
+  # stay under docs/contribute/ so their published URLs do not change.
+  - Development setup: contribute/dev-container.md
+  - Native Linux setup: contribute/running-on-native-linux.md
   - Internal Documentation:
     - internal/index.md
     - libc: internal/libc.md
     - Wasmtime: internal/wasmtime.md
     - Threei: internal/3i.md
     - Grates: internal/grates.md
+    - Grate API: internal/grate-api.md
     - Clamping: internal/clamping.md
     - RawPOSIX: internal/rawposix.md
     - Multi-Processing: internal/multiprocess-support.md
     - Signals: internal/signals.md
     - Memory: internal/memory.md
+    - setjmp / longjmp: internal/setjmp.md
+    - Logging: internal/logging.md
+    - C++ support: internal/libcpp.md
   - Contributing:
     - contribute/index.md
-    - Development setup: contribute/dev-container.md
     - Rust style guide: contribute/styleguide.md
     - Lind toolchain: contribute/toolchain.md
+    - Compiling Rust programs: contribute/compile-with-rust.md
     - Testing: contribute/testing.md
     - Debug programs: contribute/debug-programs.md
     - Adding to the docs: contribute/add-docs.md
-    - Security policy: contribute/security.md
+    - Security policy: https://github.com/Lind-Project/lind-wasm/security/policy
     - Docker Hub release workflow: contribute/docker-release-workflow.md
     - End-to-End Testing: contribute/e2e-testing.md
-  - Community:
-    - community/index.md
-    - Team: community/team.md
-    - Code of conduct: community/conduct.md
+    - Releasing lind-wasm: contribute/releasing-lind-wasm.md
+    - Pipelines:
+      - Overview: contribute/pipelines/overview.md
+      - lind-wasm: contribute/pipelines/lind-wasm.md
 
 extra_css:
   - stylesheets/img.css

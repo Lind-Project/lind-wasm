@@ -1,0 +1,14 @@
+/home/lind/lind-wasm/src/glibc/build/nss/libnss_db_pic.a
+/home/lind/lind-wasm/src/glibc/build/nss/db-ethers.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-grp.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-netgrp.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-proto.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-pwd.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-service.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-sgrp.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-spwd.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-rpc.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-initgroups.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-open.os
+/home/lind/lind-wasm/src/glibc/build/nss/db-init.os
+/home/lind/lind-wasm/src/glibc/build/nss/hash-string.os

@@ -52,12 +52,14 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
         python3 \
         python3-pip \
         sed \
+        sudo \
         autoconf \
         libtool \
         rsync \
         automake \
         tzdata \
         wget \
+        libtinfo5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install pinned WABT tools for compatibility (wasm2wat/wat2wasm/wasm-objdump).
@@ -91,9 +93,9 @@ ENV PATH="/${CLANG}/bin:${PATH}"
 ENV MATH_TEST_DIR="math_tests"
 
 # --- Install libtinfo5 ---
-RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
-
+# RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.2_amd64.deb && \
+#     apt install ./libtinfo5_6.3-2ubuntu0.2_amd64.deb
+RUN apt-get update && apt-get install -y libtinfo5
 
 # Install rust
 # --profile minimal tells rustup to install only the essentials for the toolchain
@@ -133,9 +135,21 @@ RUN make sysroot \
  && test -f lindfs/lib/libc.cwasm \
  && test -f lindfs/lib/libm.cwasm
 
+# Build fpcast variant of the runtime libraries (libc/libm .so and .cwasm)
+# This runs as a separate stage so it does not overwrite the default runtime from 'build-glibc',
+# and BuildKit can build both in parallel. 
+# Only the 'release' stage uses it, so the e2e 'test' target is not affected.
+FROM base AS build-glibc-fpcast
+COPY scripts ./scripts
+COPY tools ./tools
+COPY --parents src/glibc Makefile .
+COPY --from=build-lind-boot --parents build/lind-boot .
+RUN make sysroot WITH_FPCAST=1 \
+ && test -f lindfs/lib/libc.cwasm \
+ && test -f lindfs/lib/libm.cwasm
+
 
 # Build Docker image that includes the full lind-wasm toolchain
-# NOTE: Lind-wasm source code is not included
 FROM base AS release
 
 COPY --from=build-lind-boot --parents src/lind-boot/target .
@@ -144,29 +158,41 @@ RUN chmod 0755 /build/lind-boot
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --from=build-glibc --parents build/sysroot .
 COPY --from=build-glibc --parents lindfs .
+
+# Preserve the glibc build-tree object that downstream app builds link
+# against directly (lind-wasm-apps: zlib, gnulib, openssl, libtirpc, bash).
+# It is not part of the installed sysroot, so it would otherwise be dropped.
+COPY --from=build-glibc --parents src/glibc/build/lind_debug.o .
+
+# Ship the fpcast runtime libraries next to lindfs. 
+# The default runtime in /lindfs/lib is unchanged.
+COPY --from=build-glibc-fpcast /lindfs/lib/ /prebuilt-lindfs-fpcast/lib/
+
 COPY --parents scripts tests tools skip_test_cases.txt .
 
 ENV LIND_WASM_ROOT=/
 
-RUN chmod 0755 /scripts/lind_compile /scripts/lind_run /scripts/cargo-lind_compile \
- && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
- && ln -sf /scripts/lind_run     /usr/local/bin/lind_run \
- && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
+RUN chmod 0755 /scripts/bin/lind_compile /scripts/bin/lind_run /scripts/bin/cargo-lind_compile \
+ && ln -sf /scripts/bin/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /scripts/bin/lind_run     /usr/local/bin/lind_run \
+ && install -D -m 0755 /scripts/bin/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
 
+# Create symlink so hardcoded paths in wasmtime match Docker environment.
+RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
 FROM base AS test
 ENV LIND_WASM_ROOT=/
 COPY --parents scripts tests tools skip_test_cases.txt Makefile artifacts .
-RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_compile_cpp /scripts/lind_run \
- && chmod 0755 /scripts/cargo-lind_compile \
- && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
- && ln -sf /scripts/lind_compile_cpp /usr/local/bin/lind_compile_cpp \
- && ln -sf /scripts/lind_run     /usr/local/bin/lind_run \
- && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
+RUN chmod 0755 /scripts/test/test_runner.py /scripts/bin/lind_compile /scripts/bin/lind_compile_cpp /scripts/bin/lind_run \
+ && chmod 0755 /scripts/bin/cargo-lind_compile \
+ && ln -sf /scripts/bin/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /scripts/bin/lind_compile_cpp /usr/local/bin/lind_compile_cpp \
+ && ln -sf /scripts/bin/lind_run     /usr/local/bin/lind_run \
+ && install -D -m 0755 /scripts/bin/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build

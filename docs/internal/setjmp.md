@@ -187,7 +187,7 @@ themselves would have an undefined `__c_longjmp` at link time.
 that has a dummy `_setjmp` call site; the pass emits a weak `__c_longjmp` tag
 definition into it, which `wasm-ld` uses to satisfy all imports. This object must
 be compiled **without `-fPIE`** (`EXTRA_FLAGS_NO_PIE` in
-`scripts/make_glibc_and_sysroot.sh`), and is excluded from the `libc.so` shared
+`scripts/build/make_glibc_and_sysroot.sh`), and is excluded from the `libc.so` shared
 link since the dynamic build uses host-provided tag imports instead.
 
 ---
@@ -233,7 +233,7 @@ standard exnref format. The gap is bridged by Binaryen's `--translate-to-exnref`
 pass, which `lind-wasm-opt` runs after asyncify:
 
 ```bash
-# from scripts/lind-wasm-opt
+# from scripts/bin/lind-wasm-opt
 # Convert clang 18 legacy EH to standard EH after asyncify.
 # Asyncify handles legacy EH natively; Cranelift only supports standard EH.
 # --enable-reference-types is required because --translate-to-exnref emits
@@ -307,7 +307,7 @@ would make the common case O(1).
 | `src/lind-boot/src/lind_wasmtime/execute.rs` | Host-provided `__c_longjmp` tag for dynamic builds |
 | `src/wasmtime/crates/wasmtime/src/runtime/linker.rs` | `new_child_linker`: per-child `__c_longjmp` tag for forked cages |
 | `src/wasmtime/crates/lind-multi-process/src/signal.rs` | `signal_handler` returns `wasmtime::Result` to propagate `ThrownException` through epoch callback |
-| `scripts/make_glibc_and_sysroot.sh` | Compiles EH setjmp objects; strips `-fPIE` for tag anchor |
-| `scripts/make_shared_glibc.sh` | Excludes `wasm_eh_c_longjmp_tag.o` from `libc.so` link |
-| `scripts/lind_compile` | Adds `-fwasm-exceptions -mllvm -wasm-enable-sjlj` when `LIND_ASYNCIFY_SETJMP` unset |
-| `scripts/lind-wasm-opt` | Runs `--translate-to-exnref` when `LIND_ASYNCIFY_SETJMP` unset |
+| `scripts/build/make_glibc_and_sysroot.sh` | Compiles EH setjmp objects; strips `-fPIE` for tag anchor |
+| `scripts/build/make_shared_glibc.sh` | Excludes `wasm_eh_c_longjmp_tag.o` from `libc.so` link |
+| `scripts/bin/lind_compile` | Adds `-fwasm-exceptions -mllvm -wasm-enable-sjlj` when `LIND_ASYNCIFY_SETJMP` unset |
+| `scripts/bin/lind-wasm-opt` | Runs `--translate-to-exnref` when `LIND_ASYNCIFY_SETJMP` unset |

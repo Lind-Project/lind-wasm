@@ -213,7 +213,9 @@ pub fn get_specific_virtual_fd(
     // Note that, I need to use the FD_PER_PROCESS_MAX setting because this
     // is also how I'm tracking how many values you have open.  If this
     // changed, then these constants could be decoupled...
-    if requested_virtualfd > FD_PER_PROCESS_MAX {
+    // This must be `>=`, not `>`: the table holds fds 0..FD_PER_PROCESS_MAX-1,
+    // so FD_PER_PROCESS_MAX itself is one past the end and has to be rejected.
+    if requested_virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADF as u64);
     }
 
@@ -230,11 +232,18 @@ pub fn get_specific_virtual_fd(
     // This is before the FDTABLE action, so if I decrement the same fd, it
     // calls the intermediate handler instead of the last one.
     _increment_fdcount(myentry);
-    let myoptionentry = FDTABLE.get(&cageid).unwrap()[requested_virtualfd as usize];
-    // always add the new entry.  I'm doing this first, before I close
-    // the old one because I need to ensure I've cleaned up state correctly
-    // before calling the close handlers...
-    FDTABLE.get_mut(&cageid).unwrap()[requested_virtualfd as usize] = Some(myentry);
+    // Read the old value and write the new one under a *single* guard.
+    // Taking two guards here would open a TOCTOU window: two dup2()s racing
+    // onto the same target could both read the same old entry and decrement
+    // it twice (double-releasing the underlying fd), or one call's write
+    // could clobber an entry another thread installed in between.
+    // I install the new entry before closing the old one because I need to
+    // ensure I've cleaned up state correctly before calling the close
+    // handlers...
+    let myoptionentry = {
+        let mut row = FDTABLE.get_mut(&cageid).unwrap();
+        row[requested_virtualfd as usize].replace(myentry)
+    };
 
     // Update the fdcount / close the old entry, if existed
     if let Some(entry) = myoptionentry {
@@ -304,14 +313,21 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
     );
 
     // Insert a copy and ensure it didn't exist...
-    let hmcopy = FDTABLE.get(&srccageid).unwrap().clone();
+    // Snapshot the source row and increment its entries under a single guard,
+    // so a concurrent close / get_unused_virtual_fd can't slip in between and
+    // leave the child with entries that weren't counted (or counted entries
+    // the child never got).  The guard is dropped before the insert below,
+    // because srccageid and newcageid may live in the same shard.
+    let hmcopy = {
+        let srcrow = FDTABLE.get(&srccageid).unwrap();
+        let copy = srcrow.clone();
 
-    // Increment copied items
-    for entry in FDTABLE.get(&srccageid).unwrap().iter() {
-        if entry.is_some() {
-            _increment_fdcount(entry.unwrap());
+        // Increment copied items
+        for entry in copy.iter().flatten() {
+            _increment_fdcount(*entry);
         }
-    }
+        copy
+    };
 
     assert!(FDTABLE.insert(newcageid, hmcopy).is_none());
 
@@ -529,12 +545,11 @@ fn _decrement_fdcount(entry: FDTableEntry) -> Result<(), i32> {
 fn _increment_fdcount(entry: FDTableEntry) {
     let mytuple = (entry.fdkind, entry.underfd);
 
-    // Get a mutable reference to the entry so we can update it.
-    if let Some(mut count) = FDCOUNT.get_mut(&mytuple) {
-        *count += 1;
-    } else {
-        FDCOUNT.insert(mytuple, 1);
-    }
+    // entry() holds the shard lock across the whole read-modify-write; the
+    // previous get_mut()/else-insert() pair released it between the two,
+    // letting two first-referencers of the same key both insert(1) and
+    // undercount. Matches _decrement_fdcount's pattern above.
+    *FDCOUNT.entry(mytuple).or_insert(0) += 1;
 }
 
 /***************   Code for handling select() ****************/

@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::path::PathBuf;
 use std::sync::Arc;
+use sysdefs::lind_log;
 use wasmparser::{
     CustomSectionReader, DataKind, ElementItems, ElementKind, Encoding, ExternalKind,
     FuncToValidate, FunctionBody, KnownCustom, NameSectionReader, Naming, Operator, Parser,
@@ -855,12 +856,15 @@ and for re-adding support for interface types you can see this issue:
                                 });
                         }
                         wasmparser::Dylink0Subsection::Needed(needed) => {
-                            #[cfg(feature = "debug-dylink")]
-                            eprintln!("Warning: Dylink.0 Needed Section not handled: {:?}", needed);
+                            lind_log!(
+                                DYLINK,
+                                "Warning: Dylink.0 Needed Section not handled: {:?}",
+                                needed
+                            );
                         }
                         wasmparser::Dylink0Subsection::ExportInfo(exportinfo) => {
-                            #[cfg(feature = "debug-dylink")]
-                            eprintln!(
+                            lind_log!(
+                                DYLINK,
                                 "Warning: Dylink.0 Export Section not handled: {:?}",
                                 exportinfo
                             );
@@ -880,16 +884,14 @@ and for re-adding support for interface types you can see this issue:
                                 .insert(crate::DylinkImportInfo { imports: imports });
                         }
                         wasmparser::Dylink0Subsection::RuntimePath(_rtp) => {
-                            #[cfg(feature = "debug-dylink")]
-                            eprintln!("Warning: Dylink.0 RuntimePath Section not handled");
+                            lind_log!(DYLINK, "Warning: Dylink.0 RuntimePath Section not handled");
                         }
                         wasmparser::Dylink0Subsection::Unknown {
                             ty: _,
                             data: _,
                             range: _,
                         } => {
-                            #[cfg(feature = "debug-dylink")]
-                            eprintln!("Dylink.0 Unknown Section Encountered!");
+                            lind_log!(DYLINK, "Dylink.0 Unknown Section Encountered!");
                         }
                     }
                 }

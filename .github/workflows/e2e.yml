@@ -3,9 +3,9 @@ name: End-to-end testing
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches:
-      - main
+  # NOTE: push(main) trigger removed.
+  # This workflow is a CI gate for PRs only.
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -18,12 +18,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    # If the workflow was triggered by anything other than a pull_request event 
-    # (e.g., push, workflow_dispatch, schedule, pull_request_target), 
-    # github.event_name != 'pull_request' is true.
-    # github.event.pull_request is only populated on pull_request events. 
-    # It is true when the PR is not a draft (i.e., “Ready for review”).
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # This workflow is triggered by pull_request events only.
+    # Skip draft PRs; run only when the PR is "Ready for review".
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     env:
       REPORT_LOCAL_DIR: test-reports
@@ -35,11 +32,11 @@ jobs:
 
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build e2e (attempt 1)
         id: build_e2e_try1
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -56,7 +53,7 @@ jobs:
       - name: Build e2e (attempt 2)
         id: build_e2e_try2
         if: steps.build_e2e_try1.outcome == 'failure'
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -73,7 +70,7 @@ jobs:
       - name: Build e2e (attempt 3)
         id: build_e2e_try3
         if: steps.build_e2e_try2.outcome == 'failure'
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -109,7 +106,7 @@ jobs:
           echo "----------------------------------"
 
       - name: Upload HTML report artifact to report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: wasm-e2e-report
           path: |
@@ -119,7 +116,7 @@ jobs:
           retention-days: 7
 
       - name: Upload wasm JSON report artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: wasm-e2e-json
           path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.WASM_REPORT_JSON_FILE }}
@@ -127,7 +124,7 @@ jobs:
           retention-days: 7
 
       - name: Upload grate JSON report artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: grate-e2e-json
           path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.GRATE_REPORT_JSON_FILE }}
@@ -135,7 +132,7 @@ jobs:
           retention-days: 7
 
       - name: Upload unified runner HTML report artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: wasm-e2e-unified-html
           path: |

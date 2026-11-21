@@ -67,7 +67,7 @@ Multi-stage **.e2e** flow for lind-wasm **end-to-end testing and image creation*
 
 ### make sysroot
 
-Runs `scripts/make_glibc_and_sysroot.sh` to:
+Runs `scripts/build/make_glibc_and_sysroot.sh` to:
 
 - Configure & build glibc (WASM/WASI target) and compile additional NPTL/syscall bits and tiny ASM stubs.
 
@@ -75,14 +75,15 @@ Runs `scripts/make_glibc_and_sysroot.sh` to:
 
 
 
-### make wasmtime
+### make lind-boot
 
-- Builds the embedded Wasmtime with Cargo (release) from `src/wasmtime/`.
+- Builds the runtime with Cargo (release) from `src/lind-boot/`, which embeds the
+  customized Wasmtime, and installs it as `build/lind-boot`.
 
 
 ### make test
 
-Runs `scripts/wasmtestreport.py` which:
+Runs `scripts/test/harnesses/wasmtestreport.py` which:
 
 - Discovers tests from the repository’s test trees and honors `skip_test_cases.txt`.
 
@@ -132,7 +133,7 @@ High level:
 `docker buildx create --use --name lind-builder || docker buildx use lind-builder`
 
 #### Build with cache import/export
-`docker buildx build --platform=linux/amd64 -f Docker/Dockerfile.e2e --cache-from type=local,src=~/.cache/docker-buildx --cache-to type=type=local,dest=.~/.cache/docker-buildx,mode=max .`
+`docker buildx build --platform=linux/amd64 -f Docker/Dockerfile.e2e --cache-from type=local,src=~/.cache/docker-buildx --cache-to type=local,dest=~/.cache/docker-buildx,mode=max .`
 
 > CI typically uses type=gha; locally a local cache is simple and reliable.
 
@@ -147,5 +148,4 @@ High level:
 - Stale artifacts → run make clean/make distclean and rebuild inside the dev (base) container.
 
 - Cache debugging → add --progress=plain to docker build to see which step invalidated.
-
 

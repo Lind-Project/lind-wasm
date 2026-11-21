@@ -399,16 +399,16 @@ pub extern "C" fn mpk_kill_syscall_entry(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
 
     let target_cage = target_cage_arg as i32;
     let sig = sig_arg as i32;
 
     if target_cage < 0 {
-        return syscall_error(Errno::EINVAL, "kill", "Invalid target cage id");
+        return syscall_error(Errno::EINVAL, "kill", "Invalid target cage id") as i64;
     }
     if sig <= 0 || sig >= 32 {
-        return syscall_error(Errno::EINVAL, "kill", "Invalid signal number");
+        return syscall_error(Errno::EINVAL, "kill", "Invalid signal number") as i64;
     }
 
     let target_cageid = if target_cage == 0 {
@@ -418,7 +418,7 @@ pub extern "C" fn mpk_kill_syscall_entry(
     };
 
     let Some(target_cage_obj) = get_cage(target_cageid) else {
-        return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
+        return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist") as i64;
     };
     if target_cage_obj.runtime_type.load(Ordering::Acquire) != RUNTIME_TYPE_MPK {
         return rawposix::sys_calls::kill_syscall(
@@ -435,7 +435,7 @@ pub extern "C" fn mpk_kill_syscall_entry(
             arg5_cageid,
             arg6,
             arg6_cageid,
-        ) as i32;
+        );
     }
 
     let delivered = match sig {
@@ -455,14 +455,14 @@ pub extern "C" fn mpk_kill_syscall_entry(
                 arg5_cageid,
                 arg6,
                 arg6_cageid,
-            ) as i32;
+            );
         }
     };
 
     if delivered {
         0
     } else {
-        syscall_error(Errno::ESRCH, "kill", "Target cage does not exist")
+        syscall_error(Errno::ESRCH, "kill", "Target cage does not exist") as i64
     }
 }
 

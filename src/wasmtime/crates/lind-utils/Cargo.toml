@@ -16,4 +16,4 @@ skiplist = "0.6.0"
 sysdefs = { path = "../sysdefs" }
 
 [features]
-debug-dylink = []
+lind-logging = ["sysdefs/lind-logging"]

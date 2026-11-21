@@ -53,6 +53,8 @@ Grates are composable. A grate may itself have another grate beneath it that pro
 
 In Unix, programs are often composed using pipelines.
 
+The examples below use illustrative command syntax to show how grate stacks are arranged. They describe the intended ordering and routing behavior; check the current contributor docs and scripts for the exact commands supported by a given build.
+
 For example:
 
 ```sh

@@ -22,6 +22,7 @@ use sysdefs::constants::LINDFS_ROOT;
 use wasmtime_lind_multi_process::CAGE_START_ID;
 use wasmtime_lind_utils::LindCageManager;
 use std::sync::Arc;
+use sysdefs::logging::{config_from_env, init_lind_logger};
 
 /// Helper function which `chroot`s to `lindfs`.
 ///
@@ -66,6 +67,10 @@ fn chroot_to_lindfs() {
 /// All process lifecycle management, runtime initialization, and error
 /// handling semantics are delegated to `execute.rs`.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize the Lind logger from environment variables before anything else.
+    // Falls back to defaults (stderr, PanicAndExit, all categories) on error.
+    let _ = init_lind_logger(config_from_env().unwrap_or_default());
+
     let lindboot_cli = CliOptions::parse();
 
     // AOT-compile only — no runtime needed

@@ -32,7 +32,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use cage::{get_cage, lind_signal_init, Vmmap, VmmapOps};
 use libc::{c_void, pid_t};
 use sysdefs::constants::fs_const::{MAP_SHARED, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
-use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 
 use crate::lind_mpk::pkeys;
@@ -1054,7 +1053,7 @@ extern "C" fn gs_fork_prepare_child(launch: *mut c_void, exit_stack: usize) -> C
     let mut cage_fs_bases = HashMap::new();
     for cage_id in launch.registered_cage_ids {
         if get_cage(cage_id).is_none() {
-            lind_debug_panic(&format!("gs-fork: cage {cage_id} not found"));
+            panic!("gs-fork: cage {cage_id} not found");
         }
         let mut cage_info = MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
@@ -1068,10 +1067,10 @@ extern "C" fn gs_fork_prepare_child(launch: *mut c_void, exit_stack: usize) -> C
         };
         thread_info.register_cage(cage_id);
         if let Err(error) = cage_info.allocate_grate_stack() {
-            lind_debug_panic(&format!("gs-fork: stack allocation in cage {cage_id} failed: {error}"));
+            panic!("gs-fork: stack allocation in cage {cage_id} failed: {error}");
         }
         let Some(mpk_info) = mpk_runtime_info(cage_id) else {
-            lind_debug_panic(&format!("gs-fork: cage {cage_id} has no MPKRuntimeInfo"));
+            panic!("gs-fork: cage {cage_id} has no MPKRuntimeInfo");
         };
         let result = if cage_id == launch.child_cageid {
             cage_info.fs_base = launch.child_fs;
@@ -1080,7 +1079,7 @@ extern "C" fn gs_fork_prepare_child(launch: *mut c_void, exit_stack: usize) -> C
             cage_info.initialize_grate_tls(&mpk_info)
         };
         if let Err(error) = result {
-            lind_debug_panic(&format!("gs-fork: TLS setup in cage {cage_id} failed: {error}"));
+            panic!("gs-fork: TLS setup in cage {cage_id} failed: {error}");
         }
         cage_fs_bases.insert(cage_id, cage_info.fs_base);
         mpk_info.threads.write().insert(tid, cage_info);

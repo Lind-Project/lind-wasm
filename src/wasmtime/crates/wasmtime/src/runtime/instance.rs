@@ -19,12 +19,13 @@ use core::ptr::NonNull;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicI32, Ordering};
 use sysdefs::constants::fs_const::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE,
 };
 use sysdefs::constants::syscall_const::MMAP_SYSCALL;
 use sysdefs::constants::{
     DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE, lind_platform_const,
 };
+use sysdefs::lind_log;
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
@@ -457,10 +458,11 @@ impl Instance {
                     let stack_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
                     let rounded_stack_size = round_up_size(stack_size, PAGESIZE);
 
-                    #[cfg(feature = "debug-dylink")]
-                    println!(
+                    lind_log!(
+                        DYLINK,
                         "[debug] main module allocate {} + {} bytes",
-                        rounded_stack_size, rounded_data_size
+                        rounded_stack_size,
+                        rounded_data_size
                     );
 
                     (rounded_stack_size, rounded_data_size)
@@ -568,6 +570,15 @@ impl Instance {
                 init_vmmap(cageid, memory_base, Some(required_memory_page as usize), cage::VmmapBitWidth::Vmmap32Bit);
                 // Allocated memory should include stack AND constant data region
 
+                // Only mark the module's own footprint RW; the grate stack arena
+                // stays PROT_NONE until a worker claims its slot (create_worker),
+                // so non-grate cages never fault in or fork-copy it.
+                let initial_accessible_size = if dylink_enabled {
+                    required_memory_size
+                } else {
+                    stack_arena_base
+                };
+
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                 make_syscall(
@@ -577,7 +588,7 @@ impl Instance {
                     cageid, // target cageid (should be same)
                     start_addr as u64,
                     cageid,
-                    required_memory_size as u64,
+                    initial_accessible_size as u64,
                     cageid,
                     (PROT_READ | PROT_WRITE) as u64,
                     cageid,
@@ -590,6 +601,34 @@ impl Instance {
                     0,
                     cageid,
                 );
+
+                // Reserve the rest of the arena as a PROT_NONE vmmap entry so
+                // vmmap's free-space search can't hand a guard page or an
+                // inactive worker slot to an unrelated guest mmap(). Still
+                // skipped by fork_vmmap, since it stays PROT_NONE.
+                if !dylink_enabled {
+                    let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
+                        * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
+                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+                    make_syscall(
+                        cageid,
+                        (MMAP_SYSCALL) as u64,
+                        0,
+                        cageid,
+                        stack_arena_base as u64,
+                        cageid,
+                        stack_arena_size as u64,
+                        cageid,
+                        (PROT_NONE) as u64,
+                        cageid,
+                        (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+                        cageid,
+                        (0 - 1) as u64,
+                        cageid,
+                        0,
+                        cageid,
+                    );
+                }
             }
             // InstantiateChild: this is the child wasm instance forked by parent
             InstantiateType::InstantiateChild {
@@ -638,8 +677,7 @@ impl Instance {
                 let rounded_size =
                     round_up_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
                 let rounded_size = round_up_size(rounded_size, PAGESIZE);
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] library size round to {}", rounded_size);
+                lind_log!(DYLINK, "library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
                     cageid,                // self cageid
@@ -669,8 +707,7 @@ impl Instance {
                     *memory_base = addr;
                 }
 
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] library memory starts at {}", addr);
+                lind_log!(DYLINK, "library memory starts at {}", addr);
             }
         }
 
@@ -694,16 +731,14 @@ impl Instance {
                             "__wasm_apply_data_relocs",
                         )
                         .unwrap();
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] main module start reloc func");
+                    lind_log!(DYLINK, "main module start reloc func");
                     let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                     // apply tls relocations if any
                     if let Ok(init) = instance
                         .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
                     {
-                        #[cfg(feature = "debug-dylink")]
-                        println!("[debug] main module start __wasm_apply_tls_relocs");
+                        lind_log!(DYLINK, "main module start __wasm_apply_tls_relocs");
                         let _ = init.call(store.as_context_mut(), ()).unwrap();
                     }
 
@@ -1284,8 +1319,12 @@ impl Instance {
                     // Cache the resolved table index; also updates the GOT cell if it exists.
                     let got_inner = got.as_ref().unwrap();
                     if got_inner.cache_symbol(final_name, index as u32) {
-                        #[cfg(feature = "debug-dylink")]
-                        println!("[debug] update GOT.func.{} to {}", final_name, index);
+                        lind_log!(
+                            DYLINK,
+                            "[debug] update GOT.func.{} to {}",
+                            final_name,
+                            index
+                        );
                     }
                 }
             }
@@ -1303,9 +1342,11 @@ impl Instance {
                 let val = global.get(&mut store);
                 // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
                 let Some(raw) = val.i32() else {
-                    eprintln!(
-                        "[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
-                        name, val
+                    lind_log!(
+                        DYLINK,
+                        "Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
+                        name,
+                        val
                     );
                     continue;
                 };
@@ -1313,14 +1354,13 @@ impl Instance {
                 let val = match (raw as u32).checked_add(memory_base) {
                     Some(val) => val,
                     None => {
-                        eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                        lind_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
                         continue;
                     }
                 };
                 // Cache the resolved address; also updates the GOT cell if it already exists.
                 if got_inner.cache_symbol(&name, val) {
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] update GOT.mem.{} to {}", name, val);
+                    lind_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
                 }
             }
         }

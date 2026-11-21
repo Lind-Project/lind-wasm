@@ -67,3 +67,26 @@ Using `dashmap`:
 ```sh
 cargo test --no-default-features --features dashmap
 ```
+
+### How to benchmark
+
+The `handler_lookup` benchmark measures the main 3i handler-table hot paths:
+
+- handler lookup
+- register and deregister handler
+- copy handler table
+- runtime trampoline registration and lookup
+
+Using default `hashmap`:
+
+```sh
+cargo bench --bench handler_lookup
+```
+
+Using `dashmap`:
+
+```sh
+cargo bench --bench handler_lookup --no-default-features --features dashmap
+```
+
+Criterion HTML reports are generated under `target/criterion/`.

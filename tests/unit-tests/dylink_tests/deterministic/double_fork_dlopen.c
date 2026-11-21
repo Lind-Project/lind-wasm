@@ -22,7 +22,7 @@ int main(void) {
         /* ---- child ---- */
 
         /* dlopen inside the child. */
-        void *handle = dlopen("lib.cwasm", RTLD_LAZY);
+        void *handle = dlopen("lib.so", RTLD_LAZY);
         if (!handle) {
             fprintf(stderr, "child: dlopen failed: %s\n", dlerror());
             return 1;
@@ -38,6 +38,10 @@ int main(void) {
         }
 
         fn("child, before second fork");
+
+        /* Flush before forking so the grandchild does not inherit (and
+           print a second time) the line still sitting in stdout's buffer. */
+        fflush(stdout);
 
         /* Fork again from within the child so the grandchild inherits the
            already-dlopened library and must be able to call it. */
@@ -96,7 +100,7 @@ int main(void) {
 
         /* Parent never called dlopen; confirm it still works after the child
            tree has exited. */
-        void *handle = dlopen("lib.cwasm", RTLD_LAZY);
+        void *handle = dlopen("lib.so", RTLD_LAZY);
         if (!handle) {
             fprintf(stderr, "parent: dlopen failed: %s\n", dlerror());
             return 1;

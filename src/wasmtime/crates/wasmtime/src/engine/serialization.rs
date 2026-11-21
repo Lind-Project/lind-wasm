@@ -318,6 +318,7 @@ impl Metadata<'_> {
 
             // This doesn't affect compilation, it's just a runtime setting.
             memory_reservation_for_growth: _,
+            lind_internal_memory_reservation: _,
 
             // This does technically affect compilation but modules with/without
             // trap information can be loaded into engines with the opposite

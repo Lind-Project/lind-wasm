@@ -1,19 +1,19 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use cage::memory::check_addr_write;
+use cage::memory::{check_addr_read, check_addr_write};
 use rand::Rng;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use sysdefs::constants::Errno;
+use sysdefs::constants::fs_const::PAGESIZE;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
 use threei::threei_const;
-use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{LindHost, get_memory_base, get_memory_base_and_size};
@@ -111,7 +111,7 @@ fn add_syscall_to_linker<
               arg5cageid: u64,
               arg6: u64,
               arg6cageid: u64|
-              -> wasmtime::Result<i32> {
+              -> wasmtime::Result<i64> {
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
@@ -139,11 +139,11 @@ fn add_syscall_to_linker<
                             // Only override the return value with the pending visible retval if it is actually set.
                             // If it's not set, that means the clone syscall being replayed on rewind is the one in the child process, and we should return the actual syscall return value (0) instead of the pending visible retval from the parent process.
                             if retval > 0 {
-                                return Ok(retval);
+                                return Ok(retval as i64);
                             }
                         }
                     }
-                    return Ok(rewind_res);
+                    return Ok(rewind_res as i64);
                 }
             }
 
@@ -162,7 +162,7 @@ fn add_syscall_to_linker<
                 };
                 // let signal handler finish rest of the rewinding process
                 wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
-                return Ok(retval);
+                return Ok(retval as i64);
             }
 
             // Some thread-related operations must be executed against a specific thread's
@@ -208,6 +208,8 @@ fn add_syscall_to_linker<
                 // Save the grate-defined return value produced by the normal clone3 execution. 
                 // The guest-visible parent return is produced later during Asyncify rewind 
                 // replay, so this value must be carried across that boundary.
+                // NOTE: glibc uses pid_t for the return value of clone. Thus, retval is always
+                // truncated to 32 bits. Consequently, truncating retval here has no effect.
                 wasmtime_lind_multi_process::set_pending_clone_visible_retval(&mut caller, retval as i32).unwrap_or_else(|e| {
                     panic!("{}", format!(
                         "failed to set pending_clone_visible_retval for retval={retval} with error: {e}"
@@ -218,8 +220,7 @@ fn add_syscall_to_linker<
             // If the syscall was interrupted by a signal (EINTR), invoke the signal handler.
             // If fork is called within the signal handler, asyncify will unwind the stack;
             // we save the syscall return value so it can be restored on rewind.
-            // Only negate `retval` if it falls within the valid errno range;
-            // since negating `I32::MIN` would cause an overflow panic.
+            // Only negate `retval` if it falls within the valid errno range.
             if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i64 {
                 caller.as_context_mut().append_syscall_asyncify_data(retval as i32);
                 if let Err(e) =
@@ -236,10 +237,52 @@ fn add_syscall_to_linker<
                 }
             }
 
-            Ok(retval as i32)
+            Ok(retval)
         },
     )?;
     Ok(())
+}
+
+/// Read cap for guest strings; matches `lind_debug_printf`'s buffer.
+const MAX_DEBUG_STR_LEN: usize = 1024;
+
+/// Read a NUL-terminated string from the calling cage's linear memory.
+///
+/// `offset` is a guest pointer, not a host address. Two things keep this safe:
+/// the 32-bit bound means `base + offset` always lands inside this cage's own
+/// memory, and `check_addr_read` clears the page before we touch it — the 4 GiB
+/// reservation is mostly unmapped, so only the vmmap knows what is readable.
+///
+/// Reads stop at the end of the starting page, so a message straddling a page
+/// boundary is truncated. That is deterministic per build and acceptable for a
+/// diagnostic. Non-UTF-8 is replaced, not rejected, so a bad message can't
+/// panic the host.
+fn read_guest_cstr<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+    offset: u64,
+) -> Result<String, Errno> {
+    // Rejects NULL, and bounds `off` so `base + off` below cannot wrap.
+    // Guest offset 0 is mapped readable (`instance.rs:561` maps from
+    // `start_addr = 0`), so without this a NULL message would pass the
+    // `check_addr_read` below and log an empty string instead of being reported.
+    if offset == 0 || offset > u32::MAX as u64 {
+        return Err(Errno::EFAULT);
+    }
+    let off = offset as usize;
+    let base = get_memory_base(caller);
+    let cageid = wasmtime_lind_multi_process::current_cageid(caller) as u64;
+
+    let page_size = PAGESIZE as usize;
+    let len = std::cmp::min(MAX_DEBUG_STR_LEN, page_size - (off % page_size));
+    check_addr_read(cageid, base + off as u64, len).map_err(|_| Errno::EFAULT)?;
+
+    // Safe: the vmmap just confirmed this range is mapped and readable.
+    let bytes = unsafe { std::slice::from_raw_parts((base as *const u8).add(off), len) };
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(len);
+    Ok(String::from_utf8_lossy(&bytes[..end]).into_owned())
 }
 
 /// Register runtime introspection functions: memory base address, cage ID,
@@ -265,10 +308,19 @@ fn add_runtime_to_linker<
         },
     )?;
 
-    linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
-        let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
-        sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
-    })?;
+    linker.func_wrap(
+        "lind",
+        "debug-panic",
+        move |mut caller: Caller<'_, T>, msg: u64| -> () {
+            match read_guest_cstr::<T, U>(&mut caller, msg) {
+                Ok(_panic_str) => lind_debug_panic!("FROM GUEST: {}", _panic_str),
+                // Still fatal either way; report the pointer, don't deref it.
+                Err(_) => {
+                    lind_debug_panic!("FROM GUEST: <unreadable message pointer {:#x}>", msg)
+                }
+            }
+        },
+    )?;
 
     #[cfg(feature = "asyncify-setjmp")]
     linker.func_wrap(
@@ -321,9 +373,9 @@ fn add_debug_to_linker<
         "debug",
         "lind_debug_str",
         move |mut caller: Caller<'_, T>, ptr: i32| -> i32 {
-            let mem_base = get_memory_base(&mut caller);
-            if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
-                eprintln!("[LIND DEBUG STR]: {}", msg);
+            match read_guest_cstr::<T, U>(&mut caller, (ptr as u32) as u64) {
+                Ok(msg) => eprintln!("[LIND DEBUG STR]: {}", msg),
+                Err(_) => eprintln!("[LIND DEBUG STR]: <unreadable pointer {:#x}>", ptr as u32),
             }
             ptr
         },
@@ -531,7 +583,8 @@ pub fn add_dylink_to_linker<
                     cloned_dynamic_loader.clone().unwrap(),
                 )
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;
@@ -543,7 +596,8 @@ pub fn add_dylink_to_linker<
             if dylink_enabled {
                 wasmtime_lind_dylink::dlsym_call(&mut caller, handle, name)
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;
@@ -555,7 +609,8 @@ pub fn add_dylink_to_linker<
             if dylink_enabled {
                 wasmtime_lind_dylink::dlclose_call(&mut caller, handle)
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;

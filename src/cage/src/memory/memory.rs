@@ -3,13 +3,13 @@
 //! This file provides helper functions related to vmmap, including address alignment,
 //! initializing vmmap, helper functions for handling vmmap during a fork syscall, and
 //! address translation and validation related to vmmap
-use crate::cage::{get_cage, Cage};
-use crate::memory::{VmmapOps, VmmapBitWidth};
+use crate::cage::{get_cage, with_cage, Cage};
+use crate::memory::{VmmapBitWidth, VmmapOps};
 use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
 };
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::{lind_debug_panic, lind_log};
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -108,10 +108,11 @@ pub fn is_mmap_error(ret: usize) -> bool {
     }
 
     // Unaligned but not in errno range - this should never happen
-    lind_debug_panic(&format!(
+    lind_debug_panic!(
         "mmap returned unaligned address outside errno range: 0x{:x}",
         ret
-    ));
+    );
+    true // treat as error in LogOnly/NoAction mode
 }
 
 /// Copies the memory regions from parent to child based on the provided `vmmap` memory layout.
@@ -189,11 +190,17 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 };
                 let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
                 if ret < 0 {
-                    panic!(
-                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={})",
+                    lind_log!(
+                        Default,
+                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={}), falling back to copy_nonoverlapping",
                         get_errno(),
                         parent_st,
                         child_st,
+                        addr_len,
+                    );
+                    std::ptr::copy_nonoverlapping(
+                        parent_st as *const u8,
+                        child_st as *mut u8,
                         addr_len,
                     );
                 }
@@ -305,13 +312,12 @@ pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
 /// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or not readable
 pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
-    let mut vmmap = cage.vmmap.write();
-
-    if vmmap.check_addr_read(addr as usize, length) {
-        Ok(true)
-    } else {
-        Err(Errno::EFAULT)
+    match with_cage(cageid, |cage| {
+        cage.vmmap.read().check_addr_read(addr as usize, length)
+    }) {
+        Some(true) => Ok(true),
+        Some(false) => Err(Errno::EFAULT),
+        None => Err(Errno::EINVAL),
     }
 }
 
@@ -330,13 +336,12 @@ pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Er
 /// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or not writable
 pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
-    let mut vmmap = cage.vmmap.write();
-
-    if vmmap.check_addr_write(addr as usize, length) {
-        Ok(true)
-    } else {
-        Err(Errno::EFAULT)
+    match with_cage(cageid, |cage| {
+        cage.vmmap.read().check_addr_write(addr as usize, length)
+    }) {
+        Some(true) => Ok(true),
+        Some(false) => Err(Errno::EFAULT),
+        None => Err(Errno::EINVAL),
     }
 }
 
@@ -355,12 +360,9 @@ pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, E
 /// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or lacks read/write permissions
 pub fn check_addr_rw(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
-    let mut vmmap = cage.vmmap.write();
-
-    if vmmap.check_addr_rw(addr as usize, length) {
-        Ok(true)
-    } else {
-        Err(Errno::EFAULT)
+    match with_cage(cageid, |cage| cage.vmmap.read().check_addr_rw(addr as usize, length)) {
+        Some(true) => Ok(true),
+        Some(false) => Err(Errno::EFAULT),
+        None => Err(Errno::EINVAL),
     }
 }

@@ -5,12 +5,15 @@ use cfg_if::cfg_if;
 use anyhow::{Context, Result, anyhow};
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
 use sysdefs::constants::lind_platform_const::{
-    UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
+    LIND_MEMORY_IMPORT_MODULE, LIND_MEMORY_IMPORT_NAME, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+    fork_grate_handler_flag_for_child, is_grate_handler_registered, unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
+use sysdefs::lind_log;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::*;
@@ -123,6 +126,11 @@ pub struct LindCtx<T, U> {
     fork_host: Arc<dyn Fn(&T, bool) -> T + Send + Sync + 'static>,
 
     // exec the host
+    //
+    // The `Option<SharedMemory>` argument is the linear memory the exec-ed image
+    // should be instantiated on. `execve` replaces the program of an existing cage,
+    // so the cage's current 4 GiB reservation is passed here and reused rather than
+    // mapping a second one; `None` falls back to allocating a fresh reservation.
     exec_host: Arc<
         dyn Fn(
                 &U,
@@ -133,6 +141,7 @@ pub struct LindCtx<T, U> {
                 i32,
                 &Arc<LindCageManager>,
                 &Option<Vec<(String, Option<String>)>>,
+                Option<SharedMemory>,
             ) -> Result<Vec<Val>>
             + Send
             + Sync
@@ -172,6 +181,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             i32,
             &Arc<LindCageManager>,
             &Option<Vec<(String, Option<String>)>>,
+            Option<SharedMemory>,
         ) -> Result<Vec<Val>>
         + Send
         + Sync
@@ -491,10 +501,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -507,9 +518,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -519,9 +531,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -576,9 +589,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     //    Snapshots are looked up by module name from the HashMap captured before
                     //    the unwind; backup instances are never registered so they are naturally
                     //    excluded from the snapshot map.
-                    let main_module_name = module
-                        .name()
-                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    let main_module_name = module.name().unwrap_or_else(|| {
+                        lind_debug_panic!("module has no name");
+                        "" // best-effort fallback in LogOnly/NoAction mode
+                    });
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -615,10 +629,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -631,9 +646,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -720,9 +736,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-                    // Grate calls only supports static linking for now, so we only register
-                    // grate workers when dylink is not enabled.
-                    if !dylink_enabled {
+                    // Only rebuild a worker pool for the child if the parent actually
+                    // registered a grate handler; skips the fork_vmmap copy cost for
+                    // the common non-grate case instead of just deferring it.
+                    if !dylink_enabled && is_grate_handler_registered(parent_cageid as usize) {
                         let grate_template = GrateTemplate {
                             engine: module.engine().clone(),
                             module: module.clone(),
@@ -740,6 +757,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             format!("failed to register grate workers for cage {}", child_cageid)
                         })
                         .expect("create_handler_for_cage failed");
+
+                        fork_grate_handler_flag_for_child(
+                            parent_cageid as usize,
+                            child_cageid as usize,
+                        );
                     }
 
                     // get the asyncify_rewind_start and module start function
@@ -791,7 +813,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
-                            eprintln!("Child Error: {:?}", err);
+                            lind_log!(Default, "Child Error: {:?}", err);
                             if crashed_thread_exit(child_cageid, THREAD_START_ID as u64) {
                                 lind_manager.decrement();
                             }
@@ -805,7 +827,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         match exit_code {
                             Val::I32(val) => {}
                             _ => {
-                                eprintln!("unexpected _start function return type!");
+                                lind_log!(Default, "unexpected _start function return type!");
                             }
                         }
                     }
@@ -1061,10 +1083,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -1077,9 +1100,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1089,9 +1113,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -1134,9 +1159,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     //    Store/Instance, so globals must be explicitly synced from the parent's
                     //    snapshot. Snapshots are looked up by module name; backup instances are
                     //    never registered and are therefore naturally excluded.
-                    let main_module_name = module
-                        .name()
-                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    let main_module_name = module.name().unwrap_or_else(|| {
+                        lind_debug_panic!("module has no name");
+                        "" // best-effort fallback in LogOnly/NoAction mode
+                    });
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -1168,10 +1194,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             let dylink_info = dylink_info.as_ref().unwrap();
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] dlopen library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             child_table
                                 .grow(
@@ -1181,9 +1208,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1328,7 +1356,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     // print errors if any when running the thread
                     if let Err(err) = invoke_res {
-                        eprintln!("Error: {:?}", err);
+                        lind_log!(Default, "Error: {:?}", err);
                         return 0;
                     }
 
@@ -1342,7 +1370,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             rm_vmctx_thread(child_cageid as u64, next_tid as u64);
                         }
                         _ => {
-                            eprintln!("unexpected _start function return type: {:?}", exit_code);
+                            lind_log!(
+                                Default,
+                                "unexpected _start function return type: {:?}",
+                                exit_code
+                            );
                         }
                     }
 
@@ -1384,6 +1416,24 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // detect if dynamic loading is enabled
         let dylink_enabled = self.modules.get(0).unwrap().2.dylink_meminfo().is_some();
         let engine = exec_module.engine().clone();
+
+        // exec replaces the program image but keeps the cage, so the 4 GiB linear
+        // memory this cage already owns is handed to the new image instead of
+        // mapping a second reservation. It is looked up under the same fixed name
+        // `attach_shared_memory` defined it under in this cage's linker.
+        //
+        // If the lookup fails we simply fall back to a fresh reservation, which is
+        // the pre-existing behaviour, so exec keeps working either way.
+        let cage_memory = self.linker.as_ref().and_then(|linker| {
+            linker
+                .get(
+                    &mut *caller,
+                    LIND_MEMORY_IMPORT_MODULE,
+                    LIND_MEMORY_IMPORT_NAME,
+                )
+                .ok()
+                .and_then(|ext| ext.into_shared_memory())
+        });
 
         // get the base address of the memory
         let address = get_memory_base(&mut caller);
@@ -1461,6 +1511,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 cloned_cageid,
                 &cloned_lind_manager,
                 &environs,
+                cage_memory,
             );
 
             // If the exec'd module crashed (wasm trap, unreachable, etc.) rather
@@ -1753,7 +1804,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             tid: 1,                                     // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
-            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
+            // Per thread: the slot carries one clone3 result across that
+            // thread's own unwind/rewind, so it must not be shared.
+            pending_clone_visible_retval: Arc::new(Mutex::new(None)),
             thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
@@ -1781,7 +1834,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             tid: self.tid,
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
-            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
+            // Per thread: the slot carries one clone3 result across that
+            // thread's own unwind/rewind, so it must not be shared.
+            pending_clone_visible_retval: Arc::new(Mutex::new(None)),
             thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
@@ -2216,12 +2271,28 @@ where
     caller.data().get_ctx().tid as i32
 }
 
-// attach a new SharedMemory to the Linker for multi-threading usage
+// attach a SharedMemory to the Linker for multi-threading usage
 // Warning: only set need_init to true for first cage initialization
 //
 // `all_modules` should include the main module plus all preload library modules.
 // The shared memory is created with limits that satisfy every module's import
 // declaration: min = max(all declared mins), max = min(all declared maxes).
+//
+// `existing_memory` is the `exec` path: `execve` replaces the program image of a
+// cage that already owns a 4 GiB linear-memory reservation, so the reservation is
+// reused instead of mapping a second one (the old one would otherwise stay mapped
+// until the exec-ed program finishes, since the pre-exec `Store` is still alive
+// further down the host call stack). When reusing, the region is re-mapped fresh
+// and anonymous so the new image starts from zeroed pages, exactly like a newly
+// mmap-ed reservation would.
+//
+// Note that reusing the reservation means the pre-exec image's memory really is
+// gone once exec succeeds, so a sibling thread that outlives exec would keep
+// running against a linear memory whose contents have been discarded. POSIX
+// requires exec to terminate every other thread in the cage first; rawposix's
+// `exec_syscall` documents that as its job but does not do it yet, so multi-
+// threaded exec is not safe on this path. No lind application exercises it today
+// (exec is only reached from a cage's main thread) -- tracked separately.
 pub fn attach_shared_memory<
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
@@ -2231,29 +2302,13 @@ pub fn attach_shared_memory<
     all_modules: &[Module],
     need_init: bool,
     cageid: i32,
+    existing_memory: Option<SharedMemory>,
 ) -> Result<()> {
-    // Find the shared memory import in the first module (main module) to get
-    // the import namespace / name under which to register the memory.
+    // The main module is only needed for its engine; the import name the memory is
+    // registered under is fixed (see LIND_MEMORY_IMPORT_MODULE / _NAME).
     let main_module = all_modules
         .first()
         .ok_or_else(|| anyhow!("no modules provided"))?;
-
-    let mut import_module_name = "";
-    let mut import_name = "";
-    let mut found = false;
-    for import in main_module.imports() {
-        if let Some(m) = import.ty().memory() {
-            if m.is_shared() {
-                import_module_name = import.module();
-                import_name = import.name();
-                found = true;
-                break;
-            }
-        }
-    }
-    if !found {
-        return Err(anyhow!("Main Module does not contain a shared memory"));
-    }
 
     // In lind-wasm the linear memory is always a fixed 4 GiB physical
     // reservation (MmapMemory overrides max to MAX_MEMORY_SIZE = 4 GiB).
@@ -2282,20 +2337,30 @@ pub fn attach_shared_memory<
     // current_length can be grown to the full physical reservation.
     const LIND_MAX_PAGES: u64 = 65536;
 
-    let mem_type = wasmtime::MemoryTypeBuilder::new()
-        .shared(true)
-        .min(combined_min)
-        .max(Some(LIND_MAX_PAGES))
-        .build()
-        .map_err(anyhow::Error::from)?;
+    let reused = existing_memory.is_some();
+    let mem = match existing_memory {
+        // exec: keep the cage's current reservation instead of mapping a new one.
+        Some(mem) => mem,
+        None => {
+            let mem_type = wasmtime::MemoryTypeBuilder::new()
+                .shared(true)
+                .min(combined_min)
+                .max(Some(LIND_MAX_PAGES))
+                .build()
+                .map_err(anyhow::Error::from)?;
 
-    let mem = SharedMemory::new(main_module.engine(), mem_type)?;
+            SharedMemory::new(main_module.engine(), mem_type)?
+        }
+    };
 
     // Grow to the full 4 GiB so that every wasm address in [0, 4GiB) passes
     // the current_length bounds check.  The physical pages are already reserved
     // by MmapMemory; this just makes them PROT_READ|PROT_WRITE and updates
     // current_length atomically.
-    let delta = LIND_MAX_PAGES.saturating_sub(combined_min);
+    //
+    // A reused memory was already grown to LIND_MAX_PAGES by the cage's previous
+    // image, so `mem.size()` (not `combined_min`) decides what is still missing.
+    let delta = LIND_MAX_PAGES.saturating_sub(mem.size());
     if delta > 0 {
         mem.grow(delta)
             .map_err(anyhow::Error::from)
@@ -2311,17 +2376,59 @@ pub fn attach_shared_memory<
         // them. early_init_stack (dylink) and the make_syscall in
         // new_started_impl_with_lind re-establish the required initial regions
         // before any wasm code runs.
-        unsafe {
-            libc::mprotect(
-                memory_base as *mut libc::c_void,
-                1usize << 32,
-                libc::PROT_NONE,
-            );
+        if reused {
+            // A reused reservation still carries the previous image's mappings,
+            // and `mprotect` alone would only change their permissions: the old
+            // pages stay, so the new image would see stale bytes wherever nothing
+            // writes over them -- .bss above all, which is never written and is
+            // simply assumed to be zero.
+            //
+            // Nor is MADV_DONTNEED enough. The region is not uniformly private and
+            // anonymous: rawposix maps files into it with MAP_FIXED (`mmap_inner`)
+            // and attaches SysV shm with MAP_SHARED|MAP_FIXED (`cage::shmat`).
+            // MADV_DONTNEED only zero-fills on the private anonymous parts; over a
+            // file-backed or shared range it just drops the cached pages and the
+            // contents come straight back on the next access, with the old VMA type
+            // still in place.
+            //
+            // So re-establish a fresh anonymous mapping over the whole region, the
+            // same way rawposix's own `munmap` releases a range. This replaces any
+            // leftover file/shm mapping, discards every page (the next touch faults
+            // in a zero page), and returns the old program's RSS -- while keeping
+            // the address range reserved, since MAP_FIXED lands inside the
+            // reservation Wasmtime's `MmapMemory` already owns.
+            let mapped = unsafe {
+                libc::mmap(
+                    memory_base as *mut libc::c_void,
+                    1usize << 32,
+                    PROT_NONE,
+                    (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+                    -1,
+                    0,
+                )
+            };
+            if mapped != memory_base as *mut libc::c_void {
+                return Err(anyhow!(
+                    "failed to reset linear memory of cage {} for exec: mmap returned {:p}, expected {:p}",
+                    cageid,
+                    mapped,
+                    memory_base as *mut libc::c_void,
+                ));
+            }
+        } else {
+            unsafe {
+                libc::mprotect(memory_base as *mut libc::c_void, 1usize << 32, PROT_NONE);
+            }
         }
 
         cage::init_vmmap(cageid as u64, memory_base as usize, None, VmmapBitWidth::Vmmap32Bit);
     }
-    linker.define(&store, import_module_name, import_name, mem.clone())?;
+    linker.define(
+        &store,
+        LIND_MEMORY_IMPORT_MODULE,
+        LIND_MEMORY_IMPORT_NAME,
+        mem.clone(),
+    )?;
 
     Ok(())
 }
@@ -2421,7 +2528,10 @@ fn has_correct_signature(module: &Module) -> bool {
 /// consumes this value and uses it to override the positive real child cage id.
 ///
 /// The slot is protected by a mutex and stored behind an `Arc` so that it
-/// survives `HostCtx`/`LindCtx` cloning across fork setup.
+/// survives `HostCtx`/`LindCtx` cloning across fork setup. Each forked
+/// process and thread gets its own slot (see `fork_process`/`fork_thread`);
+/// a shared slot let a thread's clone3 result leak into another cage's
+/// fork return.
 pub fn set_pending_clone_visible_retval<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,

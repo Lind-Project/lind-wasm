@@ -21,6 +21,7 @@ threei = { path = "../threei" }
 default = ["fast"]
 fast = []
 secure = []
+lind-logging = ["sysdefs/lind-logging"]
 # Pass-through selectors for the fdtables backend. Exactly one must be
 # enabled by a downstream crate (lind-boot) — rawposix on its own won't
 # compile without one of these because fdtables itself has no default.

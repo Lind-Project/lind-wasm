@@ -31,16 +31,16 @@ docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e -t dev --target bas
 
 docker run --platform=linux/amd64 -v $(PWD):/lind -w /lind -it dev /bin/bash
 ```
-5. Build toolchain (glibc and wasmtime)
+5. Build the toolchain (runtime, glibc sysroot and `lindfs`)
 ```
 # this may take a while ...
-make lind-boot sysroot
+make build
 ```
 6. Run the test suite 
 ```
-./scripts/wasmtestreport.py
+./scripts/test/harnesses/wasmtestreport.py
 ```
-Run `scripts/wasmtestreport.py --help` to list available usage options.
+Run `scripts/test/harnesses/wasmtestreport.py --help` to list available usage options.
 
 ## Directory Structure
 
@@ -98,7 +98,7 @@ lind-wasm outputs are compared to the native gcc output.
 ### Example Combined Usage
 
 ```
-./scripts/wasmtestreport.py \
+./scripts/test/harnesses/wasmtestreport.py \
   --generate-html \
   --skip config_tests file_tests \
   --timeout 10 \
@@ -146,7 +146,7 @@ hello_grate.c
 
 Each grate test must:
 
-- Has dispatcher function called `pass_fptr_to_wt`
+- Register the handlers needed by the cage under test
 - Determine test success internally
 - Exit with EXIT_FAILURE if the test fails
 - Exit normally (e.g., EXIT_SUCCESS) on success
@@ -172,7 +172,7 @@ Make sure the lind-wasm runtime has already been compiled.
 **Step 1 — Compile the Grate**
 
 ```sh
-lind-clang --compile-grate <cage_name>_grate.c
+lind-clang <cage_name>_grate.c
 ```
 
 This produces `<cage_name>_grate.cwasm`

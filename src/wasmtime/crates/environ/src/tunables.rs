@@ -74,6 +74,12 @@ define_tunables! {
         /// memory for growth.
         pub memory_reservation_for_growth: u64,
 
+        /// lind-wasm:
+        /// Initial reservation, in bytes, for lind-wasm internal memories
+        /// such as Wasmtime GC heap. Guest shared memory still uses
+        /// `memory_reservation`.
+        pub lind_internal_memory_reservation: u64,
+
         /// Whether or not to generate native DWARF debug information.
         pub debug_native: bool,
 
@@ -212,6 +218,7 @@ impl Tunables {
             memory_reservation: 1 << 20,
             memory_guard_size: 0,
             memory_reservation_for_growth: 0,
+            lind_internal_memory_reservation: 10 * (1 << 20),
 
             // General options which have the same defaults regardless of
             // architecture.

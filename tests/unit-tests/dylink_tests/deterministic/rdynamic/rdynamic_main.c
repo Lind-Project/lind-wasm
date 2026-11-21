@@ -1,0 +1,52 @@
+// main.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <dlfcn.h>
+#include <sys/wait.h>
+
+// This function will be called from the shared library
+void hello_from_main(void) {
+    printf("Hello from main executable!\n");
+}
+
+int main(void) {
+    void *handle;
+    void (*plugin_entry)(void);
+
+    // Load the shared library
+    handle = dlopen("rdynamic_lib.so", RTLD_NOW);
+    if (!handle) {
+        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        return 1;
+    }
+
+    // Resolve symbol from the plugin
+    plugin_entry = dlsym(handle, "plugin_entry");
+    if (!plugin_entry) {
+        fprintf(stderr, "dlsym error: %s\n", dlerror());
+        return 1;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork failed");
+        return 1;
+    }
+
+    // parent waits for the child to finish before calling into the plugin,
+    // so the child's output always comes first and the output is deterministic
+    if (pid > 0) {
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            perror("waitpid failed");
+            return 1;
+        }
+    }
+
+    // Call into the plugin
+    plugin_entry();
+
+    dlclose(handle);
+    return 0;
+}

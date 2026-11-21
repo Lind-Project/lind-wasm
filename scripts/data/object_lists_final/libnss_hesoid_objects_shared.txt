@@ -1,0 +1,5 @@
+/home/lind/lind-wasm/src/glibc/build/hesiod/hesiod.os
+/home/lind/lind-wasm/src/glibc/build/hesiod/hesiod-grp.os
+/home/lind/lind-wasm/src/glibc/build/hesiod/hesiod-proto.os
+/home/lind/lind-wasm/src/glibc/build/hesiod/hesiod-pwd.os
+/home/lind/lind-wasm/src/glibc/build/hesiod/hesiod-service.os

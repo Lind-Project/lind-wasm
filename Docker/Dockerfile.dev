@@ -76,9 +76,10 @@ RUN groupadd --gid 1000 ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # --- Install libtinfo5 as root ---
-RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
-
+# RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.2_amd64.deb && \
+#     apt install ./libtinfo5_6.3-2ubuntu0.2_amd64.deb
+RUN apt-get update && apt-get install -y libtinfo5
+    
 # --- Switch to user ASAP ---
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
@@ -123,16 +124,17 @@ RUN make lind-debug
 # Tell scripts where the repo is (they are installed to /usr/local/bin)
 ENV LIND_WASM_ROOT=/home/${USERNAME}/lind-wasm
 USER root
-RUN install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/local/bin/lind_compile \
- && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_run     /usr/local/bin/lind_run     \
- && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
+RUN install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/bin/lind_compile /usr/local/bin/lind_compile \
+ && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/bin/lind_run     /usr/local/bin/lind_run     \
+ && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/bin/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
 # Replace copied helper scripts with symlinks so local edits are reflected.
 RUN rm -f /usr/local/bin/lind_compile /usr/local/bin/lind_run \
- && ln -sf /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/local/bin/lind_compile \
- && ln -sf /home/${USERNAME}/lind-wasm/scripts/lind_run     /usr/local/bin/lind_run
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/bin/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/bin/lind_run     /usr/local/bin/lind_run \
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/bin/lind_checkenv /usr/local/bin/lind_checkenv
 USER ${USERNAME}
 
 CMD ["/bin/bash"]

@@ -21,18 +21,18 @@ long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
   printf("[Grate|multi-register_grate] Handling function ptr: %llu from cage: %llu\n",
          fn_ptr_uint, cageid);
 
-  int (*fn)(uint64_t) = (int (*)(uint64_t))(uintptr_t)fn_ptr_uint;
+  int64_t (*fn)(uint64_t) = (int64_t (*)(uint64_t))(uintptr_t)fn_ptr_uint;
 
   return fn(cageid);
 }
 
-int geteuid_grate(uint64_t cageid) {
+int64_t geteuid_grate(uint64_t cageid) {
   printf("[Grate|multi-register_grate] In multi-register_grate %d handler for cage: %llu\n",
          getpid(), cageid);
   return 10;
 }
 
-int getuid_grate(uint64_t cageid) {
+int64_t getuid_grate(uint64_t cageid) {
   printf("[Grate|multi-register_grate] In multi-register_grate %d handler for cage: %llu\n",
          getpid(), cageid);
   return 20;

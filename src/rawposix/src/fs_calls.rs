@@ -1,6 +1,6 @@
 use cage::{
     get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
-    shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
+    shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapBitWidth, VmmapOps, HEAP_ENTRY_INDEX,
     SHM_METADATA,
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
@@ -20,7 +20,7 @@ use sysdefs::constants::lind_platform_const::{
 };
 use sysdefs::constants::syscall_const::{MMAP_SYSCALL, MPROTECT_SYSCALL};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
@@ -145,8 +145,15 @@ pub extern "C" fn openat_syscall(
             should_cloexec,
             0,
         ) {
-            Ok(vfd) => vfd  as i64,
-            Err(_) => (syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened")) as i64,
+            Ok(vfd) => vfd as i64,
+            Err(_) => {
+                // close the kernel fd if there's an error on getting virtual fd,
+                // otherwise the host fd would leak on every EMFILE
+                unsafe {
+                    libc::close(kernel_fd);
+                }
+                syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened") as i64
+            }
         }
     }
 }
@@ -222,8 +229,15 @@ pub extern "C" fn open_syscall(
         should_cloexec,
         0,
     ) {
-        Ok(vfd) => (vfd as i64),
-        Err(_) => (syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened")) as i64,
+        Ok(vfd) => vfd as i64,
+        Err(_) => {
+            // close the kernel fd if there's an error on getting virtual fd,
+            // otherwise the host fd would leak on every EMFILE
+            unsafe {
+                libc::close(kernel_fd);
+            }
+            syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened") as i64
+        }
     }
 }
 
@@ -865,10 +879,11 @@ pub extern "C" fn mmap_syscall(
         | MAP_STACK as i32
         | ignored_flags;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic(&format!(
+        lind_debug_panic!(
             "mmap: unsupported flags {:#x} (allowed: {:#x})",
-            flags, allowed_flags
-        ));
+            flags,
+            allowed_flags
+        );
     }
 
     flags &= !ignored_flags;
@@ -924,6 +939,16 @@ pub extern "C" fn mmap_syscall(
 
         let space = result.unwrap();
         useraddr = vmmap.page_num_to_user(space.start());
+    }
+
+    if matches!(vmmap.user_addr_bit_width, VmmapBitWidth::Vmmap32Bit)
+        && (useraddr as u64) + (rounded_length as u64) > 0x100000000u64
+    {
+        return syscall_error(
+            Errno::EINVAL,
+            "mmap",
+            "address range overflows 32-bit space",
+        ) as i64;
     }
 
     flags |= MAP_FIXED as i32;
@@ -1350,7 +1375,8 @@ pub extern "C" fn brk_syscall(
 /// On error:
 /// Return error num EBADF(Bad File Descriptor)
 pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry, Errno> {
-    if vfd_arg > MAXFD as u64 {
+    // `>=`: fds run 0..MAXFD-1, so MAXFD itself is out of range.
+    if vfd_arg >= MAXFD as u64 {
         return Err(Errno::EBADF);
     }
     // Get underlying kernel fd
@@ -1446,7 +1472,9 @@ pub extern "C" fn fcntl_syscall(
                 arg as u64,
             ) {
                 Ok(new_vfd) => return (new_vfd as i32) as i64,
-                Err(_) => return (syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor")) as i64,
+                Err(_) => {
+                    return (syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor")) as i64
+                }
             }
         }
         // As for `F_DUPFD`, but additionally set the close-on-exec flag
@@ -1468,7 +1496,9 @@ pub extern "C" fn fcntl_syscall(
                 arg as u64,
             ) {
                 Ok(new_vfd) => return (new_vfd as i32) as i64,
-                Err(_) => return (syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor")) as i64,
+                Err(_) => {
+                    return (syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor")) as i64
+                }
             }
         }
         // Return (as the function result) the file descriptor flags.
@@ -1497,7 +1527,9 @@ pub extern "C" fn fcntl_syscall(
             let cloexec_flag: bool = arg != 0;
             match fdtables::set_cloexec(cageid, vfd_arg as u64, cloexec_flag) {
                 Ok(_) => return 0,
-                Err(_e) => return (syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor")) as i64,
+                Err(_e) => {
+                    return (syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor")) as i64
+                }
             }
         }
         // todo: F_GETOWN and F_SETOWN commands are not implemented yet
@@ -1547,12 +1579,9 @@ pub extern "C" fn fcntl_syscall(
 ///  - `arg3`–`arg6` and their corresponding `_cageid`: Reserved arguments (must be unused).
 ///
 /// ## Implementation Details:
-///  - The path arguments are translated from the RawPOSIX perspective into host kernel paths
-///    using `sc_convert_path_to_host`, which applies path normalization relative to the cage's CWD.
-///  - The unused arguments are validated with `sc_unusedarg`; any unexpected values are treated
-///    as a security violation.
-///  - The underlying `libc::link()` is invoked with the translated paths.
-///  - On failure, `errno` is retrieved via `get_errno()` and normalized through `handle_errno()`.
+///  - `link(oldpath, newpath)` is equivalent to `linkat(AT_FDCWD, oldpath, AT_FDCWD,
+///    newpath, 0)`, so this call delegates to `linkat_syscall`, which handles path
+///    translation, unused-argument validation, and errno normalization.
 ///
 /// ## Return Value:
 ///  - `0` on success.
@@ -1572,16 +1601,6 @@ pub extern "C" fn link_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
-    // Type conversion
-    let oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
-        Ok(oldpath) => oldpath,
-        Err(e) => return (syscall_error(e, "link", "path conversion failed")) as i64,
-    };
-    let newpath = match sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid) {
-        Ok(newpath) => newpath,
-        Err(e) => return (syscall_error(e, "link", "path conversion failed")) as i64,
-    };
-
     // Validate unused args
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -1594,13 +1613,141 @@ pub extern "C" fn link_syscall(
         );
     }
 
-    let ret = unsafe { libc::link(oldpath.as_ptr(), newpath.as_ptr()) };
+    // Delegate to linkat_syscall with both dirfds set to AT_FDCWD and no flags
+    linkat_syscall(
+        cageid,
+        AT_FDCWD as u64,
+        cageid,
+        oldpath_arg,
+        oldpath_cageid,
+        AT_FDCWD as u64,
+        cageid,
+        newpath_arg,
+        newpath_cageid,
+        0,
+        cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
+}
+
+//------------------------------------LINKAT SYSCALL------------------------------------
+/// `linkat_syscall` creates a new link (hard link) to an existing file, relative to
+/// directory file descriptors.
+/// Reference: https://man7.org/linux/man-pages/man2/linkat.2.html
+///
+/// ## Arguments:
+///  - `cageid`: Identifier of the calling Cage (namespace / process-like container).
+///  - `olddirfd_arg` / `olddirfd_cageid`: Directory fd that `oldpath` is resolved
+///    relative to, or `AT_FDCWD`.
+///  - `oldpath_arg` / `oldpath_cageid`: Address of the existing pathname in the caller's
+///    address space.
+///  - `newdirfd_arg` / `newdirfd_cageid`: Directory fd that `newpath` is resolved
+///    relative to, or `AT_FDCWD`.
+///  - `newpath_arg` / `newpath_cageid`: Address of the new pathname in the caller's
+///    address space.
+///  - `flags_arg` / `flags_cageid`: `AT_SYMLINK_FOLLOW` and/or `AT_EMPTY_PATH`.
+///  - `arg6` and its corresponding `_cageid`: Reserved argument (must be unused).
+///
+/// ## Implementation Details:
+///  - When a dirfd is `AT_FDCWD`, the corresponding path is translated into a host kernel
+///    path with `sc_convert_path_to_host` (normalized relative to the cage's CWD).
+///    Otherwise the virtual fd is translated to the underlying kernel fd and the raw
+///    (untranslated) path is passed through, letting the kernel resolve it relative to
+///    that directory.
+///  - The underlying `libc::linkat()` is invoked with the translated fds/paths and flags.
+///  - On failure, `errno` is retrieved via `get_errno()` and normalized through `handle_errno()`.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - Negative errno (`EEXIST`, `ENOENT`, `EBADF`, `EFAULT`, etc.) on failure.
+pub extern "C" fn linkat_syscall(
+    cageid: u64,
+    olddirfd_arg: u64,
+    olddirfd_cageid: u64,
+    oldpath_arg: u64,
+    oldpath_cageid: u64,
+    newdirfd_arg: u64,
+    newdirfd_cageid: u64,
+    newpath_arg: u64,
+    newpath_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    let olddirfd = sc_convert_sysarg_to_i32(olddirfd_arg, olddirfd_cageid, cageid);
+    let newdirfd = sc_convert_sysarg_to_i32(newdirfd_arg, newdirfd_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // Validate unused args
+    if !sc_unusedarg(arg6, arg6_cageid) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "linkat_syscall"
+        );
+    }
+
+    let c_oldpath;
+    let old_kernel_fd = if olddirfd == AT_FDCWD {
+        c_oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, "linkat", "old path conversion failed") as i64,
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, olddirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "linkat", "Bad olddirfd") as i64;
+        }
+        let vfd = wrappedvfd.unwrap();
+        // Use the raw (untranslated) path here intentionally. `sc_convert_path_to_host`
+        // resolves relative to CWD, but linkat interprets oldpath relative to olddirfd.
+        // The kernel handles that resolution, so we pass the original guest string.
+        let tmp_cstr = match get_cstr(oldpath_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EFAULT, "linkat", "invalid oldpath") as i64,
+        };
+        c_oldpath = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let c_newpath;
+    let new_kernel_fd = if newdirfd == AT_FDCWD {
+        c_newpath = match sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, "linkat", "new path conversion failed") as i64,
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, newdirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "linkat", "Bad newdirfd") as i64;
+        }
+        let vfd = wrappedvfd.unwrap();
+        let tmp_cstr = match get_cstr(newpath_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EFAULT, "linkat", "invalid newpath") as i64,
+        };
+        c_newpath = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let ret = unsafe {
+        libc::linkat(
+            old_kernel_fd,
+            c_oldpath.as_ptr(),
+            new_kernel_fd,
+            c_newpath.as_ptr(),
+            flags,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
-        return (handle_errno(errno, "link")) as i64;
+        return handle_errno(errno, "linkat") as i64;
     }
-    (ret) as i64
+    ret as i64
 }
 
 //------------------------------------XSTAT SYSCALL------------------------------------
@@ -2055,7 +2202,8 @@ pub extern "C" fn readlink_syscall(
     }
 
     // Call to kernel readlink
-    let bytes_written = unsafe { libc::readlink(path.as_ptr(), buf as *mut libc::c_char, buflen) as i64 };
+    let bytes_written =
+        unsafe { libc::readlink(path.as_ptr(), buf as *mut libc::c_char, buflen) as i64 };
 
     if bytes_written < 0 {
         let errno = get_errno();
@@ -2141,7 +2289,9 @@ pub extern "C" fn readlinkat_syscall(
             }
         };
 
-        unsafe { libc::readlinkat(kernel_fd, raw_path.as_ptr() as *const c_char, buf, buflen) as i64 }
+        unsafe {
+            libc::readlinkat(kernel_fd, raw_path.as_ptr() as *const c_char, buf, buflen) as i64
+        }
     };
 
     if ret < 0 {
@@ -2593,13 +2743,14 @@ fn renameat_inner(
 
     let ret = unsafe {
         if use_renameat2 {
-            libc::renameat2(
+            libc::syscall(
+                libc::SYS_renameat2,
                 old_kernel_fd,
                 c_oldpath.as_ptr(),
                 new_kernel_fd,
                 c_newpath.as_ptr(),
                 flags,
-            )
+            ) as libc::c_int
         } else {
             libc::renameat(
                 old_kernel_fd,
@@ -2993,13 +3144,24 @@ pub extern "C" fn dup_syscall(
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg as u64);
     if wrappedvfd.is_err() {
-        return (syscall_error(Errno::EBADF, "dup", "Bad File Descriptor")) as i64;
+        return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor") as i64;
     }
     let vfd = wrappedvfd.unwrap();
     let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
-    let ret_vfd =
-        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
-    return (ret_vfd as i64);
+    if ret_kernelfd < 0 {
+        return handle_errno(get_errno(), "dup") as i64;
+    }
+    // A full virtual fd table is an EMFILE condition, not a reason to panic inside
+    // a syscall. Close the host fd we just created so the failure path does not leak it.
+    match fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0) {
+        Ok(ret_vfd) => ret_vfd as i64,
+        Err(_) => {
+            unsafe {
+                libc::close(ret_kernelfd);
+            }
+            syscall_error(Errno::EMFILE, "dup", "Too many open files") as i64
+        }
+    }
 }
 
 /// dup2() performs the same task as dup(), so we utilize dup() here and mapping underlying kernel
@@ -3040,11 +3202,14 @@ pub extern "C" fn dup2_syscall(
     }
 
     // Validate both virtual fds
-    if old_vfd_arg > MAXFD as u64 || new_vfd_arg > MAXFD as u64 {
-        return (syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor")) as i64;
+    // `>=`: fds run 0..MAXFD-1, so MAXFD itself is out of range. With `>`,
+    // dup2(fd, MAXFD) reached get_specific_virtual_fd below, whose EBADF is
+    // unwrapped -- a guest could panic the host and take every cage with it.
+    if old_vfd_arg >= MAXFD as u64 || new_vfd_arg >= MAXFD as u64 {
+        return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor") as i64;
     } else if old_vfd_arg == new_vfd_arg {
         // Does nothing
-        return (new_vfd_arg as i64);
+        return new_vfd_arg as i64;
     }
 
     // If the file descriptor newfd was previously open, it is closed before being reused; the
@@ -3114,16 +3279,17 @@ pub extern "C" fn dup3_syscall(
         );
     }
 
-    if old_vfd_arg > MAXFD as u64 || new_vfd_arg > MAXFD as u64 {
-        return (syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor")) as i64;
+    // `>=`: see the equivalent bound in dup2_syscall above.
+    if old_vfd_arg >= MAXFD as u64 || new_vfd_arg >= MAXFD as u64 {
+        return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor") as i64;
     }
 
     if old_vfd_arg == new_vfd_arg {
-        return (syscall_error(Errno::EINVAL, "dup3", "oldfd and newfd must be different")) as i64;
+        return syscall_error(Errno::EINVAL, "dup3", "oldfd and newfd must be different") as i64;
     }
 
     if flags != 0 && flags != O_CLOEXEC {
-        return (syscall_error(Errno::EINVAL, "dup3", "Invalid flags")) as i64;
+        return syscall_error(Errno::EINVAL, "dup3", "Invalid flags") as i64;
     }
 
     let ret = dup2_syscall(
@@ -3873,6 +4039,71 @@ pub extern "C" fn pwrite_syscall(
     ret
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/copy_file_range.2.html
+///
+/// Linux `copy_file_range()` copies up to `len` bytes from one file descriptor
+/// to another. If `off_in` or `off_out` is NULL, the corresponding file offset
+/// is used and updated by the kernel. If they are non-NULL, they point to file
+/// offsets and the file offsets of the descriptors are not changed.
+pub extern "C" fn copy_file_range_syscall(
+    cageid: u64,
+    fd_in_arg: u64,
+    fd_in_cageid: u64,
+    off_in_arg: u64,
+    off_in_cageid: u64,
+    fd_out_arg: u64,
+    fd_out_cageid: u64,
+    off_out_arg: u64,
+    off_out_cageid: u64,
+    len_arg: u64,
+    len_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+) -> i64 {
+    let fd_in = convert_fd_to_host(fd_in_arg, fd_in_cageid, cageid);
+    if fd_in < 0 {
+        return handle_errno(-fd_in, "copy_file_range") as i64;
+    }
+
+    let fd_out = convert_fd_to_host(fd_out_arg, fd_out_cageid, cageid);
+    if fd_out < 0 {
+        return handle_errno(-fd_out, "copy_file_range") as i64;
+    }
+
+    let off_in = if off_in_arg == 0 {
+        std::ptr::null_mut()
+    } else {
+        sc_convert_buf(off_in_arg, off_in_cageid, cageid) as *mut libc::loff_t
+    };
+
+    let off_out = if off_out_arg == 0 {
+        std::ptr::null_mut()
+    } else {
+        sc_convert_buf(off_out_arg, off_out_cageid, cageid) as *mut libc::loff_t
+    };
+
+    let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
+    let flags = sc_convert_sysarg_to_u32(flags_arg, flags_cageid, cageid);
+
+    let ret = unsafe {
+        libc::syscall(
+            libc::SYS_copy_file_range as libc::c_long,
+            fd_in,
+            off_in,
+            fd_out,
+            off_out,
+            len,
+            flags,
+        ) as i64
+    };
+
+    if ret < 0 {
+        return handle_errno(get_errno(), "copy_file_range") as i64;
+    }
+
+    ret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/chdir.2.html
 ///
 /// Linux `chdir()` syscall changes the current working directory of the calling process to the directory
@@ -4601,7 +4832,7 @@ pub extern "C" fn ioctl_syscall(
     // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, FIONREAD, and TIOCGWINSZ right now.
     // Return error for unsupported requests.
     if req != FIONBIO && req != FIOASYNC && req != FIONREAD && req != TIOCGWINSZ {
-        lind_debug_panic("Lind unsupported ioctl request");
+        lind_debug_panic!("Lind unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
@@ -4771,7 +5002,7 @@ pub extern "C" fn shmget_syscall(
     }
 
     if key == IPC_PRIVATE {
-        lind_debug_panic("shmget key IPC_PRIVATE is not allowed in Lind");
+        lind_debug_panic!("shmget key IPC_PRIVATE is not allowed in Lind");
     }
     let shmid: i32;
     let metadata = &SHM_METADATA;
@@ -5243,7 +5474,8 @@ pub extern "C" fn getrandom_syscall(
         let errno = get_errno();
         return (handle_errno(errno, "getrandom")) as i64;
     }
-
+    // For 32 bit systems, the return value should be truncated to i32.
+    // For WASM this happens in src/glibc/sysdeps/unix/sysv/linux/getrandom.c
     ret
 }
 
@@ -5282,7 +5514,10 @@ pub extern "C" fn symlink_syscall(
     // sc_convert_path_to_host.
     let target = match get_cstr(target_arg) {
         Ok(path) => path,
-        Err(_) => return (syscall_error(Errno::EFAULT, "symlink", "target path conversion failed")) as i64,
+        Err(_) => {
+            return (syscall_error(Errno::EFAULT, "symlink", "target path conversion failed"))
+                as i64
+        }
     };
 
     // The linkpath is where the symlink is created, so it does need full path resolution.
@@ -5355,7 +5590,8 @@ pub extern "C" fn symlinkat_syscall(
     let target = match get_cstr(target_arg) {
         Ok(path) => path,
         Err(_) => {
-            return (syscall_error(Errno::EFAULT, "symlinkat", "target path conversion failed")) as i64
+            return (syscall_error(Errno::EFAULT, "symlinkat", "target path conversion failed"))
+                as i64
         }
     };
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
@@ -5389,7 +5625,9 @@ pub extern "C" fn symlinkat_syscall(
         // The kernel handles that resolution, so we pass the original guest pointer.
         let raw_linkpath = match get_cstr(linkpath_arg) {
             Ok(p) => p,
-            Err(_) => return (syscall_error(Errno::EINVAL, "symlinkat", "invalid linkpath")) as i64,
+            Err(_) => {
+                return (syscall_error(Errno::EINVAL, "symlinkat", "invalid linkpath")) as i64
+            }
         };
 
         unsafe {
@@ -5453,11 +5691,15 @@ pub extern "C" fn setxattr_syscall(
     // Type conversion for name (attribute name, not a path - no path normalization needed)
     let name_str = match get_cstr(name_arg) {
         Ok(s) => s,
-        Err(_) => return (syscall_error(Errno::EFAULT, "setxattr", "name conversion failed")) as i64,
+        Err(_) => {
+            return (syscall_error(Errno::EFAULT, "setxattr", "name conversion failed")) as i64
+        }
     };
     let name = match std::ffi::CString::new(name_str) {
         Ok(s) => s,
-        Err(_) => return (syscall_error(Errno::EINVAL, "setxattr", "name contains null byte")) as i64,
+        Err(_) => {
+            return (syscall_error(Errno::EINVAL, "setxattr", "name contains null byte")) as i64
+        }
     };
 
     // Type conversion for value buffer
@@ -5549,5 +5791,6 @@ pub extern "C" fn listxattr_syscall(
         return (handle_errno(errno, "listxattr")) as i64;
     }
 
+    // For 32 bit systems, the return value needs to be truncated to i32.
     ret
 }

@@ -94,7 +94,7 @@ fn deregister_entire_callnum_with_constant() {
 
 #[test]
 #[serial]
-fn selective_deregister_removes_only_matching_target_cage() {
+fn registering_different_handler_replaces_existing_mapping() {
     clear_globals();
 
     let cage = 7;
@@ -104,11 +104,8 @@ fn selective_deregister_removes_only_matching_target_cage() {
     assert_eq!(register_simple(cage, callnum, 91, 1002, OP_ADD), 0);
     assert_eq!(register_simple(cage, callnum, 92, 1003, OP_ADD), 0);
 
-    assert_eq!(register_simple(cage, callnum, 90, 0, OP_REMOVE), 0);
-
-    let mut m = mappings_for(cage, callnum);
-    m.sort_unstable();
-    assert_eq!(m, vec![(91, 1002), (92, 1003)]);
+    // Only one handler is retained for each (cage, syscall) pair.
+    assert_eq!(mappings_for(cage, callnum), vec![(92, 1003)]);
 }
 
 #[test]
@@ -144,7 +141,16 @@ fn cleanup_cage_removed_when_last_callnum_removed() {
     assert_eq!(register_simple(cage, SYSCALL_FOO, 90, 1, OP_ADD), 0);
     assert_eq!(register_simple(cage, SYSCALL_BAR, 91, 2, OP_ADD), 0);
 
-    assert_eq!(register_simple(cage, SYSCALL_FOO, 90, 1, OP_REMOVE), 0);
+    assert_eq!(
+        register_simple(
+            cage,
+            SYSCALL_FOO,
+            threei_const::THREEI_DEREGISTER,
+            0,
+            OP_REMOVE,
+        ),
+        0,
+    );
 
     #[cfg(feature = "hashmap")]
     {
@@ -197,22 +203,16 @@ fn deregister_not_found_is_ok() {
 fn copy_into_empty_target_copies_all() {
     clear_globals();
 
-    let src = 1001;
-    let dst = 2001;
+    let source = 7;
+    let target = 8;
 
-    assert_eq!(register_simple(src, SYSCALL_FOO, 90, 11, OP_ADD), 0);
-    assert_eq!(register_simple(src, SYSCALL_FOO, 91, 12, OP_ADD), 0);
+    assert_eq!(register_simple(source, SYSCALL_FOO, 90, 11, OP_ADD), 0);
+    assert_eq!(register_simple(source, SYSCALL_BAR, 91, 12, OP_ADD), 0);
 
-    let rc = cpy(dst, src);
-    assert_eq!(rc, 0);
+    assert_eq!(cpy(target, source), 0);
 
-    let mut got = mappings_for(dst, SYSCALL_FOO);
-    got.sort_unstable();
-    assert_eq!(got, vec![(90, 11), (91, 12)]);
-
-    let mut srcmap = mappings_for(src, SYSCALL_FOO);
-    srcmap.sort_unstable();
-    assert_eq!(srcmap, vec![(90, 11), (91, 12)]);
+    assert_eq!(mappings_for(target, SYSCALL_FOO), vec![(90, 11)]);
+    assert_eq!(mappings_for(target, SYSCALL_BAR), vec![(91, 12)]);
 }
 
 #[test]
@@ -234,46 +234,39 @@ fn copy_is_idempotent() {
 
 #[test]
 #[serial]
-fn copy_does_not_overwrite_existing_handlers() {
+fn copy_overwrites_existing_target_handlers() {
     clear_globals();
 
-    let src = 1003;
-    let dst = 2003;
+    let source = 7;
+    let target = 8;
 
-    assert_eq!(register_simple(src, SYSCALL_FOO, 99, 11, OP_ADD), 0);
-    assert_eq!(register_simple(src, SYSCALL_FOO, 100, 12, OP_ADD), 0);
+    assert_eq!(register_simple(target, SYSCALL_FOO, 77, 10, OP_ADD), 0);
+    assert_eq!(register_simple(target, SYSCALL_BAR, 78, 13, OP_ADD), 0);
 
-    assert_eq!(register_simple(dst, SYSCALL_FOO, 77, 11, OP_ADD), 0);
+    assert_eq!(register_simple(source, SYSCALL_FOO, 100, 12, OP_ADD), 0);
 
-    assert_eq!(cpy(dst, src), 0);
+    assert_eq!(cpy(target, source), 0);
 
-    let mut got = mappings_for(dst, SYSCALL_FOO);
-    got.sort_unstable();
-    assert_eq!(got, vec![(77, 11), (99, 11), (100, 12)]);
+    // Copy replaces the target cage's complete handler table.
+    assert_eq!(mappings_for(target, SYSCALL_FOO), vec![(100, 12)]);
+    assert!(mappings_for(target, SYSCALL_BAR).is_empty());
 }
 
 #[test]
 #[serial]
-fn copy_merges_multiple_callnums() {
+fn copy_preserves_multiple_source_callnums() {
     clear_globals();
 
-    let src = 1004;
-    let dst = 2004;
+    let source = 7;
+    let target = 8;
 
-    assert_eq!(register_simple(src, SYSCALL_FOO, 90, 11, OP_ADD), 0);
-    assert_eq!(register_simple(src, SYSCALL_BAR, 190, 21, OP_ADD), 0);
+    assert_eq!(register_simple(source, SYSCALL_FOO, 190, 21, OP_ADD), 0);
+    assert_eq!(register_simple(source, SYSCALL_BAR, 191, 22, OP_ADD), 0);
 
-    assert_eq!(register_simple(dst, SYSCALL_BAR, 191, 22, OP_ADD), 0);
+    assert_eq!(cpy(target, source), 0);
 
-    assert_eq!(cpy(dst, src), 0);
-
-    let mut got34 = mappings_for(dst, SYSCALL_FOO);
-    got34.sort_unstable();
-    assert_eq!(got34, vec![(90, 11)]);
-
-    let mut got35 = mappings_for(dst, SYSCALL_BAR);
-    got35.sort_unstable();
-    assert_eq!(got35, vec![(190, 21), (191, 22)]);
+    assert_eq!(mappings_for(target, SYSCALL_FOO), vec![(190, 21)]);
+    assert_eq!(mappings_for(target, SYSCALL_BAR), vec![(191, 22)]);
 }
 
 #[test]
