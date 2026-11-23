@@ -264,6 +264,37 @@ pub struct Cage {
     pub grate_inflight: AtomicU64,
 }
 
+impl Cage {
+    /// Creates a cage with the given identity and cwd. Every other field
+    /// starts empty or zeroed. The interval timer is bound to `cageid`.
+    ///
+    /// Fork starts from this value, then overwrites the public fields it
+    /// must inherit: the parent's signal handlers and virtual memory map.
+    pub fn new(cageid: u64, parent: u64, cwd: PathBuf) -> Self {
+        Self {
+            cageid,
+            parent,
+            cwd: RwLock::new(Arc::new(cwd)),
+            rev_shm: Mutex::new(Vec::new()),
+            signalhandler: DashMap::new(),
+            sigset: AtomicU64::new(0),
+            pending_signals: RwLock::new(Vec::new()),
+            epoch_handler: DashMap::new(),
+            os_tid_map: DashMap::new(),
+            main_threadid: RwLock::new(0),
+            interval_timer: IntervalTimer::new(cageid),
+            zombies: Mutex::new(Vec::new()),
+            wait_cond: Condvar::new(),
+            child_num: AtomicU64::new(0),
+            vmmap: RwLock::new(Vmmap::new()),
+            final_exit_status: RwLock::new(None),
+            exit_group_initiated: AtomicBool::new(false),
+            is_dead: AtomicBool::new(false),
+            grate_inflight: AtomicU64::new(0),
+        }
+    }
+}
+
 /// Global cage table indexed by cage ID.
 ///
 /// Each slot stores an optional `Arc<Cage>` using `ArcSwapOption`, allowing
@@ -442,36 +473,13 @@ mod tests {
     #[test]
     fn test_get_cage_valid() {
         cagetable_init();
-        // Create a cage with ID 2
-        let test_cage = Cage {
-            cageid: 2,
-            parent: 1,
-            cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
-            rev_shm: Mutex::new(Vec::new()),
-            signalhandler: DashMap::new(),
-            sigset: AtomicU64::new(0),
-            pending_signals: RwLock::new(vec![]),
-            epoch_handler: DashMap::new(),
-            os_tid_map: DashMap::new(),
-            main_threadid: RwLock::new(0),
-            interval_timer: crate::timer::IntervalTimer::new(2),
-            zombies: Mutex::new(vec![]),
-            wait_cond: Condvar::new(),
-            child_num: AtomicU64::new(0),
-            vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
-            final_exit_status: RwLock::new(None),
-            exit_group_initiated: AtomicBool::new(false),
-            is_dead: AtomicBool::new(false),
-            grate_inflight: AtomicU64::new(0),
-        };
+        let test_cage = Cage::new(2, 1, PathBuf::from("/"));
 
         add_cage(2, test_cage);
 
-        let result = get_cage(2);
-        assert_eq!(
-            result.unwrap().cageid,
-            2,
-            "Retrieved cage should have correct ID"
-        );
+        let result = get_cage(2).unwrap();
+        assert_eq!(result.cageid, 2, "Retrieved cage should have correct ID");
+        assert_eq!(result.parent, 1);
+        assert_eq!(&**result.cwd.read(), &PathBuf::from("/"));
     }
 }
