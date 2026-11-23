@@ -414,6 +414,13 @@ pub extern "C" fn select_syscall(
         None
     };
 
+    // lind-perf (perf builds only): time only zero-timeout calls (polls); calls that may sleep
+    // would swamp the handler's own costs.
+    #[cfg(feature = "lind_perf")]
+    let perf_poll = timeout_ptr.map_or(false, |t| unsafe { (*t).tv_sec == 0 && (*t).tv_usec == 0 });
+    perf_timer_if!(_t_select = SELECT, perf_poll);
+    perf_timer_if!(_t_prepare = SELECT_PREPARE, perf_poll);
+
     // Create fdkindset for fdtables processing
     let mut fdkindset = HashSet::new();
     fdkindset.insert(FDKIND_KERNEL);
@@ -458,6 +465,7 @@ pub extern "C" fn select_syscall(
         .unwrap_or((0, fdtables::_init_fd_set()));
 
     let realnewnfds = readnfd.max(writenfd).max(errornfd);
+    perf_stop!(_t_prepare);
 
     // Convert timeval pointer to milliseconds for consistency with poll/epoll_wait timeout handling
     // select takes a timeval* (tv_sec + tv_usec), but poll/epoll_wait use integer milliseconds
@@ -474,6 +482,7 @@ pub extern "C" fn select_syscall(
         tv_usec: 0,
     };
 
+    perf_timer_if!(_t_loop = SELECT_KERNEL_LOOP, perf_poll);
     let start_time = starttimer();
     // Keep track of total timeout duration for exit handling later
     let (duration, chunk_timeout) = timeout_setup_ms(timeout_ms);
@@ -549,6 +558,9 @@ pub extern "C" fn select_syscall(
             return (syscall_error(Errno::EINTR, "select_syscall", "interrupted")) as i64;
         }
     }
+
+    perf_stop!(_t_loop);
+    perf_timer_if!(_t_results = SELECT_RESULTS, perf_poll);
 
     let unreal_read = HashSet::new();
     let unreal_write = HashSet::new();

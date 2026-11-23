@@ -70,6 +70,61 @@
 //! a given (cage_id, tid), because execution must resume in the same continuation. For grate calls, by
 //! contrast, lind-3i only needs to obtain some available worker for the target grate, because correctness
 //! depends on entering a compatible grate instance, not on resuming a previously suspended continuation.
+// lind-perf timing hooks. With the `lind_perf` feature they start/stop a timer on a counter
+// from this crate's `perf` module; without it they expand to nothing, so normal builds contain
+// no perf code. Defined before the `mod` declarations so every module can use them.
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_timer {
+    ($guard:ident = $counter:ident) => {
+        let $guard = crate::perf::$counter.timer();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_timer {
+    ($guard:ident = $counter:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_stop {
+    ($guard:ident) => {
+        drop($guard);
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_stop {
+    ($guard:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_span_start {
+    ($counter:ident) => {
+        crate::perf::$counter.span_start();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_span_start {
+    ($counter:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {
+        crate::perf::$counter.span_end();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {};
+}
+
+#[cfg(feature = "lind_perf")]
+pub mod perf;
+
 use anyhow::Context;
 use std::collections::{HashMap, VecDeque};
 use std::env;
@@ -347,6 +402,7 @@ impl<'a, T: 'static> Drop for WorkerLease<'a, T> {
     /// execution unwinds due to an error or trap.
     fn drop(&mut self) {
         if let Some(worker) = self.worker.take() {
+            perf_timer!(_t = WORKER_RELEASE);
             self.owner.return_worker(worker);
         }
     }
@@ -504,8 +560,10 @@ impl<T: 'static> GrateHandler<T> {
     /// ensuring that at most one call enters the grate at a time even though
     /// the handler may still own multiple workers.
     fn submit_serialized(&self, req: GrateRequest) -> anyhow::Result<i64> {
+        perf_timer!(_t_acquire = WORKER_ACQUIRE);
         let _serial_guard = self.serial_executor.enter();
         let worker = self.take_worker_blocking();
+        perf_stop!(_t_acquire);
         let mut lease = WorkerLease::new(self, worker);
         lease.worker_mut().run(req)
     }
@@ -516,7 +574,9 @@ impl<T: 'static> GrateHandler<T> {
     /// runs the request immediately. Different callers may therefore execute
     /// concurrently as long as different workers are available.
     fn submit_parallel(&self, req: GrateRequest) -> anyhow::Result<i64> {
+        perf_timer!(_t_acquire = WORKER_ACQUIRE);
         let worker = self.take_worker_blocking();
+        perf_stop!(_t_acquire);
         let mut lease = WorkerLease::new(self, worker);
         lease.worker_mut().run(req)
     }
@@ -528,6 +588,7 @@ impl<T: 'static> GrateHandler<T> {
     /// and then dispatches the request according to the handler’s configured
     /// concurrency mode.
     pub fn submit(&self, req: GrateRequest) -> anyhow::Result<i64> {
+        perf_timer!(_t_submit = SUBMIT);
         let _active_guard = ActiveCallGuard::new(self)?;
 
         match self.concurrency_mode {
@@ -605,6 +666,7 @@ impl<T: 'static> GrateWorker<T> {
     /// The worker resets its stack, resolves the exported grate entry function,
     /// and invokes `pass_fptr_to_wt` with the marshalled request arguments.
     fn run(&mut self, req: GrateRequest) -> anyhow::Result<i64> {
+        perf_timer!(_t_run = WORKER_RUN);
         #[cfg(feature = "debug-grate-calls")]
         {
             println!(
@@ -613,39 +675,44 @@ impl<T: 'static> GrateWorker<T> {
             );
         }
 
+        perf_timer!(_t_reset = WORKER_RESET_STACK);
         self.reset_worker_stack();
+        perf_stop!(_t_reset);
 
         let func = self.pass_fptr_func.as_ref().ok_or_else(|| {
             anyhow::anyhow!("no pass_fptr_func found in worker {}", self.worker_id)
         })?;
 
-        let ret = func
-            .call(
-                &mut self.store,
-                (
-                    req.handler_addr,
-                    req.cageid,
-                    req.arg1,
-                    req.arg1cageid,
-                    req.arg2,
-                    req.arg2cageid,
-                    req.arg3,
-                    req.arg3cageid,
-                    req.arg4,
-                    req.arg4cageid,
-                    req.arg5,
-                    req.arg5cageid,
-                    req.arg6,
-                    req.arg6cageid,
-                ),
+        perf_span_end!(SPAN_3I_TO_GRATE_WASM);
+        perf_timer!(_t_call = PASS_FPTR_CALL);
+        let res = func.call(
+            &mut self.store,
+            (
+                req.handler_addr,
+                req.cageid,
+                req.arg1,
+                req.arg1cageid,
+                req.arg2,
+                req.arg2cageid,
+                req.arg3,
+                req.arg3cageid,
+                req.arg4,
+                req.arg4cageid,
+                req.arg5,
+                req.arg5cageid,
+                req.arg6,
+                req.arg6cageid,
+            ),
+        );
+        perf_stop!(_t_call);
+        perf_span_start!(SPAN_GRATE_WASM_TO_3I);
+        let ret = res.map_err(|e| {
+            anyhow::anyhow!(
+                "pass_fptr_to_wt trapped in worker {}: {:#}",
+                self.worker_id,
+                e
             )
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "pass_fptr_to_wt trapped in worker {}: {:#}",
-                    self.worker_id,
-                    e
-                )
-            })?;
+        })?;
 
         #[cfg(feature = "debug-grate-calls")]
         println!(

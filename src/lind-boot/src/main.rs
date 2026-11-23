@@ -1,5 +1,10 @@
+// lind-perf timing macros (expand to nothing without the `lind_perf` feature).
+#[macro_use]
+mod perf_macros;
 mod cli;
 mod lind_wasmtime;
+#[cfg(feature = "lind_perf")]
+mod perf;
 
 use crate::{
     cli::CliOptions,
@@ -70,6 +75,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // lind-perf (perf builds only). A child process started by `--perf` enables its one
+    // counter and opens its result file here, before the chroot. Otherwise, `--perf` makes
+    // this process the parent: it re-runs lind-boot once per counter and prints the report,
+    // and never runs the program itself.
+    #[cfg(feature = "lind_perf")]
+    let perf_child = perf::child_init();
+    #[cfg(feature = "lind_perf")]
+    {
+        if perf_child.is_none() {
+            if let Some(timer) = lindboot_cli.perf {
+                std::process::exit(perf::run_parent(&lindboot_cli, timer));
+            }
+        }
+    }
+
     // Not a precompile command, chroot to lindfs
     chroot_to_lindfs();
 
@@ -91,9 +111,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // program exit code, terminate with EX_SOFTWARE (70) to signal
     // a runtime-level failure rather than a cage-provided exit code.
     match execute_wasmtime(lindboot_cli) {
-        Ok(code) => std::process::exit(code),
+        Ok(code) => {
+            #[cfg(feature = "lind_perf")]
+            perf::child_finish(perf_child);
+            std::process::exit(code)
+        }
         Err(e) => {
             eprintln!("{:?}", e);
+            #[cfg(feature = "lind_perf")]
+            perf::child_finish(perf_child);
             std::process::exit(sysdefs::constants::EX_SOFTWARE);
         }
     }

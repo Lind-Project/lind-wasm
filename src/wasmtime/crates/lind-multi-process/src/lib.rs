@@ -1,5 +1,61 @@
 #![allow(dead_code)]
 
+// lind-perf timing hooks. With the `lind_perf` feature they start/stop a timer on a counter
+// from this crate's `perf` module; without it they expand to nothing, so normal builds contain
+// no perf code. The `_any` forms record whenever the counter is the one enabled for the run, not
+// only during a timed benchmark syscall: fork and exit run outside one, partly on new threads.
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_timer_any {
+    ($guard:ident = $counter:ident) => {
+        let $guard = crate::perf::$counter.timer_any();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_timer_any {
+    ($guard:ident = $counter:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_stop {
+    ($guard:ident) => {
+        drop($guard);
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_stop {
+    ($guard:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_span_start_any {
+    ($counter:ident) => {
+        crate::perf::$counter.span_start_any();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_span_start_any {
+    ($counter:ident) => {};
+}
+#[cfg(feature = "lind_perf")]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {
+        crate::perf::$counter.span_end();
+    };
+}
+#[cfg(not(feature = "lind_perf"))]
+#[allow(unused_macros)]
+macro_rules! perf_span_end {
+    ($counter:ident) => {};
+}
+
+#[cfg(feature = "lind_perf")]
+pub mod perf;
+
 use cfg_if::cfg_if;
 
 use anyhow::{Context, Result, anyhow};
@@ -316,6 +372,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // 5. fork the memory region to child (including saved unwind context)
     // 6. start the rewind for both parent and child
     pub fn fork_call(&self, mut caller: &mut Caller<'_, T>, child_cageid: u64) -> Result<i32> {
+        perf_timer_any!(_t_setup = FORK_PARENT_SETUP);
         // get the base address of the memory
         let address = get_memory_base(&mut caller) as *mut u8;
 
@@ -370,6 +427,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // retrieve the child host
         let mut child_host = (self.fork_host)(caller.data(), false);
 
+        perf_timer_any!(_t_snapshots = FORK_PARENT_SNAPSHOTS);
         let mut snapshot = {
             let mut parent_host = caller.data_mut();
             let parent_ctx = get_cx(&mut parent_host);
@@ -383,6 +441,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         };
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
+        perf_stop!(_t_snapshots);
 
         // mark the start of unwind
         let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
@@ -414,6 +473,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let is_parent_thread = store.is_thread();
 
         store.set_on_called(Box::new(move |mut store| {
+            perf_span_end!(SPAN_FORK_PARENT_UNWIND);
+            perf_timer_any!(_t_callback = FORK_PARENT_CALLBACK);
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
@@ -425,8 +486,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             let builder = thread::Builder::new()
                 .name(format!("lind-fork-{}", child_cageid))
                 .stack_size(thread_stack_size);
+            perf_timer_any!(_t_spawn = FORK_PARENT_SPAWN);
             builder
                 .spawn(move || {
+                    perf_timer_any!(_t_child = FORK_CHILD_SETUP);
+                    perf_timer_any!(_t_store = FORK_CHILD_STORE);
                     // create a new instance
                     let store_inner = Store::<T>::new_inner(&engine, symbol_table)
                         .expect("failed to create store inner");
@@ -453,7 +517,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner)
                         .expect("failed to create store");
+                    perf_stop!(_t_store);
 
+                    perf_timer_any!(_t_linker = FORK_CHILD_LINKER);
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
                         Linker::new_child_linker(
                             &mut store,
@@ -464,6 +530,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             &snapshot.2,
                         )
                         .expect("failed to create child linker");
+                    perf_stop!(_t_linker);
 
                     // early init vmmap
                     cage::init_vmmap(child_cageid, child_memory_base.unwrap() as usize, None);
@@ -560,6 +627,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     }
 
                     // don't use child's stack_arena_base since it is not initialized yet, use parent's stack_arena_base instead
+                    perf_timer_any!(_t_instantiate = FORK_CHILD_INSTANTIATE);
                     let (instance, _, grate_instanceid) = linker
                         .instantiate_with_lind(
                             &mut store,
@@ -570,6 +638,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             },
                         )
                         .unwrap();
+                    perf_stop!(_t_instantiate);
 
                     // Global snapshot workflow:
                     // 1. register_named_instance: record the child's main module instance under
@@ -708,6 +777,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     // Notify threei of the cage runtime type
                     threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
+                    perf_stop!(_t_child);
                     barrier_clone.wait();
 
                     // update the linker for the child instance, since new linker contains some child-specific defines
@@ -801,6 +871,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             .as_context_mut()
                             .set_syscall_asyncify_data(syscall_asyncify_data);
 
+                        perf_span_start_any!(SPAN_FORK_CHILD_TO_EXIT);
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
                         // Wasm instance crashed — perform the same cleanup
                         // as the signal-handler error path so the parent
@@ -844,9 +915,12 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     return 0;
                 })
                 .unwrap();
+            perf_stop!(_t_spawn);
 
             // wait until child has fully copied the memory
+            perf_timer_any!(_t_wait = FORK_PARENT_WAIT);
             barrier.wait();
+            perf_stop!(_t_wait);
 
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
@@ -854,6 +928,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // set up asyncify state and fork return value for parent
             store.set_asyncify_state(AsyncifyState::Rewind(child_cageid as i32));
 
+            perf_stop!(_t_callback);
+            perf_span_start_any!(SPAN_FORK_PARENT_REWIND);
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
         }));
@@ -861,6 +937,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // set asyncify state to unwind
         store.set_asyncify_state(AsyncifyState::Unwind);
 
+        perf_stop!(_t_setup);
+        perf_span_start_any!(SPAN_FORK_PARENT_UNWIND);
         // The "dual" return from fork is handled directly in the wasm modules through asyncify.
         // We return the newly forked child_cageid so that callers invoking this path through
         // `make_threei_call` are aware of the cageid of the forked process.
@@ -1604,6 +1682,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // actual exit syscall that would kill other threads is not supported yet
     // TODO: exit_call should be switched to epoch interrupt method later
     pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, _is_last_thread: u64) {
+        perf_span_end!(SPAN_FORK_CHILD_TO_EXIT);
+        perf_timer_any!(_t_exit = EXIT_CALL);
         // Capture values for the deferred OnCalledAction closure.
         // Every thread defers lind_thread_exit to OnCalledAction so that
         // the epoch_handler entry stays alive until the asyncify unwind
@@ -1647,6 +1727,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let store = caller.as_context_mut().0;
 
         store.set_on_called(Box::new(move |mut store| {
+            perf_span_end!(SPAN_EXIT_UNWIND);
+            perf_timer_any!(_t_cleanup = EXIT_CLEANUP);
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
@@ -1657,7 +1739,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             if is_last {
                 // cage_finalize waits for grate_inflight to drain,
                 // records zombie/SIGCHLD, removes fdtable + cage.
+                perf_timer_any!(_t_finalize = EXIT_FINALIZE);
                 cage::cage_finalize(deferred_cageid);
+                perf_stop!(_t_finalize);
 
                 // Remove the VMContext pool
                 if !rm_vmctx_thread(deferred_cageid, 0) {
@@ -1672,11 +1756,14 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 deferred_lind_manager.decrement();
             }
 
+            perf_stop!(_t_cleanup);
             return Ok(OnCalledAction::Finish(vec![Val::I32(code)]));
         }));
 
         // set asyncify state to unwind
         store.set_asyncify_state(AsyncifyState::Unwind);
+        perf_stop!(_t_exit);
+        perf_span_start_any!(SPAN_EXIT_UNWIND);
         // after returning from here, unwind process should start
     }
 

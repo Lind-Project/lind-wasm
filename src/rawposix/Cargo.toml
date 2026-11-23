@@ -16,12 +16,15 @@ sysdefs = { path = "../sysdefs" }
 typemap = { path = "../typemap" }
 cage = { path = "../cage" }
 threei = { path = "../threei" }
+lind-perf = { path = "../lind-perf", optional = true }
 
 [features]
 default = ["fast"]
 fast = []
 secure = []
 lind-logging = ["sysdefs/lind-logging"]
+# Per-layer syscall timing + benchmark syscalls 2001/2002; perf builds only (see src/lind-perf).
+lind_perf = ["dep:lind-perf"]
 # Pass-through selectors for the fdtables backend. Exactly one must be
 # enabled by a downstream crate (lind-boot) — rawposix on its own won't
 # compile without one of these because fdtables itself has no default.
