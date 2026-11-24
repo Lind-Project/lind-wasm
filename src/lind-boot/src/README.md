@@ -14,7 +14,6 @@ src/
 ├── exec.rs
 ├── exit.rs
 ├── shims.rs
-├── lind_mpk/
 └── lind_wasmtime/
     ├── mod.rs
     ├── execute.rs
@@ -22,9 +21,29 @@ src/
     └── trampoline.rs
 ```
 
-`shims.rs` remains the active clone, exec, and exit dispatch. The new
-`clone.rs`, `exec.rs`, and `exit.rs` modules are reserved for its eventual
-replacement. The draft interface lives in
+`shims.rs` remains the active clone, exec, and exit dispatch. Clone is the
+universal handler: it classifies the clone flags (fork, pthread clone, or
+unsupported) and calls `LindRuntime::duplicate_cage`/`duplicate_thread` on
+the cage's runtime. Core allocates the new thread ID
+(`cage::alloc_thread_id`; a forked child starts as `cage::MAIN_THREAD_ID`) and
+passes both results in `LindThreadDuplicateArgs` (parent: child cage ID or new
+thread ID; child: 0). Exec stages the new image with
+`init_cage(staging, path, args, true)`, creates its main thread with
+`create_thread`, and commits it with `apply_staging_cage`; the staging ID is a
+synthetic `(1 << 32) | target` that is never in the cage table. Exit calls
+`terminate_thread` with the exit status, which commits the thread to exit and returns; the runtime
+retires the thread at its next scheduling point and reports it with Core's
+`lind_if::LindCore::thread_exited` (registered here as `cage::CORE`), which
+calls `terminate_cage` after the last thread. The MPK runtime (loader, execution,
+`gs_fork`, syscalls, signals, trampolines) lives in `lind-runtimes::lind_mpk`;
+`main.rs` launches ELF programs through `execute_mpk` with an `MpkLaunch`.
+The Wasm runtime is `lind_runtimes::lind_wasm::lind_if::WasmRuntime`, which
+calls `wasmtime-lind-multi-process` and is instantiated here as
+`WasmRuntime<HostCtx, CliOptions>` because those host types live in boot.
+Comments in the exec and exit handlers list the steps for the paths that are
+still unsupported (cross-runtime exec, terminating another thread).
+The new `clone.rs`, `exec.rs`, and `exit.rs` modules are reserved for the
+eventual replacement of the shims. The draft interface lives in
 the [`lind-if`](../../lind-if) crate; the Wasm and MPK
 implementations are scaffolded in [`lind-runtimes`](../../lind-runtimes).
 Memory operations now follow
@@ -38,8 +57,8 @@ negative errnos. Runtime `do_munmap` is a plain host unmap. Guest `munmap` and
 fixed anonymous `PROT_NONE` `do_mmap` over the released range instead of
 calling `do_munmap`. MPK protection-key management (`pkeys`) lives in
 `lind-runtimes::lind_mpk`; MPK `do_mmap` uses it directly so fixed mappings
-inside a reservation keep the cage's key. `lind_mpk::pkeys` here re-exports it,
-and boot still installs its hooks into `cage` for legacy mapping paths.
+inside a reservation keep the cage's key, and MPK initialization installs its
+hooks into `cage` for legacy mapping paths.
 Signals follow `Lind-Core -> LindRuntime::notify_signal`: `register_syscall_entries`
 registers both runtimes with `cage` by runtime type (`cage::register_runtime`),
 and `cage` depends only on `lind-if`, not on the implementations. Core queues

@@ -39,6 +39,7 @@ fn make_cage(cageid: u64) -> Cage {
         cageid,
         parent: 1,
         cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+        umask: std::sync::atomic::AtomicU32::new(0o022),
         rev_shm: Mutex::new(Vec::new()),
         signalhandler: Default::default(),
         sigset: AtomicU64::new(0),

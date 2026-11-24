@@ -14,7 +14,7 @@ use std::ffi::CString;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering::*;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
@@ -118,6 +118,16 @@ pub extern "C" fn uname_syscall(
 /// (`pthread_create`). In this case, no new Cage is created. Threads share the same
 /// Cage. Address space and execution context must be duplicated or adjusted within
 /// the WebAssembly runtime.
+///
+/// ## vfork
+///
+/// `CLONE_VM | CLONE_VFORK` without `CLONE_THREAD` (native glibc's
+/// `posix_spawn`) asks for a child process sharing the parent's memory, which
+/// the runtimes cannot create yet. It is turned into a vfork-style fork: the
+/// child gets a copy of the memory and the parent is held until the child execs
+/// or exits. POSIX allows vfork to behave like fork; the only visible difference
+/// is that memory writes by the child (e.g. `posix_spawn` reporting an exec
+/// failure) do not reach the parent.
 pub extern "C" fn fork_syscall(
     cageid: u64,
     clone_arg: u64,        // Child's cage id
@@ -152,6 +162,14 @@ pub extern "C" fn fork_syscall(
     //
     // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
     // otherwise, we are creating a process (i.e. fork)
+    if args.flags & sys_const::CLONE_VFORK != 0
+        && args.flags & sys_const::CLONE_VM != 0
+        && args.flags & sys_const::CLONE_THREAD == 0
+    {
+        // Rewritten in the guest's clone_args too: the runtime reads the flags
+        // from there when duplicating the thread.
+        args.flags &= !sys_const::CLONE_VM;
+    }
     let flags = args.flags;
     let isthread = flags & (sys_const::CLONE_VM);
 
@@ -178,6 +196,7 @@ pub extern "C" fn fork_syscall(
         let cageobj = Cage {
             cageid: child_cageid,
             cwd: RwLock::new(selfcage.cwd.read().clone()),
+            umask: AtomicU32::new(selfcage.umask.load(Relaxed)),
             parent: parent_cageid,
             rev_shm: Mutex::new(Vec::new()),
             main_threadid: RwLock::new(0),
@@ -320,28 +339,15 @@ pub extern "C" fn exec_syscall(
     // if Asyncify begins unwinding, exec has succeeded.
     // By convention, Asyncify unwind returns 0, which we use as the success signal.
     if ret == 0 {
-        // Empty fd with flag should_cloexec
-        fdtables::empty_fds_for_exec(cageid);
-
-        // Copy necessary data from current cage
-        let selfcage = get_cage(cageid).unwrap();
-
-        selfcage.rev_shm.lock().clear();
+        exec_reset_cage_state(cageid);
 
         // ensures that all old mappings and states are discarded, allowing the new cage to
         // run in a clean virtual address space, while reusing the existing `Vmmap` container
-        // to avoid extra allocations.
+        // to avoid extra allocations. (MPK reinitializes the vmmap itself.)
+        let selfcage = get_cage(cageid).unwrap();
         let mut vmmap = selfcage.vmmap.write();
         vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
 
-        // perform signal related clean up
-        // all the signal handler becomes default after exec
-        // pending signals should be perserved though
-        selfcage.signalhandler.clear();
-        // the sigset will be reset after exec
-        selfcage.sigset.store(0, Relaxed);
-        // The new image starts with only its initial thread.
-        cage::reset_thread_ids(cageid);
         // Do NOT clear epoch_handler or main_threadid here.
         // If exec-ed module crashes, the thread is still running and needs its
         // epoch_handler entry for proper exit tracking.  On success,
@@ -351,6 +357,29 @@ pub extern "C" fn exec_syscall(
     }
 
     ret
+}
+
+/// Resets the runtime-independent cage state once an exec has passed its
+/// point of no return: closes the `should_cloexec` fds, drops the shared
+/// memory bookkeeping, restores default signal handlers, and leaves only the
+/// initial thread.
+///
+/// Wasm reaches this from `exec_syscall` after the old image unwound. MPK's
+/// exec never returns on success, so its runtime calls this itself after
+/// tearing down the old image.
+pub fn exec_reset_cage_state(cageid: u64) {
+    fdtables::empty_fds_for_exec(cageid);
+
+    let selfcage = get_cage(cageid).unwrap();
+    selfcage.rev_shm.lock().clear();
+
+    // all the signal handler becomes default after exec
+    // pending signals should be perserved though
+    selfcage.signalhandler.clear();
+    // the sigset will be reset after exec
+    selfcage.sigset.store(0, Relaxed);
+    // The new image starts with only its initial thread.
+    cage::reset_thread_ids(cageid);
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
@@ -907,6 +936,48 @@ pub extern "C" fn getgid_syscall(
     (unsafe { libc::getgid() } as i64)
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getgroups.2.html
+///
+/// Cages have no supplementary groups, so this reports an empty list and never
+/// touches `list_arg`. POSIX leaves it unspecified whether the effective group
+/// ID is included, and callers such as `id` add it themselves.
+///
+/// ## Returns
+/// - 0 (number of supplementary groups) on success.
+/// - `-EINVAL` if `size` is negative.
+pub extern "C" fn getgroups_syscall(
+    cageid: u64,
+    size_arg: u64,
+    size_cageid: u64,
+    _list_arg: u64,
+    _list_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    let size = sc_convert_sysarg_to_i32(size_arg, size_cageid, cageid);
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getgroups_syscall"
+        );
+    }
+
+    if size < 0 {
+        return syscall_error(Errno::EINVAL, "getgroups", "negative size") as i64;
+    }
+    0
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getegid.2.html
 ///
 /// Get the effective **host** group ID of the calling process.
@@ -1342,6 +1413,18 @@ pub extern "C" fn sigprocmask_syscall(
     (res) as i64
 }
 
+/// The fixed (soft == hard) limit Lind reports for `resource`, if supported.
+fn fixed_rlimit(resource: u32) -> Option<u64> {
+    match resource {
+        RLIMIT_STACK => Some(8 * 1024 * 1024),
+        RLIMIT_NOFILE => Some(1024),
+        RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => Some(MAX_LINEAR_MEMORY_SIZE),
+        RLIMIT_NPROC => Some(MAX_CAGEID as u64),
+        RLIMIT_CORE => Some(0),
+        _ => None,
+    }
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/prlimit.2.html
 ///
 /// Reads or sets resource limits.
@@ -1384,26 +1467,29 @@ pub extern "C" fn prlimit64_syscall(
     // get resource numeber from arg2
     let resource = sc_convert_sysarg_to_u32(arg2, arg2_cageid, cageid);
 
-    // setrlimit unsupported
+    // Limits are fixed (soft == hard), so setrlimit can only succeed when it
+    // leaves them unchanged, e.g. GNU make's `rlim_cur = rlim_max`.
     if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
-        lind_debug_panic!("prlimit64: setrlimit not supported");
-        return (syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported")) as i64;
+        let new_limit = match convert_rlimit_from_user(cageid, arg3, arg3_cageid) {
+            Ok(limit) => limit,
+            Err(e) => {
+                return (syscall_error(e, "prlimit64", "could not read resource limit")) as i64
+            }
+        };
+        let unchanged = fixed_rlimit(resource)
+            .is_some_and(|v| new_limit.rlim_cur == v && new_limit.rlim_max == v);
+        if !unchanged {
+            lind_debug_panic!("prlimit64: setrlimit not supported");
+            return (syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported")) as i64;
+        }
     }
 
     // handle getrlimit calls
-    // default to 1024.
     if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid) {
-        let limit = match resource {
-            RLIMIT_STACK => 8 * 1024 * 1024,
-            RLIMIT_NOFILE => 1024,
-            RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => MAX_LINEAR_MEMORY_SIZE,
-            RLIMIT_NPROC => MAX_CAGEID as u64,
-            RLIMIT_CORE => 0,
-            _ => {
-                lind_debug_panic!("prlimit64: unsupported resource {}", resource);
-                0
-            }
-        };
+        let limit = fixed_rlimit(resource).unwrap_or_else(|| {
+            lind_debug_panic!("prlimit64: unsupported resource {}", resource);
+            0
+        });
         let old_limit = Rlimit64 {
             rlim_cur: limit,
             rlim_max: limit,

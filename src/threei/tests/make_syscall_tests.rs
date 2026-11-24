@@ -101,6 +101,45 @@ fn non_exit_syscall_falls_through_to_rawposix_path_when_not_interposed() {
     assert_eq!(rc, threei_const::ELINDAPIABORTED as i64);
 }
 
+/// A cage with a handler table but no handler for the requested syscall
+/// gets -ENOSYS instead of a runtime panic.
+#[test]
+#[serial]
+fn unregistered_syscall_returns_enosys() {
+    clear_globals();
+    assert_eq!(
+        register_simple(
+            CAGE_A,
+            SYSCALL_FOO,
+            RAWPOSIX_CAGEID,
+            rawposix_wide_return as *const () as usize as u64,
+            OP_ADD,
+        ),
+        0
+    );
+
+    let ret = make_syscall(
+        CAGE_A,
+        SYSCALL_FOO + 1,
+        0,
+        CAGE_A,
+        0,
+        CAGE_A,
+        0,
+        CAGE_A,
+        0,
+        CAGE_A,
+        0,
+        CAGE_A,
+        0,
+        CAGE_A,
+        0,
+        CAGE_A,
+    );
+
+    assert_eq!(ret, -(sysdefs::constants::err_const::Errno::ENOSYS as i64));
+}
+
 /// If there is an interposition entry for (self_cageid, syscall_num),
 /// make_syscall should call into the grate (via _call_grate_func) and return
 /// that function's status code. This requires that the test setup installs

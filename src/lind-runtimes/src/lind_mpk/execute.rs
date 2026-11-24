@@ -917,6 +917,12 @@ pub(crate) fn exec_mpk_internal(cage_id: u64, prepared: PreparedMpkExec) -> anyh
         }
     }
 
+    // The old image is gone; reset the runtime-independent cage state
+    // (close-on-exec fds, signal handlers, threads) as Wasm does once its old
+    // image unwound. Without this, CLOEXEC fds survive exec, e.g. git's
+    // run-command notifier pipe, so the parent blocks forever.
+    rawposix::sys_calls::exec_reset_cage_state(cage_id);
+
     // Step 5: Reuse this thread's supervisor stack and context stack, or set
     // them up if the thread has none yet. The MpkThreadInfo is registered in
     // MPKRuntimeInfo::threads below.

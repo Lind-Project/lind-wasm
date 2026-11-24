@@ -752,6 +752,28 @@ pub fn convert_rlimit_to_user(
     Ok(())
 }
 
+/// Reads resource limits using the calling cage's ABI; the counterpart of
+/// `convert_rlimit_to_user`. The buffer must be non-null and valid.
+pub fn convert_rlimit_from_user(
+    cageid: u64,
+    arg: u64,
+    arg_cageid: u64,
+) -> Result<Rlimit64, Errno> {
+    if cage_is_mpk(cageid) {
+        let limit = sc_convert_addr_to_rlimit64(arg, arg_cageid, cageid)?;
+        Ok(Rlimit64 {
+            rlim_cur: limit.rlim_cur,
+            rlim_max: limit.rlim_max,
+        })
+    } else {
+        let limit = sc_convert_addr_to_rlimit(arg, arg_cageid, cageid)?;
+        Ok(Rlimit64 {
+            rlim_cur: limit.rlim_cur as u64,
+            rlim_max: limit.rlim_max as u64,
+        })
+    }
+}
+
 /// Translates a user-provided address from the Cage's virtual memory into
 /// a mutable reference to an `FSData` structure.
 ///

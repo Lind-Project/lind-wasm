@@ -72,26 +72,23 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// the lookup itself; only included in panic diagnostics.
 ///
 /// ## Returns:
-///     Some((dest_grateid, in_grate_addr))
+/// `Some((dest_grateid, in_grate_addr))`, or `None` if no handler is
+/// registered for `syscall_num`.
 ///
 /// ## Panics:
-///     - If no entry exists for `self_cageid`.
-///     - If no entry exists for `syscall_num`.
+/// - If no entry exists for `self_cageid`.
 pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
     let handler_table = HANDLERTABLE.lock().unwrap();
 
-    let call_map = handler_table.get(&self_cageid).unwrap_or_else(|| {
+    let Some(call_map) = handler_table.get(&self_cageid) else {
+        // Release the lock first so the panic does not poison HANDLERTABLE.
+        drop(handler_table);
         panic!(
             "[3i|_get_handler] no handler table for self_cageid: {} (syscall_num={}, target_cageid={})",
             self_cageid, syscall_num, target_cageid
         )
-    });
-    let target_map = call_map.get(&syscall_num).unwrap_or_else(|| {
-        panic!(
-            "[3i|_get_handler] no handler for syscall_num: {} in self_cageid: {} (target_cageid={})",
-            syscall_num, self_cageid, target_cageid
-        )
-    });
+    };
+    let target_map = call_map.get(&syscall_num)?;
 
     // Registration keeps a single handler per (self_cageid, syscall_num) pair,
     // so the first entry is the only one.

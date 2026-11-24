@@ -7,7 +7,7 @@ use fdtables;
 use parking_lot::{Condvar, Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering::*};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
     EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
@@ -226,6 +226,22 @@ extern "C" fn noop_signal_handler(_sig: libc::c_int) {}
 ///
 /// Parameters:
 /// - `verbosity`: controls runtime logging verbosity.
+/// Returns the umask lind was started with, used as the initial cage umask.
+///
+/// Read from /proc instead of via umask(2), which can only be queried by
+/// temporarily changing the process-wide mask.
+fn host_umask() -> u32 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status
+                .lines()
+                .find_map(|line| line.strip_prefix("Umask:"))
+                .and_then(|mask| u32::from_str_radix(mask.trim(), 8).ok())
+        })
+        .unwrap_or(0o022)
+}
+
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
 
@@ -271,6 +287,7 @@ pub fn rawposix_start(verbosity: isize) {
     let initcage = Cage {
         cageid: INIT_CAGEID,
         cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+        umask: AtomicU32::new(host_umask()),
         parent: INIT_CAGEID,
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),

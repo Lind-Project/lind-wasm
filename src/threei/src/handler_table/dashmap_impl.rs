@@ -76,12 +76,11 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// the lookup itself; only included in panic diagnostics.
 ///
 /// ## Returns:
-///     Some((dest_grateid, in_grate_addr))
+/// `Some((dest_grateid, in_grate_addr))`, or `None` if no handler is
+/// registered for `syscall_num`.
 ///
 /// ## Panics:
-///     - If no entry exists for `self_cageid`.
-///     - If no entry exists for `syscall_num`.
-///     - If no handler entry exists under this syscall.
+/// - If no entry exists for `self_cageid`.
 pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
     // Grab the per-cage map guard.
     let self_entry = HANDLERTABLE.get(&self_cageid).unwrap_or_else(|| {
@@ -92,12 +91,7 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
     });
 
     // Grab the per-syscall map guard.
-    let call_entry = self_entry.value().get(&syscall_num).unwrap_or_else(|| {
-        panic!(
-            "No handlers for self_cageid={} syscall_num={} (target_cageid={})",
-            self_cageid, syscall_num, target_cageid
-        )
-    });
+    let call_entry = self_entry.value().get(&syscall_num)?;
 
     let target_map = call_entry.value();
 
@@ -109,10 +103,7 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
         return Some((gid, addr));
     }
 
-    panic!(
-        "No handlers for self_cageid={} syscall_num={} (target_cageid={})",
-        self_cageid, syscall_num, target_cageid
-    );
+    None
 }
 
 /// Removes **ALL** handler entries across all cages that point to a specific grateid.

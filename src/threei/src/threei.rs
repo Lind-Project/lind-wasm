@@ -463,7 +463,7 @@ pub fn abandon_grate_dispatches() {
 /// - Returns `-ESRCH` if the target cage is dead or in `EXITING_TABLE` (unless the syscall
 /// is an exit variant or the caller is the target itself), or if the destination grate is
 /// already dead.
-/// - Panics if no handler is registered for (self_cageid, syscall_num).
+/// - Returns `-ENOSYS` if no handler is registered for (self_cageid, syscall_num).
 pub fn make_syscall(
     self_cageid: u64, // is required to get the cage instance
     syscall_num: u64,
@@ -612,14 +612,15 @@ pub fn make_syscall(
         return grate_result;
     }
 
-    // _get_handler returned None — the target_map for this
-    // (self_cageid, syscall_num) exists but has no dest_grateid entry.
-    // (Only reachable with the hashmap backend; the dashmap backend panics
-    // inside _get_handler in this case.)
-    panic!(
-        "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={}",
-        self_cageid, syscall_num
+    // No handler is registered for (self_cageid, syscall_num): report the
+    // syscall as unimplemented, like the kernel does for unknown numbers.
+    lind_log!(
+        THREEI,
+        "[3i|make_syscall] no handler for syscall_num={} in self_cageid={}, returning ENOSYS",
+        syscall_num,
+        self_cageid
     );
+    -(Errno::ENOSYS as i64)
 }
 
 /***************************** trigger_harsh_cage_exit & harsh_cage_exit *****************************/
@@ -1072,6 +1073,7 @@ mod grate_dispatch_tests {
             cageid: GRATE,
             parent: GRATE,
             cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+            umask: std::sync::atomic::AtomicU32::new(0o022),
             rev_shm: Mutex::new(Vec::new()),
             signalhandler: Default::default(),
             sigset: AtomicU64::new(0),

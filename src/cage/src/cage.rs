@@ -9,7 +9,7 @@ use dashmap::DashMap;
 /// interaction and increases efficiency.
 pub use parking_lot::{Condvar, Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
-pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
+pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU32, AtomicU64, Ordering};
 pub use std::sync::{Arc, LazyLock};
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, RUNTIME_TYPE_MPK, RUNTIME_TYPE_WASMTIME};
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
@@ -143,6 +143,10 @@ pub struct Cage {
     pub parent: u64,
     // Current working directory of cage, must be able to be unique from other cages
     pub cwd: RwLock<Arc<PathBuf>>,
+    // File mode creation mask (umask(2)) of the cage. It is virtualized because the host
+    // umask is shared by all cages in the process; rawposix applies it to the mode of
+    // file-creating syscalls. Inherited on fork and preserved across exec.
+    pub umask: AtomicU32,
     // Reverse mapping for shared memory of addresses in cage to shmid, used for attaching and deattaching
     // shared memory segments
     pub rev_shm: Mutex<Vec<(u64, i32)>>,
@@ -538,6 +542,7 @@ mod tests {
             cageid: 2,
             parent: 1,
             cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+            umask: AtomicU32::new(0o022),
             rev_shm: Mutex::new(Vec::new()),
             signalhandler: DashMap::new(),
             sigset: AtomicU64::new(0),

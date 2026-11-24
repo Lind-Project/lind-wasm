@@ -6,6 +6,7 @@ use cage::{
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
 use libc::c_void;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
@@ -20,7 +21,7 @@ use sysdefs::constants::lind_platform_const::{
 };
 use sysdefs::constants::syscall_const::{MMAP_SYSCALL, MPROTECT_SYSCALL};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
-use sysdefs::lind_debug_panic;
+use sysdefs::{lind_debug_panic, lind_log};
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
@@ -132,7 +133,7 @@ pub extern "C" fn openat_syscall(
         };
 
         let kernel_fd =
-            unsafe { libc::openat(host_fd, c_path.as_ptr(), oflag, mode as libc::mode_t) };
+            unsafe { libc::openat(host_fd, c_path.as_ptr(), oflag, apply_umask(cageid, mode) as libc::mode_t) };
         if kernel_fd < 0 {
             return (handle_errno(get_errno(), "openat_syscall")) as i64;
         }
@@ -212,7 +213,7 @@ pub extern "C" fn open_syscall(
     }
 
     // Get the kernel fd first
-    let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
+    let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, apply_umask(cageid, mode)) };
 
     if kernel_fd < 0 {
         return (handle_errno(get_errno(), "open_syscall")) as i64;
@@ -519,7 +520,7 @@ pub extern "C" fn mkdir_syscall(
         );
     }
 
-    let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
+    let ret = unsafe { libc::mkdir(path.as_ptr(), apply_umask(cageid, mode)) };
     // Error handling
     if ret < 0 {
         let errno = get_errno();
@@ -575,7 +576,7 @@ pub extern "C" fn mknod_syscall(
         );
     }
 
-    let ret = unsafe { libc::mknod(path.as_ptr(), mode, dev) };
+    let ret = unsafe { libc::mknod(path.as_ptr(), apply_umask(cageid, mode), dev) };
     if ret < 0 {
         let errno = get_errno();
         return (handle_errno(errno, "mknod")) as i64;
@@ -3103,6 +3104,159 @@ pub extern "C" fn clock_gettime_syscall(
     ret
 }
 
+/// Linux Reference: https://man7.org/linux/man-pages/man2/time.2.html
+///
+/// Returns the current realtime clock in seconds and, if `tloc_arg` is
+/// non-null, also stores it there. Reading the clock does not modify any
+/// state, so the host syscall is used directly (it validates `tloc_arg`).
+///
+/// ## Arguments:
+/// - `tloc_arg`: Address of an optional `time_t` output buffer
+/// - `arg2`–`arg6`: Reserved, must be unused
+///
+/// ## Returns:
+/// - Seconds since the Epoch on success.
+/// - -1 on failure, with errno set appropriately.
+pub extern "C" fn time_syscall(
+    cageid: u64,
+    tloc_arg: u64,
+    _tloc_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "time_syscall"
+        );
+    }
+
+    let ret = unsafe { syscall(libc::SYS_time, tloc_arg as *mut libc::time_t) };
+    if ret < 0 {
+        return (handle_errno(get_errno(), "time")) as i64;
+    }
+    ret
+}
+
+/// Linux Reference: https://man7.org/linux/man-pages/man2/gettimeofday.2.html
+///
+/// Reads the realtime clock into `tv_arg` and, if requested, the kernel
+/// timezone into `tz_arg`. Like `clock_gettime`, this only reads state, so
+/// the host syscall is used directly (it validates both buffers).
+///
+/// ## Arguments:
+/// - `tv_arg`: Address of an optional `timeval` output buffer
+/// - `tz_arg`: Address of an optional `timezone` output buffer
+/// - `arg3`–`arg6`: Reserved, must be unused
+///
+/// ## Returns:
+/// - 0 on success.
+/// - -1 on failure, with errno set appropriately.
+pub extern "C" fn gettimeofday_syscall(
+    cageid: u64,
+    tv_arg: u64,
+    _tv_cageid: u64,
+    tz_arg: u64,
+    _tz_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "gettimeofday_syscall"
+        );
+    }
+
+    let ret = unsafe {
+        syscall(
+            libc::SYS_gettimeofday,
+            tv_arg as *mut libc::timeval,
+            tz_arg as *mut c_void,
+        )
+    };
+    if ret < 0 {
+        return (handle_errno(get_errno(), "gettimeofday")) as i64;
+    }
+    ret
+}
+
+/// Applies the cage's virtual umask to the `mode` of a file-creating syscall.
+/// The host process umask still applies on top of it.
+fn apply_umask(cageid: u64, mode: u32) -> u32 {
+    let umask = get_cage(cageid)
+        .map(|cage| cage.umask.load(Ordering::Relaxed))
+        .unwrap_or(0);
+    mode & !umask
+}
+
+/// Linux Reference: https://man7.org/linux/man-pages/man2/umask.2.html
+///
+/// Sets the cage's file mode creation mask and returns the previous one.
+/// The mask is kept per cage instead of changing the host umask, which is
+/// shared by every cage; `open`, `openat`, `mkdir` and `mknod` apply it.
+///
+/// ## Arguments:
+/// - `mask_arg`: The new mask (only the permission bits `0o777` are used)
+/// - `arg2`–`arg6`: Reserved, must be unused
+///
+/// ## Returns:
+/// - The previous mask. This call always succeeds.
+pub extern "C" fn umask_syscall(
+    cageid: u64,
+    mask_arg: u64,
+    mask_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    let mask = sc_convert_sysarg_to_u32(mask_arg, mask_cageid, cageid) & 0o777;
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "umask_syscall"
+        );
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    cage.umask.swap(mask, Ordering::Relaxed) as i64
+}
+
 /// Linux Reference: https://man7.org/linux/man-pages/man2/dup.2.html
 ///
 /// Since the two file descriptors refer to the same open file description, they share file offset
@@ -4830,9 +4984,11 @@ pub extern "C" fn ioctl_syscall(
     }
 
     // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, FIONREAD, and TIOCGWINSZ right now.
-    // Return error for unsupported requests.
+    // Other requests are never forwarded to the host; they fail with ENOTTY, the kernel's
+    // error for requests that do not apply to the object (e.g. TCGETS from isatty()).
     if req != FIONBIO && req != FIOASYNC && req != FIONREAD && req != TIOCGWINSZ {
-        lind_debug_panic!("Lind unsupported ioctl request");
+        lind_log!("unsupported ioctl request {:#x} on fd {}", req, vfd_arg);
+        return syscall_error(Errno::ENOTTY, "ioctl", "unsupported ioctl request") as i64;
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);

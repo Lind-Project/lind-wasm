@@ -9,7 +9,7 @@ use super::fs_calls::{
     dup_syscall, faccessat_syscall, fchdir_syscall, fchmod_syscall, fchmodat_syscall,
     fchownat_syscall, fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall,
     fstatat_syscall, fstatfs_syscall, fsync_syscall, ftruncate_syscall, futex_syscall,
-    getcwd_syscall, getdents_syscall, getrandom_syscall, ioctl_syscall, lchown_syscall,
+    getcwd_syscall, getdents_syscall, getrandom_syscall, gettimeofday_syscall, ioctl_syscall, lchown_syscall,
     link_syscall, linkat_syscall, listxattr_syscall, lseek_syscall, lstat_syscall, madvise_syscall,
     mkdir_syscall,
     mknod_syscall, mmap_syscall, mprotect_syscall, munmap_syscall, nanosleep_time64_syscall,
@@ -18,7 +18,8 @@ use super::fs_calls::{
     readv_syscall, rename_syscall, renameat2_syscall, renameat_syscall, rmdir_syscall,
     setxattr_syscall, shmat_syscall, shmctl_syscall, shmdt_syscall, shmget_syscall, stat_syscall,
     statfs_syscall, symlink_syscall, symlinkat_syscall, sync_file_range_syscall, truncate_syscall,
-    unlink_syscall, unlinkat_syscall, utimensat_syscall, write_syscall, writev_syscall,
+    time_syscall, umask_syscall, unlink_syscall, unlinkat_syscall, utimensat_syscall,
+    write_syscall, writev_syscall,
 };
 use super::init::RawCallFunc;
 use super::net_calls::{
@@ -30,7 +31,7 @@ use super::net_calls::{
 };
 use super::sys_calls::{
     alarm_syscall, exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
-    getgid_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, gettid_syscall, getuid_syscall,
+    getgid_syscall, getgroups_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, gettid_syscall, getuid_syscall,
     kill_syscall, prlimit64_syscall, rseq_syscall, sched_yield_syscall, set_robust_list_syscall,
     setitimer_syscall, sigaction_syscall, sigprocmask_syscall, sigsuspend_syscall, uname_syscall, waitpid_syscall,
 };
@@ -123,6 +124,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::TRUNCATE_SYSCALL as u64, truncate_syscall),
     (syscall_const::FTRUNCATE_SYSCALL as u64, ftruncate_syscall),
     (syscall_const::GETDENTS_SYSCALL as u64, getdents_syscall),
+    (syscall_const::GETDENTS64_SYSCALL as u64, getdents_syscall),
     (syscall_const::GETCWD_SYSCALL as u64, getcwd_syscall),
     (syscall_const::CHDIR_SYSCALL as u64, chdir_syscall),
     (syscall_const::FCHDIR_SYSCALL as u64, fchdir_syscall),
@@ -137,10 +139,16 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::FCHMOD_SYSCALL as u64, fchmod_syscall),
     (syscall_const::CHOWN_SYSCALL as u64, chown_syscall),
     (syscall_const::LCHOWN_SYSCALL as u64, lchown_syscall),
+    (syscall_const::UMASK_SYSCALL as u64, umask_syscall),
+    (
+        syscall_const::GETTIMEOFDAY_SYSCALL as u64,
+        gettimeofday_syscall,
+    ),
     (syscall_const::GETUID_SYSCALL as u64, getuid_syscall),
     (syscall_const::GETGID_SYSCALL as u64, getgid_syscall),
     (syscall_const::GETEUID_SYSCALL as u64, geteuid_syscall),
     (syscall_const::GETEGID_SYSCALL as u64, getegid_syscall),
+    (syscall_const::GETGROUPS_SYSCALL as u64, getgroups_syscall),
     (syscall_const::GETPPID_SYSCALL as u64, getppid_syscall),
     (syscall_const::GETPGID_SYSCALL as u64, getpgid_syscall),
     (syscall_const::GETTID_SYSCALL as u64, gettid_syscall),
@@ -153,6 +161,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     ),
     (188 as u64, setxattr_syscall),
     (194 as u64, listxattr_syscall),
+    (syscall_const::TIME_SYSCALL as u64, time_syscall),
     (syscall_const::FUTEX_SYSCALL as u64, futex_syscall),
     (
         syscall_const::EPOLL_CREATE_SYSCALL as u64,

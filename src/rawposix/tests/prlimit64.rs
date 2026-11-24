@@ -15,20 +15,25 @@ use sysdefs::constants::lind_platform_const::{
 use sysdefs::constants::sys_const::{
     RLIMIT_AS, RLIMIT_CORE, RLIMIT_DATA, RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK,
 };
+use sysdefs::constants::err_const::VERBOSE;
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{Rlimit, Rlimit64};
 use typemap::datatype_conversion::convert_rlimit_to_user;
 
 fn get_limit(resource: u32, buffer: u64) -> i64 {
+    prlimit(resource, 0, buffer)
+}
+
+fn prlimit(resource: u32, new_limit: u64, old_limit: u64) -> i64 {
     prlimit64_syscall(
         1,
         0,
         1,
         resource as u64,
         1,
-        0,
-        1,
-        buffer,
+        new_limit,
+        2,
+        old_limit,
         2,
         UNUSED_ARG,
         UNUSED_ID,
@@ -56,6 +61,7 @@ fn prlimit64_uses_calling_cage_runtime_layout() {
             cageid: 1,
             parent: 1,
             cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+            umask: std::sync::atomic::AtomicU32::new(0o022),
             rev_shm: Mutex::new(Vec::new()),
             signalhandler: DashMap::new(),
             sigset: AtomicU64::new(0),
@@ -143,5 +149,33 @@ fn prlimit64_uses_calling_cage_runtime_layout() {
         ));
         assert_eq!(wasm_buffer, [0xA5A5_A5A5; 2]);
     }
+
+    // setrlimit succeeds only when it keeps the fixed limits.
+    let _ = VERBOSE.set(0);
+    let stack = 8 * 1024 * 1024u64;
+    let mut wasm_new = [stack as u32, stack as u32];
+    assert_eq!(prlimit(RLIMIT_STACK, wasm_new.as_mut_ptr() as u64, 0), 0);
+    wasm_new[0] = 4096;
+    assert_eq!(
+        prlimit(RLIMIT_STACK, wasm_new.as_mut_ptr() as u64, 0),
+        -(Errno::EPERM as i64)
+    );
+    cage.runtime_type.store(RUNTIME_TYPE_MPK, Ordering::Release);
+    let mut native_new = [stack, stack];
+    let mut native_old = [0u64; 2];
+    assert_eq!(
+        prlimit(
+            RLIMIT_STACK,
+            native_new.as_mut_ptr() as u64,
+            native_old.as_mut_ptr() as u64
+        ),
+        0
+    );
+    assert_eq!(native_old, [stack, stack]);
+    native_new[1] = u64::MAX;
+    assert_eq!(
+        prlimit(RLIMIT_STACK, native_new.as_mut_ptr() as u64, 0),
+        -(Errno::EPERM as i64)
+    );
     remove_cage(1);
 }
