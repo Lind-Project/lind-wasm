@@ -249,8 +249,9 @@ impl ExecFileKey {
 }
 
 /// Upper bound on the serialized size of the modules kept in
-/// [`EXEC_MODULE_CACHE`].
-const EXEC_MODULE_CACHE_LIMIT: usize = 1 << 30;
+/// [`EXEC_MODULE_CACHE`]. A clang build needs clang (about 830 MB) and ld.lld
+/// (about 420 MB) at once: with 1 GiB every link evicted clang.
+const EXEC_MODULE_CACHE_LIMIT: usize = 2 << 30;
 
 /// Modules of recently exec'd files, least recently used first. Reading and
 /// deserializing a large precompiled module dominates exec under SGX (cc1 is
