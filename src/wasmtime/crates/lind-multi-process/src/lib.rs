@@ -2666,7 +2666,7 @@ pub fn set_pending_clone_visible_retval<
 
 /// Consumes the pending parent-visible `clone`/`fork` return value, if any.
 ///
-/// This is intended to be called from the `CLONE_SYSCALL` rewind replay path,
+/// This is intended to be called from the `CLONE3_SYSCALL` rewind replay path,
 /// after `catch_rewind` returns a positive `rewind_res`. A positive rewind
 /// result means we are replaying the parent side of `fork`, where the default
 /// return value would be the real child cage id.

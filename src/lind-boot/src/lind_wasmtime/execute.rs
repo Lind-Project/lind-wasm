@@ -16,7 +16,7 @@ use sysdefs::constants::lind_platform_const::{
     INSTANCE_NUMBER, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
     unmark_grate_handler_registered,
 };
-use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
+use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_START_INDEX};
 use sysdefs::lind_debug_panic;
 use sysdefs::lind_log;
@@ -404,18 +404,18 @@ pub fn execute_with_lind(
 /// targeting the Wasmtime runtime cage (`WASMTIME_CAGEID`).
 ///
 /// Registered syscalls:
-/// - `clone` (56): fork / pthread_create completion in Wasmtime
+/// - `clone3` (435): fork / pthread_create completion in Wasmtime
 /// - `exec`  (59): exec completion in Wasmtime (instance replacement / image switch)
 /// - `exit`  (60): thread/process termination completion in Wasmtime
 fn register_wasmtime_syscall_entry() -> bool {
-    // Register clone trampoline (syscall 56).
+    // Register clone trampoline (syscall 435).
     let fp_clone = clone_syscall_entry;
     let clone_call_u64: u64 = fp_clone as *const () as usize as u64;
     let clone_ret = threei::register_handler(
         UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        CLONE_SYSCALL as u64,                // clone syscall number
+        CLONE3_SYSCALL as u64,               // clone3 syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         clone_call_u64,
