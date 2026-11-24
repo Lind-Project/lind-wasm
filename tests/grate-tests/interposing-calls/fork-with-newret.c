@@ -16,9 +16,11 @@ int main()
     } else {
         printf("[Cage] Forked process with PID: %d\n", cpid);
         assert(cpid == 10); // The fork_grate handler in the grate should return 10, which is determined by the grate ret
-        wait(NULL);           /* wait for child */
+        int status;
+        assert(wait(&status) > 0);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
 
     return 0;
 }
-
