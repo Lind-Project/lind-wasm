@@ -70,6 +70,12 @@ pub fn signal_epoch_trigger(cageid: u64) {
         // be lost between the waiter's check and its call to wait().
         let _zombies = cage.zombies.lock();
         cage.wait_cond.notify_all();
+        // The same, for a thread that waits under the deterministic schedule;
+        // a thread of this cage that waits for something else (a futex, a
+        // grate worker) has its wait ended too, as a signal ends a blocking
+        // call. Its caller sees EINTR or checks its condition again.
+        sysdefs::sched::wake(sysdefs::sched::Chan::Cage(cageid), usize::MAX);
+        sysdefs::sched::interrupt_cage(cageid);
     }
 }
 
@@ -150,6 +156,11 @@ pub fn epoch_kill_all(cageid: u64, caller_tid: i32) {
         {
             let _zombies = cage.zombies.lock();
             cage.wait_cond.notify_all();
+            // Under the deterministic schedule a blocked thread waits there
+            // and not in a host call: end every wait of this cage's threads,
+            // so that each of them runs again and observes EPOCH_KILLED.
+            sysdefs::sched::wake(sysdefs::sched::Chan::Cage(cageid), usize::MAX);
+            sysdefs::sched::interrupt_cage(cageid);
         }
     }
 }
@@ -286,7 +297,13 @@ pub fn wait_all_threads_exited(cageid: u64, _except_tid: u64) {
             }
         }
 
-        std::thread::yield_now();
+        // The other threads need the turn to see the kill and exit.
+        if sysdefs::sched::active() {
+            sysdefs::sched::interrupt_cage(cageid);
+            sysdefs::sched::yield_now();
+        } else {
+            std::thread::yield_now();
+        }
     }
 }
 

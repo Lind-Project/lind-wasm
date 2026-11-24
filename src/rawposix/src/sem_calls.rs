@@ -129,6 +129,14 @@ fn lookup_sem(key: &SemKey, callname: &str) -> Result<Arc<SemState>, i32> {
 
 /// Futex-wakes `count` waiters blocked on `state.value`.
 fn sem_futex_wake(state: &SemState, count: u32) {
+    if sysdefs::sched::enabled() {
+        // Waiters under the deterministic schedule wait there, not in the host.
+        sysdefs::sched::wake(
+            sysdefs::sched::Chan::Futex(&state.value as *const AtomicU32 as u64),
+            count as usize,
+        );
+        return;
+    }
     unsafe {
         libc::syscall(
             libc::SYS_futex,
@@ -168,6 +176,23 @@ fn sem_do_wait(state: &SemState, flags: u32, abs_sec: i64, abs_nsec: i64, clocki
         }
         if flags == SEM_WAIT_TRY {
             return syscall_error(Errno::EAGAIN, "sem_trywait", "semaphore count is zero");
+        }
+
+        if sysdefs::sched::active() {
+            // The value is zero and no other guest thread can run before
+            // this one waits. A timed wait lasts one round of the ready queue.
+            use sysdefs::sched::{self, Chan, Wake};
+            let chan = Chan::Futex(&state.value as *const AtomicU32 as u64);
+            let wake = if flags == SEM_WAIT_TIMED {
+                sched::wait_timed(chan)
+            } else {
+                sched::wait(chan)
+            };
+            match wake {
+                Wake::Woken => continue,
+                Wake::TimedOut => return syscall_error(Errno::ETIMEDOUT, "sem_wait", "timed out"),
+                Wake::Interrupted => return syscall_error(Errno::EINTR, "sem_wait", "interrupted"),
+            }
         }
 
         // Block until the value leaves zero. FUTEX_WAIT_BITSET takes an

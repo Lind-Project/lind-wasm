@@ -118,6 +118,12 @@ impl SharedMemory {
     pub fn atomic_notify(&self, addr_index: u64, count: u32) -> Result<u32, Trap> {
         let ptr = validate_atomic_addr(&self.0.def.0, addr_index, 4, 4)?;
         log::trace!("memory.atomic.notify(addr={addr_index:#x}, count={count})");
+        // Under lind's deterministic schedule waiters wait there (see
+        // `sched_wait`), keyed by host address like lind's futex.
+        if sysdefs::sched::enabled() {
+            let chan = sysdefs::sched::Chan::Futex(ptr as u64);
+            return Ok(sysdefs::sched::wake(chan, count as usize) as u32);
+        }
         let ptr = unsafe { &*ptr };
         Ok(self.0.spot.notify(ptr, count))
     }
@@ -138,6 +144,12 @@ impl SharedMemory {
         assert!(std::mem::size_of::<AtomicU32>() == 4);
         assert!(std::mem::align_of::<AtomicU32>() <= 4);
         let atomic = unsafe { AtomicU32::from_ptr(addr.cast()) };
+        if sysdefs::sched::active() {
+            if atomic.load(Ordering::SeqCst) != expected {
+                return Ok(WaitResult::Mismatch);
+            }
+            return Ok(sched_wait(addr as u64, timeout.is_some()));
+        }
         let deadline = timeout.map(|d| Instant::now() + d);
 
         WAITER.with(|waiter| {
@@ -162,6 +174,12 @@ impl SharedMemory {
         assert!(std::mem::size_of::<AtomicU64>() == 8);
         assert!(std::mem::align_of::<AtomicU64>() <= 8);
         let atomic = unsafe { AtomicU64::from_ptr(addr.cast()) };
+        if sysdefs::sched::active() {
+            if atomic.load(Ordering::SeqCst) != expected {
+                return Ok(WaitResult::Mismatch);
+            }
+            return Ok(sched_wait(addr as u64, timeout.is_some()));
+        }
         let deadline = timeout.map(|d| Instant::now() + d);
 
         WAITER.with(|waiter| {
@@ -200,3 +218,25 @@ thread_local! {
 struct LongTermVMMemoryDefinition(VMMemoryDefinition);
 unsafe impl Send for LongTermVMMemoryDefinition {}
 unsafe impl Sync for LongTermVMMemoryDefinition {}
+
+
+/// `memory.atomic.wait` under lind's deterministic schedule: the thread
+/// gives up its turn instead of parking in the host, and `atomic_notify`
+/// makes it ready again. The caller has checked the expected value; no other
+/// guest thread can run between that check and this wait. A wait with a
+/// timeout lasts one round of the ready queue (see `sysdefs::sched`).
+fn sched_wait(host_addr: u64, timed: bool) -> WaitResult {
+    use sysdefs::sched::{self, Chan, Wake};
+    let chan = Chan::Futex(host_addr);
+    let wake = if timed {
+        sched::wait_timed(chan)
+    } else {
+        sched::wait(chan)
+    };
+    match wake {
+        Wake::TimedOut => WaitResult::TimedOut,
+        // An interrupted wait returns as if woken: the guest checks its
+        // condition again, and sees the kill at its next epoch check.
+        Wake::Woken | Wake::Interrupted => WaitResult::Ok,
+    }
+}

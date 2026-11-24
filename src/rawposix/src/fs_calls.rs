@@ -412,12 +412,76 @@ pub extern "C" fn futex_syscall(
     //         val3,
     //     );
     // }
+    if sysdefs::sched::active() {
+        return futex_scheduled(uaddr, futex_op, val, timeout, val3);
+    }
     let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3) as i32 };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "futex");
     }
     ret
+}
+
+/// futex() under the deterministic schedule.
+///
+/// Only one guest thread runs at a time, so a waiter does not sleep in the
+/// host: it gives up its turn and is made ready again, oldest first, by the
+/// thread that calls FUTEX_WAKE on the same address. The check of the futex
+/// word and the wait cannot be separated by another guest thread, because
+/// the caller holds the turn until it waits.
+///
+/// A wait with a timeout lasts one round of the ready queue (there is no
+/// real time under this schedule): it returns ETIMEDOUT if every other ready
+/// thread has had a turn and none of them woke it.
+fn futex_scheduled(uaddr: u64, futex_op: u32, val: u32, timeout: u64, val3: u32) -> i32 {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use sysdefs::constants::sys_const::{
+        FUTEX_CMP_REQUEUE, FUTEX_REQUEUE, FUTEX_WAIT, FUTEX_WAIT_BITSET, FUTEX_WAKE,
+        FUTEX_WAKE_BITSET,
+    };
+    use sysdefs::sched::{self, Chan, Wake};
+
+    // FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME
+    const FLAGS: u32 = 128 | 256;
+    let cmd = (futex_op & !FLAGS) as i32;
+    let chan = Chan::Futex(uaddr);
+    let word = || unsafe { (*(uaddr as *const AtomicU32)).load(Ordering::SeqCst) };
+
+    if cmd == FUTEX_WAIT || cmd == FUTEX_WAIT_BITSET {
+        if uaddr == 0 || uaddr % 4 != 0 {
+            return syscall_error(Errno::EINVAL, "futex", "bad futex address");
+        }
+        if word() != val {
+            return syscall_error(Errno::EAGAIN, "futex", "the futex word changed");
+        }
+        let wake = if timeout == 0 {
+            sched::wait(chan)
+        } else {
+            sched::wait_timed(chan)
+        };
+        return match wake {
+            Wake::Woken => 0,
+            Wake::TimedOut => syscall_error(Errno::ETIMEDOUT, "futex", "timed out"),
+            Wake::Interrupted => syscall_error(Errno::EINTR, "futex", "interrupted"),
+        };
+    }
+    if cmd == FUTEX_WAKE || cmd == FUTEX_WAKE_BITSET {
+        return sched::wake(chan, val as usize) as i32;
+    }
+    if cmd == FUTEX_REQUEUE || cmd == FUTEX_CMP_REQUEUE {
+        if cmd == FUTEX_CMP_REQUEUE && (uaddr == 0 || word() != val3) {
+            return syscall_error(Errno::EAGAIN, "futex", "the futex word changed");
+        }
+        // Waiters are not moved to the second futex: all of them are woken
+        // and retry. A wake without a change is allowed for a futex.
+        return sched::wake(chan, usize::MAX) as i32;
+    }
+    syscall_error(
+        Errno::ENOSYS,
+        "futex",
+        "operation not supported under the deterministic schedule",
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/write.2.html
@@ -4601,6 +4665,30 @@ pub extern "C" fn nanosleep_time64_syscall(
             "{}: unused arguments contain unexpected values -- security violation",
             "nanosleep_time64_syscall"
         );
+    }
+    // Under the deterministic schedule there is no real time to sleep for:
+    // the caller lets every other ready thread run, then continues.
+    //
+    // A sleep ends with EINTR when its cage has a signal to handle. A grate
+    // that waits in a loop of short sleeps (the IPC grate, for a pipe or for
+    // select) relies on this to return to its caller, which then runs the
+    // handler: make waits for SIGCHLD this way while its jobs run. The grate
+    // runs on its caller's thread, so the cage asked about is the one that
+    // thread belongs to, not the grate that makes this call.
+    if sysdefs::sched::active() {
+        let sleeper = sysdefs::sched::current_cage().unwrap_or(cageid);
+        // Also when a signal became deliverable at the thread's last change
+        // of its signal mask and was handled before this sleep (pselect as
+        // sigprocmask + select, see sched::set_unblocked_signal).
+        let at_unblock = sysdefs::sched::take_unblocked_signal();
+        if cage::signal::signal::signal_check_trigger(sleeper) || at_unblock {
+            return syscall_error(Errno::EINTR, "nanosleep", "interrupted by signal");
+        }
+        sysdefs::sched::yield_now();
+        if cage::signal::signal::signal_check_trigger(sleeper) {
+            return syscall_error(Errno::EINTR, "nanosleep", "interrupted by signal");
+        }
+        return 0;
     }
     let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req, rem) as i32 };
     if ret < 0 {
