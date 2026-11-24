@@ -394,7 +394,13 @@ pub fn cage_finalize(cageid: u64) {
     if let Some(cage) = get_cage(cageid) {
         // Wait for all in-flight grate dispatches to drain.
         while cage.grate_inflight.load(Ordering::Acquire) > 0 {
-            std::hint::spin_loop();
+            // Under the deterministic schedule the threads that are inside
+            // this grate need the turn to return from it.
+            if sysdefs::sched::active() {
+                sysdefs::sched::yield_now();
+            } else {
+                std::hint::spin_loop();
+            }
         }
 
         // Record zombie and notify parent.
@@ -414,6 +420,8 @@ pub fn cage_finalize(cageid: u64) {
                 });
                 parent.child_num.fetch_sub(1, Ordering::SeqCst);
                 parent.wait_cond.notify_all();
+                // The same, for a parent that waits under the deterministic schedule.
+                sysdefs::sched::wake(sysdefs::sched::Chan::Cage(cage.parent), usize::MAX);
             }
             crate::signal::signal::lind_send_signal(cage.parent, SIGCHLD);
         }

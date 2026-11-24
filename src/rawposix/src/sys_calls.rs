@@ -28,6 +28,7 @@ use sysdefs::constants::sys_const::{
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::constants::syscall_const;
+use sysdefs::sched;
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
 use sysdefs::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
@@ -473,6 +474,27 @@ pub extern "C" fn exit_group_syscall(
     )
 }
 
+/// Sleep until there is an event for `cage`: a child exited, a signal
+/// arrived, or the cage is being killed. `guard` (the cage's `zombies` lock)
+/// is released while the thread sleeps.
+///
+/// Under the deterministic schedule the thread gives up its turn here and is
+/// made ready again by the thread that causes the event (`cage_finalize`,
+/// `signal_epoch_trigger`, `epoch_kill_all`). Otherwise it sleeps on the
+/// cage's condition variable.
+fn wait_for_cage_event<T>(cage: &Cage, guard: &mut parking_lot::MutexGuard<'_, T>) {
+    if sched::active() {
+        // Join the channel before the lock is released, so that a wake from
+        // a thread outside the schedule (the interval timer) is not lost.
+        sched::prepare(sched::Chan::Cage(cage.cageid));
+        parking_lot::MutexGuard::unlocked(guard, || {
+            sched::park();
+        });
+    } else {
+        cage.wait_cond.wait(guard);
+    }
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/waitpid.3p.html
 ///
 /// waitpid() will return the cageid of waited cage, or 0 when WNOHANG is set and there is no cage already exited
@@ -555,7 +577,13 @@ pub extern "C" fn waitpid_syscall(
                 break zombies.remove(0);
             }
             if nohang {
-                // no pending zombies and WNOHANG is set: return immediately
+                // no pending zombies and WNOHANG is set: return immediately.
+                // Under the deterministic schedule a caller that polls must
+                // still let its children run, or it would poll forever.
+                if sched::active() {
+                    drop(zombies);
+                    sched::yield_now();
+                }
                 return 0;
             }
             // A pending signal (or a kill of this cage) takes priority over sleeping again,
@@ -573,7 +601,7 @@ pub extern "C" fn waitpid_syscall(
             }
             // Nothing to reap yet: sleep until a child exits, a signal arrives, or the cage
             // is killed. The mutex is released while sleeping and re-acquired on wake-up.
-            cage.wait_cond.wait(&mut zombies);
+            wait_for_cage_event(&cage, &mut zombies);
         }
     }
     // if cageid is specified, then we need to look up the zombie list for the id
@@ -611,13 +639,17 @@ pub extern "C" fn waitpid_syscall(
             // now we have verified that the cage exists and is the child of the cage,
             // but it has not exited yet
             if nohang {
+                if sched::active() {
+                    drop(zombies);
+                    sched::yield_now();
+                }
                 return 0;
             }
             if signal_check_trigger(cage.cageid) {
                 return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
             }
             // Sleep until a child exits, a signal arrives, or the cage is killed.
-            cage.wait_cond.wait(&mut zombies);
+            wait_for_cage_event(&cage, &mut zombies);
         }
     };
     drop(zombies);
@@ -1143,6 +1175,9 @@ pub extern "C" fn sigprocmask_syscall(
 
     if let Some(some_set) = set {
         let curr_sigset = cage.sigset.load(Relaxed);
+        // Deterministic schedule: the record lasts from one change of the
+        // mask to the next (see sched::set_unblocked_signal).
+        sched::set_unblocked_signal(false);
         res = match how {
             SIG_BLOCK => {
                 // Block signals in set
@@ -1161,6 +1196,7 @@ pub extern "C" fn sigprocmask_syscall(
                     .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0)
                 {
                     cage::signal_epoch_trigger(cage.cageid);
+                    sched::set_unblocked_signal(true);
                 }
                 0
             }
@@ -1179,6 +1215,7 @@ pub extern "C" fn sigprocmask_syscall(
                     .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
                 {
                     cage::signal_epoch_trigger(cage.cageid);
+                    sched::set_unblocked_signal(true);
                 }
                 // Set sigset to set
                 cage.sigset.store(*some_set, Relaxed);
@@ -1312,6 +1349,10 @@ pub extern "C" fn sched_yield_syscall(
         );
     }
 
+    if sched::active() {
+        sched::yield_now();
+        return 0;
+    }
     (unsafe { sched_yield() }) as i32
 }
 
@@ -1376,10 +1417,20 @@ pub extern "C" fn sigsuspend_syscall(
     }
 
     loop {
+        // Join the cage's channel before the check: a signal that arrives
+        // after the check then still ends the wait.
+        if sched::active() {
+            sched::prepare(sched::Chan::Cage(cageid));
+        }
         if signal_check_trigger(cageid) {
+            sched::cancel();
             return syscall_error(Errno::EINTR, "sigsuspend", "interrupted by signal");
         }
-        unsafe { sched_yield() };
+        if sched::active() {
+            sched::park();
+        } else {
+            unsafe { sched_yield() };
+        }
     }
 }
 

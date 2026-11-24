@@ -62,6 +62,9 @@ use wasmtime_lind_utils::{LindCageManager, LindGOT};
 /// entrypoint. On successful completion it waits for all cages to exit before
 /// shutting down RawPOSIX, ensuring runtime-wide cleanup happens only after the
 /// last process terminates.
+/// Guest environment variable that turns the deterministic schedule on.
+const DETERMINISTIC_SCHEDULE_VAR: &str = "LIND_DETERMINISTIC_SCHEDULE";
+
 pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // -- Map the shared-memory preload and dump regions, if any --
     if let Some(path) = lindboot_cli.preload_shm.as_deref() {
@@ -119,6 +122,20 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
         .context("failed to create execution engine")?;
     let module = read_main_wasm_or_cwasm(&engine, &lindboot_cli)?;
 
+    // -- Deterministic schedule --
+    // LIND_DETERMINISTIC_SCHEDULE=1 in the guest environment turns it on: one
+    // guest thread runs at a time, in an order fixed by the guests (see
+    // sysdefs::sched). The first cage's main thread takes the first turn and
+    // gives it up when its program has ended.
+    if lindboot_cli
+        .vars
+        .iter()
+        .any(|(name, value)| name == DETERMINISTIC_SCHEDULE_VAR && value.as_deref() == Some("1"))
+    {
+        sysdefs::sched::enable();
+    }
+    let sched_turn = sysdefs::sched::register(CAGE_START_ID as u64).start();
+
     // -- Run the first module in the first cage --
     let result = execute_with_lind(
         lindboot_cli,
@@ -127,11 +144,22 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
         module,
         CAGE_START_ID as u64,
     );
+    drop(sched_turn);
+    let sched_report = || {
+        if sysdefs::sched::enabled() {
+            let (turns, stalls, _) = sysdefs::sched::stats();
+            eprintln!(
+                "[sched] deterministic schedule: {} turns, {} times no thread was ready",
+                turns, stalls
+            );
+        }
+    };
 
     match result {
         Ok(ref ret_vals) => {
             // we wait until all other cage exits
             lind_manager.wait();
+            sched_report();
             // Interpret the first return value of the Wasm entry point
             // as the process exit code. If the module does not explicitly
             // return an i32, we treat it as a successful exit (code = 0).
@@ -158,6 +186,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             cage::cage_finalize(cageid);
             lind_manager.decrement();
             lind_manager.wait();
+            sched_report();
             return Err(e);
         }
     }

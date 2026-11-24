@@ -454,7 +454,18 @@ impl<T: 'static> GrateHandler<T> {
             if let Some(worker) = inner.workers.pop_front() {
                 return worker;
             }
-            inner = self.cv.wait(inner).unwrap();
+            if sysdefs::sched::active() {
+                // Every worker is held by a thread that is inside the grate
+                // and has given up its turn there. Wait for one of them
+                // under the deterministic schedule, not in the host, so
+                // that they can run and return a worker.
+                sysdefs::sched::prepare(sysdefs::sched::Chan::Worker(self.grate_id));
+                drop(inner);
+                sysdefs::sched::park();
+                inner = self.inner.lock().unwrap();
+            } else {
+                inner = self.cv.wait(inner).unwrap();
+            }
         }
     }
 
@@ -469,6 +480,7 @@ impl<T: 'static> GrateHandler<T> {
         inner.workers.push_back(worker);
         if should_notify {
             self.cv.notify_one();
+            sysdefs::sched::wake(sysdefs::sched::Chan::Worker(self.grate_id), 1);
         }
     }
 

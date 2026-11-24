@@ -805,6 +805,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 "[instrument] fork about to spawn thread, child_cage={}",
                 child_cageid
             );
+            // Deterministic schedule: the parent holds the turn here, so the
+            // child's place in the ready queue is fixed by the fork itself
+            // and not by when the host starts the child's thread.
+            let sched_ticket = sysdefs::sched::register(child_cageid);
             let builder = thread::Builder::new()
                 .name(format!("lind-fork-{}", child_cageid))
                 .stack_size(thread_stack_size);
@@ -1112,6 +1116,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
                     barrier_clone.wait();
+
+                    // Up to here the child ran while its parent waited at the
+                    // barrier. From here on it runs only when it has the turn,
+                    // and gives the turn up when this closure returns.
+                    let _sched_turn = sched_ticket.start();
 
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     let mut new_child_host = store.data_mut();
@@ -1436,11 +1445,16 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 *((child_unwind_data_start_sys as usize + 4) as *mut u32) = child_rewind_end;
             }
 
+            // Deterministic schedule: see fork_call. A new thread shares its
+            // cage's state from the start, so it waits for the turn before
+            // it does anything.
+            let sched_ticket = sysdefs::sched::register(child_cageid as u64);
             let builder = thread::Builder::new()
                 .name(format!("lind-thread-{}", next_tid))
                 .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
+                    let _sched_turn = sched_ticket.start();
                     // create a new instance
                     let store_inner = Store::<T>::new_inner(&engine, symbol_table)
                         .expect("failed to create store inner");
