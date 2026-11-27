@@ -1036,7 +1036,20 @@ def pre_test(tests_to_run=None, allow_precompiled=False):
         except OSError:
             # Fallback to copying in case symlink creation fails
             shutil.copy2(readlinkfile_path, symlink_path)
-    
+
+    '''
+    ISO-004: create host-only and cage-only sentinel files with distinguishable
+    content, so symlink_confinement.c can prove confinement by checking WHICH
+    file's content it read, not just whether an open() succeeded. 
+    '''
+    host_sentinel_dir = Path("/tmp/lind")
+    host_sentinel_dir.mkdir(parents=True, exist_ok=True)
+    (host_sentinel_dir / "sentinel.txt").write_text("LIND_HOST_ONLY")
+
+    cage_sentinel_dir = LINDFS_ROOT / "tmp" / "lind"
+    cage_sentinel_dir.mkdir(parents=True, exist_ok=True)
+    (cage_sentinel_dir / "sentinel.txt").write_text("LIND_CAGE_ONLY")
+
     # Create required executables
     if tests_to_run:
         executable_deps = analyze_executable_dependencies(tests_to_run)
